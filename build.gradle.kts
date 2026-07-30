@@ -28,9 +28,7 @@ dependencies {
 }
 
 java {
-    toolchain {
-        languageVersion.set(JavaLanguageVersion.of(21))
-    }
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
 
     withSourcesJar()
     withJavadocJar()
@@ -40,18 +38,10 @@ tasks.test {
     useJUnitPlatform()
 }
 
-tasks.withType<JavaCompile>().configureEach {
-    options.release = 21
-}
-
 publishing {
     publications {
         create<MavenPublication>("mavenJava") {
             from(components["java"])
-
-            groupId = project.group.toString()
-            artifactId = project.name
-            version = project.version.toString()
         }
     }
 

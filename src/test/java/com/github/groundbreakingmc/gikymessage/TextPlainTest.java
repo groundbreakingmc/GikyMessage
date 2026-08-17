@@ -2,6 +2,7 @@ package com.github.groundbreakingmc.gikymessage;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.Style;
 import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import org.junit.jupiter.api.DisplayName;
@@ -112,8 +113,8 @@ class TextPlainTest extends TextTestBase {
         void colorResetMidString() {
             // &r resets all formatting; text after reset should be unstyled
             assertRenders(
-                    Component.text("Red")
-                            .color(NamedTextColor.RED)
+                    Component.empty()
+                            .append(Component.text("Red", NamedTextColor.RED))
                             .append(Component.text(" Normal")),
                     "&cRed&r Normal"
             );
@@ -135,10 +136,10 @@ class TextPlainTest extends TextTestBase {
         @DisplayName("Decoration then reset then decoration")
         void decorationResetDecoration() {
             assertRenders(
-                    Component.text("Bold")
-                            .decorate(TextDecoration.BOLD)
+                    Component.empty()
+                            .append(Component.text("Bold", Style.style(TextDecoration.BOLD)))
                             .append(Component.text(" Normal"))
-                            .append(Component.text(" Italic").decorate(TextDecoration.ITALIC)),
+                            .append(Component.text(" Italic", Style.style(TextDecoration.ITALIC))),
                     "&lBold&r Normal&o Italic"
             );
         }

@@ -102,6 +102,7 @@ final class Compiler {
         final StringBuilder textBuf = new StringBuilder();
         Token[] rootTokens = new Token[8];
         int rootTokenCnt = 0;
+        boolean canHoistRootStyle = true;
 
         final String[] dynStatic = new String[PH_CAP + 1];
         final int[] dynPh = new int[PH_CAP];
@@ -231,6 +232,7 @@ final class Compiler {
                         continue;
                     }
                     case 'r' -> {
+                        if (depth == 0 && rootTokenCnt > 0) canHoistRootStyle = false;
                         curDeco = 0;
                         curColor = null;
                         curShadow = null;
@@ -427,7 +429,7 @@ final class Compiler {
         final String[] finalPhKeys = Arrays.copyOf(phKeys, phCount);
         final Token root = rootTokenCnt == 1
                 ? rootTokens[0]
-                : buildRootToken(rootTokens, rootTokenCnt);
+                : buildRootToken(rootTokens, rootTokenCnt, canHoistRootStyle);
 
         return new TextImpl(root, finalPhKeys, cacheable);
     }
@@ -927,8 +929,8 @@ final class Compiler {
         return null;
     }
 
-    private static Token buildRootToken(Token[] tokens, int count) {
-        if (count > 1 && tokens[0] instanceof Token.Plain first) {
+    private static Token buildRootToken(Token[] tokens, int count, boolean canHoistRootStyle) {
+        if (canHoistRootStyle && count > 1 && tokens[0] instanceof Token.Plain first) {
             final Token[] children = Arrays.copyOfRange(tokens, 1, count);
             final boolean dynChild = hasDynamicChildren(children, children.length);
             return new Token.Children(first.text, first.style, children, children.length, dynChild);

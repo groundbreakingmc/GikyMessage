@@ -171,7 +171,7 @@ class TextClickHoverTest extends TextTestBase {
             assertRenders(
                     Component.text("Tip", NamedTextColor.AQUA)
                             .hoverEvent(HoverEvent.showText(Component.text("Here"))),
-                    "&d[Tip](show:Here)"
+                    "&b[Tip](show:Here)"
             );
         }
 
@@ -209,7 +209,7 @@ class TextClickHoverTest extends TextTestBase {
             assertRenders(
                     Component.text("Peek", NamedTextColor.LIGHT_PURPLE, TextDecoration.ITALIC)
                             .hoverEvent(HoverEvent.showText(Component.text("Boo!", NamedTextColor.YELLOW))),
-                    "&b&o[Peek](show:&eBoo!)"
+                    "&d&o[Peek](show:&eBoo!)"
             );
         }
     }
@@ -297,7 +297,7 @@ class TextClickHoverTest extends TextTestBase {
                             .clickEvent(ClickEvent.openUrl("https://docs.example.com"))
                             .hoverEvent(HoverEvent.showText(
                                     Component.text("Read the docs", Style.style(TextDecoration.BOLD)))),
-                    "&d&l[Docs](url:https://docs.example.com, show:&lRead the docs)"
+                    "&b&l[Docs](url:https://docs.example.com, show:&lRead the docs)"
             );
         }
 

@@ -208,8 +208,8 @@ class TextPlainTest extends TextTestBase {
         }
 
         @Test
-        void lightPurple() {
-            assertRenders(Component.text("x", NamedTextColor.LIGHT_PURPLE), "&bx");
+        void aqua() {
+            assertRenders(Component.text("x", NamedTextColor.AQUA), "&bx");
         }
 
         @Test
@@ -218,8 +218,8 @@ class TextPlainTest extends TextTestBase {
         }
 
         @Test
-        void aqua() {
-            assertRenders(Component.text("x", NamedTextColor.AQUA), "&dx");
+        void lightPurple() {
+            assertRenders(Component.text("x", NamedTextColor.LIGHT_PURPLE), "&dx");
         }
 
         @Test
@@ -253,8 +253,8 @@ class TextPlainTest extends TextTestBase {
                     NamedTextColor.BLACK, NamedTextColor.DARK_BLUE, NamedTextColor.DARK_GREEN,
                     NamedTextColor.DARK_AQUA, NamedTextColor.DARK_RED, NamedTextColor.DARK_PURPLE,
                     NamedTextColor.GOLD, NamedTextColor.GRAY, NamedTextColor.DARK_GRAY,
-                    NamedTextColor.BLUE, NamedTextColor.GREEN, NamedTextColor.LIGHT_PURPLE,
-                    NamedTextColor.RED, NamedTextColor.AQUA, NamedTextColor.YELLOW,
+                    NamedTextColor.BLUE, NamedTextColor.GREEN, NamedTextColor.AQUA,
+                    NamedTextColor.RED, NamedTextColor.LIGHT_PURPLE, NamedTextColor.YELLOW,
                     NamedTextColor.WHITE
             };
 

@@ -72,9 +72,9 @@ final class ColorUtils {
             case '8' -> NamedTextColor.DARK_GRAY;
             case '9' -> NamedTextColor.BLUE;
             case 'a' -> NamedTextColor.GREEN;
-            case 'b' -> NamedTextColor.LIGHT_PURPLE;
+            case 'b' -> NamedTextColor.AQUA;
             case 'c' -> NamedTextColor.RED;
-            case 'd' -> NamedTextColor.AQUA;
+            case 'd' -> NamedTextColor.LIGHT_PURPLE;
             case 'e' -> NamedTextColor.YELLOW;
             case 'f' -> NamedTextColor.WHITE;
             default -> null;

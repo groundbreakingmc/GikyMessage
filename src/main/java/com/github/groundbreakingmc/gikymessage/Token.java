@@ -50,7 +50,7 @@ interface Token {
         @Override
         public Component render(Component[] compPh) {
             if (this.cached != null) return this.cached;
-            return this.cached = new TextComponentImpl(this.text, this.style);
+            return this.cached = textComponent(this.text, this.style);
         }
     }
 
@@ -72,7 +72,7 @@ interface Token {
         @Override
         public Component render(Component[] compPh) {
             if (this.cached != null) return this.cached;
-            return this.cached = new TextComponentImpl(this.text, this.style);
+            return this.cached = textComponent(this.text, this.style);
         }
     }
 
@@ -106,7 +106,7 @@ interface Token {
             for (int i = 0; i < this.childCnt; i++)
                 rendered[i] = this.children[i].render(compPh);
 
-            final Component result = new TextComponentImpl(this.text, this.style, rendered);
+            final Component result = textComponent(this.text, this.style, rendered);
             if (!this.hasDynChild) this.cached = result;
             return result;
         }
@@ -149,8 +149,8 @@ interface Token {
             final String rootText = this.staticParts.length > 0 && this.staticParts[0] != null
                     ? this.staticParts[0] : "";
             final Component[] children = buildDynContent(this.staticParts, this.phIndices, compPh);
-            if (children.length == 0) return new TextComponentImpl(rootText, this.style);
-            return new TextComponentImpl(rootText, this.style, children);
+            if (children.length == 0) return textComponent(rootText, this.style);
+            return textComponent(rootText, this.style, children);
         }
     }
 
@@ -175,8 +175,8 @@ interface Token {
             final String rootText = this.staticParts.length > 0 && this.staticParts[0] != null
                     ? this.staticParts[0] : "";
             final Component[] children = buildDynContent(this.staticParts, this.phIndices, compPh);
-            if (children.length == 0) return new TextComponentImpl(rootText, this.style);
-            return new TextComponentImpl(rootText, this.style, children);
+            if (children.length == 0) return textComponent(rootText, this.style);
+            return textComponent(rootText, this.style, children);
         }
     }
 
@@ -252,9 +252,9 @@ interface Token {
                 final Component[] rendered = new Component[this.childCnt];
                 for (int i = 0; i < this.childCnt; i++)
                     rendered[i] = this.children[i].render(compPh);
-                return new TextComponentImpl(this.text, style, rendered);
+                return textComponent(this.text, style, rendered);
             }
-            return new TextComponentImpl(this.text, style);
+            return textComponent(this.text, style);
         }
     }
 
@@ -325,7 +325,7 @@ interface Token {
             final Component[] dynChildren = buildDynContent(staticParts, phIndices, compPh);
 
             if (dynChildren.length == 0 && this.childCnt == 0) {
-                return new TextComponentImpl(rootText, style);
+                return textComponent(rootText, style);
             }
 
             final Component[] allChildren = new Component[dynChildren.length + this.childCnt];
@@ -333,7 +333,7 @@ interface Token {
             for (int i = 0; i < this.childCnt; i++)
                 allChildren[dynChildren.length + i] = this.children[i].render(compPh);
 
-            return new TextComponentImpl(rootText, style, allChildren);
+            return textComponent(rootText, style, allChildren);
         }
 
         static ClickEvent buildClick(byte type, String value) {
@@ -426,7 +426,7 @@ interface Token {
         @Override
         public Component render(Component[] compPh) {
             if (this.cached != null) return this.cached;
-            return this.cached = Component.object(this.contents).style(this.style);
+            return this.cached = Component.object(this.contents).style(this.style.style());
         }
     }
 
@@ -445,7 +445,7 @@ interface Token {
             // Player head name must be a resource-location string — extract plain text
             return Component.object(
                     ObjectContents.playerHead(extractText(compPh[this.phIndex]))
-            ).style(this.style);
+            ).style(this.style.style());
         }
     }
 
@@ -537,7 +537,7 @@ interface Token {
     private static Component[] buildDynContent(
             String[] staticParts, int[] phIndices, Component[] compPh) {
         final int n = phIndices.length;
-        if (n == 0) return TextComponentImpl.EMPTY_CHILDREN;
+        if (n == 0) return EMPTY_COMPONENTS;
 
         final Component[] result = new Component[n];
         for (int i = 0; i < n; i++) {
@@ -561,17 +561,20 @@ interface Token {
      * intermediate list allocation by constructing the result directly.
      */
     private static Component appendStaticChild(Component parent, String text) {
-        final Component staticChild = new TextComponentImpl(text, StyleImpl.EMPTY);
-        if (parent instanceof TextComponentImpl tci) {
-            final Component[] existing = tci.childrenArray();
-            final Component[] newChildren = new Component[existing.length + 1];
-            System.arraycopy(existing, 0, newChildren, 0, existing.length);
-            newChildren[existing.length] = staticChild;
-            return new TextComponentImpl(tci.content(), tci.style(), newChildren);
-        }
-        // Fallback for any other Component implementation
+        final Component staticChild = Component.text(text);
         return parent.children(
                 concatList(parent.children(), staticChild));
+    }
+
+    Component[] EMPTY_COMPONENTS = new Component[0];
+
+    private static Component textComponent(String text, StyleImpl style) {
+        return Component.text(text, style.style());
+    }
+
+    private static Component textComponent(String text, StyleImpl style, Component[] children) {
+        final TextComponent component = Component.text(text, style.style());
+        return children.length == 0 ? component : component.children(java.util.Arrays.asList(children));
     }
 
     private static java.util.List<Component> concatList(
@@ -602,9 +605,9 @@ interface Token {
             );
             final char ch = text.charAt(i);
             final String charStr = ch < 128 ? CHAR_CACHE[ch] : String.valueOf(ch);
-            chars[i] = new TextComponentImpl(charStr, style);
+            chars[i] = textComponent(charStr, style);
         }
 
-        return new TextComponentImpl("", StyleImpl.EMPTY, chars);
+        return textComponent("", StyleImpl.EMPTY, chars);
     }
 }

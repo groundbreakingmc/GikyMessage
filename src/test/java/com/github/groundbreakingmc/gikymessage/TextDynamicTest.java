@@ -31,6 +31,12 @@ class TextDynamicTest extends TextTestBase {
         }
 
         @Test
+        @DisplayName("Unresolved placeholder")
+        void unresolvedPlaceholder() {
+            assertRenders(Component.text("Hello, {player}!"), "Hello, {player}!");
+        }
+
+        @Test
         @DisplayName("Placeholder with color")
         void coloredPlaceholder() {
             assertRenders(

@@ -297,7 +297,7 @@ final class TextImpl implements Text {
         } else if (this.componentCache != null && this.componentCache[i] != null) {
             buf[i] = this.componentCache[i];
         } else {
-            buf[i] = Component.text("{+" + key + "+}");
+            buf[i] = Component.text("{" + key + "}");
         }
     }
 }

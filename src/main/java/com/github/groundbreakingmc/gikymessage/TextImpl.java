@@ -129,7 +129,18 @@ final class TextImpl implements Text {
                                      @NotNull String k2, @NotNull Component v2,
                                      @NotNull String k3, @NotNull Component v3,
                                      @NotNull String k4, @NotNull Component v4) {
-        return render(new Resolver.Resolver5(k0, v0, k1, v1, k2, v2, k3, v3, k4, v4));
+        if (this.phKeys.length == 0) return this.render();
+        final Component[] buf = this.compPhBuffer.get();
+        for (int i = 0; i < this.phKeys.length; i++) {
+            final String k = this.phKeys[i];
+            fillSlot(buf, i, k,
+                    k.equals(k0) ? v0 :
+                            k.equals(k1) ? v1 :
+                                    k.equals(k2) ? v2 :
+                                            k.equals(k3) ? v3 :
+                                                    k.equals(k4) ? v4 : null);
+        }
+        return this.token.render(buf);
     }
 
     @Override
@@ -139,7 +150,19 @@ final class TextImpl implements Text {
                                      @NotNull String k3, @NotNull Component v3,
                                      @NotNull String k4, @NotNull Component v4,
                                      @NotNull String k5, @NotNull Component v5) {
-        return render(new Resolver.Resolver6(k0, v0, k1, v1, k2, v2, k3, v3, k4, v4, k5, v5));
+        if (this.phKeys.length == 0) return this.render();
+        final Component[] buf = this.compPhBuffer.get();
+        for (int i = 0; i < this.phKeys.length; i++) {
+            final String k = this.phKeys[i];
+            fillSlot(buf, i, k,
+                    k.equals(k0) ? v0 :
+                            k.equals(k1) ? v1 :
+                                    k.equals(k2) ? v2 :
+                                            k.equals(k3) ? v3 :
+                                                    k.equals(k4) ? v4 :
+                                                            k.equals(k5) ? v5 : null);
+        }
+        return this.token.render(buf);
     }
 
     @Override
@@ -150,7 +173,20 @@ final class TextImpl implements Text {
                                      @NotNull String k4, @NotNull Component v4,
                                      @NotNull String k5, @NotNull Component v5,
                                      @NotNull String k6, @NotNull Component v6) {
-        return render(new Resolver.Resolver7(k0, v0, k1, v1, k2, v2, k3, v3, k4, v4, k5, v5, k6, v6));
+        if (this.phKeys.length == 0) return this.render();
+        final Component[] buf = this.compPhBuffer.get();
+        for (int i = 0; i < this.phKeys.length; i++) {
+            final String k = this.phKeys[i];
+            fillSlot(buf, i, k,
+                    k.equals(k0) ? v0 :
+                            k.equals(k1) ? v1 :
+                                    k.equals(k2) ? v2 :
+                                            k.equals(k3) ? v3 :
+                                                    k.equals(k4) ? v4 :
+                                                            k.equals(k5) ? v5 :
+                                                                    k.equals(k6) ? v6 : null);
+        }
+        return this.token.render(buf);
     }
 
     @Override
@@ -162,7 +198,21 @@ final class TextImpl implements Text {
                                      @NotNull String k5, @NotNull Component v5,
                                      @NotNull String k6, @NotNull Component v6,
                                      @NotNull String k7, @NotNull Component v7) {
-        return render(new Resolver.Resolver8(k0, v0, k1, v1, k2, v2, k3, v3, k4, v4, k5, v5, k6, v6, k7, v7));
+        if (this.phKeys.length == 0) return this.render();
+        final Component[] buf = this.compPhBuffer.get();
+        for (int i = 0; i < this.phKeys.length; i++) {
+            final String k = this.phKeys[i];
+            fillSlot(buf, i, k,
+                    k.equals(k0) ? v0 :
+                            k.equals(k1) ? v1 :
+                                    k.equals(k2) ? v2 :
+                                            k.equals(k3) ? v3 :
+                                                    k.equals(k4) ? v4 :
+                                                            k.equals(k5) ? v5 :
+                                                                    k.equals(k6) ? v6 :
+                                                                            k.equals(k7) ? v7 : null);
+        }
+        return this.token.render(buf);
     }
 
     @Override
@@ -175,7 +225,22 @@ final class TextImpl implements Text {
                                      @NotNull String k6, @NotNull Component v6,
                                      @NotNull String k7, @NotNull Component v7,
                                      @NotNull String k8, @NotNull Component v8) {
-        return render(new Resolver.Resolver9(k0, v0, k1, v1, k2, v2, k3, v3, k4, v4, k5, v5, k6, v6, k7, v7, k8, v8));
+        if (this.phKeys.length == 0) return this.render();
+        final Component[] buf = this.compPhBuffer.get();
+        for (int i = 0; i < this.phKeys.length; i++) {
+            final String k = this.phKeys[i];
+            fillSlot(buf, i, k,
+                    k.equals(k0) ? v0 :
+                            k.equals(k1) ? v1 :
+                                    k.equals(k2) ? v2 :
+                                            k.equals(k3) ? v3 :
+                                                    k.equals(k4) ? v4 :
+                                                            k.equals(k5) ? v5 :
+                                                                    k.equals(k6) ? v6 :
+                                                                            k.equals(k7) ? v7 :
+                                                                                    k.equals(k8) ? v8 : null);
+        }
+        return this.token.render(buf);
     }
 
     @Override
@@ -189,7 +254,23 @@ final class TextImpl implements Text {
                                      @NotNull String k7, @NotNull Component v7,
                                      @NotNull String k8, @NotNull Component v8,
                                      @NotNull String k9, @NotNull Component v9) {
-        return render(new Resolver.Resolver10(k0, v0, k1, v1, k2, v2, k3, v3, k4, v4, k5, v5, k6, v6, k7, v7, k8, v8, k9, v9));
+        if (this.phKeys.length == 0) return this.render();
+        final Component[] buf = this.compPhBuffer.get();
+        for (int i = 0; i < this.phKeys.length; i++) {
+            final String k = this.phKeys[i];
+            fillSlot(buf, i, k,
+                    k.equals(k0) ? v0 :
+                            k.equals(k1) ? v1 :
+                                    k.equals(k2) ? v2 :
+                                            k.equals(k3) ? v3 :
+                                                    k.equals(k4) ? v4 :
+                                                            k.equals(k5) ? v5 :
+                                                                    k.equals(k6) ? v6 :
+                                                                            k.equals(k7) ? v7 :
+                                                                                    k.equals(k8) ? v8 :
+                                                                                            k.equals(k9) ? v9 : null);
+        }
+        return this.token.render(buf);
     }
 
     // ── Internal helpers ────────────────────────────────────────────────────

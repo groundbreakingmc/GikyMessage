@@ -1,6 +1,7 @@
 package com.github.groundbreakingmc.gikymessage;
 
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.Style;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Map;
@@ -20,7 +21,7 @@ import java.util.Map;
  */
 public sealed interface Text permits TextImpl {
 
-    Text EMPTY = new TextImpl(new Token.Plain("", StyleImpl.EMPTY), new String[0], false);
+    Text EMPTY = new TextImpl(new Token.Plain("", Style.empty()), new String[0], false);
 
     /**
      * Compiles a format string into a {@link Text}.

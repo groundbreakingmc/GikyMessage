@@ -5,6 +5,7 @@ import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.ShadowColor;
+import net.kyori.adventure.text.format.Style;
 import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.object.ObjectContents;
 
@@ -39,10 +40,10 @@ interface Token {
     final class Plain implements Token {
 
         final String text;
-        final StyleImpl style;
+        final Style style;
         private Component cached;
 
-        Plain(String text, StyleImpl style) {
+        Plain(String text, Style style) {
             this.text = text;
             this.style = style;
         }
@@ -61,10 +62,10 @@ interface Token {
     final class Meta implements Token {
 
         private final String text;
-        private final StyleImpl style;
+        private final Style style;
         private Component cached;
 
-        Meta(String text, StyleImpl style) {
+        Meta(String text, Style style) {
             this.text = text;
             this.style = style;
         }
@@ -83,13 +84,13 @@ interface Token {
     final class Children implements Token {
 
         private final String text;
-        private final StyleImpl style;
+        private final Style style;
         private final Token[] children;
         private final int childCnt;
         final boolean hasDynChild;
         private Component cached;
 
-        Children(String text, StyleImpl style,
+        Children(String text, Style style,
                  Token[] children, int childCnt, boolean hasDynChild) {
             this.text = text;
             this.style = style;
@@ -136,9 +137,9 @@ interface Token {
 
         final String[] staticParts;
         final int[] phIndices;
-        private final StyleImpl style;
+        private final Style style;
 
-        PlainDyn(String[] staticParts, int[] phIndices, StyleImpl style) {
+        PlainDyn(String[] staticParts, int[] phIndices, Style style) {
             this.staticParts = staticParts;
             this.phIndices = phIndices;
             this.style = style;
@@ -162,9 +163,9 @@ interface Token {
 
         private final String[] staticParts;
         private final int[] phIndices;
-        private final StyleImpl style;
+        private final Style style;
 
-        MetaDynContent(String[] staticParts, int[] phIndices, StyleImpl style) {
+        MetaDynContent(String[] staticParts, int[] phIndices, Style style) {
             this.staticParts = staticParts;
             this.phIndices = phIndices;
             this.style = style;
@@ -245,7 +246,7 @@ interface Token {
                 case SHOW -> hover = HoverEvent.showText(Text.of(value).render());
             }
 
-            final StyleImpl style = new StyleImpl(
+            final Style style = StyleUtils.create(
                     this.color, this.shadow, this.deco, click, hover, null, null);
 
             if (this.childCnt > 0) {
@@ -316,7 +317,7 @@ interface Token {
                     click = buildClick(this.action2Type, val2);
             }
 
-            final StyleImpl style = new StyleImpl(
+            final Style style = StyleUtils.create(
                     this.color, this.shadow, this.deco, click, hover, null, null);
 
             // Build component children with placeholder-as-parent structure
@@ -415,10 +416,10 @@ interface Token {
     final class Obj implements Token {
 
         private final ObjectContents contents;
-        private final StyleImpl style;
+        private final Style style;
         private Component cached;
 
-        Obj(ObjectContents contents, StyleImpl style) {
+        Obj(ObjectContents contents, Style style) {
             this.contents = contents;
             this.style = style;
         }
@@ -426,16 +427,16 @@ interface Token {
         @Override
         public Component render(Component[] compPh) {
             if (this.cached != null) return this.cached;
-            return this.cached = Component.object(this.contents).style(this.style.style());
+            return this.cached = Component.object(this.contents).style(this.style);
         }
     }
 
     final class ObjDyn implements Token {
 
         private final int phIndex;
-        private final StyleImpl style;
+        private final Style style;
 
-        ObjDyn(int phIndex, StyleImpl style) {
+        ObjDyn(int phIndex, Style style) {
             this.phIndex = phIndex;
             this.style = style;
         }
@@ -445,7 +446,7 @@ interface Token {
             // Player head name must be a resource-location string — extract plain text
             return Component.object(
                     ObjectContents.playerHead(extractText(compPh[this.phIndex]))
-            ).style(this.style.style());
+            ).style(this.style);
         }
     }
 
@@ -568,12 +569,12 @@ interface Token {
 
     Component[] EMPTY_COMPONENTS = new Component[0];
 
-    private static Component textComponent(String text, StyleImpl style) {
-        return Component.text(text, style.style());
+    private static Component textComponent(String text, Style style) {
+        return Component.text(text, style);
     }
 
-    private static Component textComponent(String text, StyleImpl style, Component[] children) {
-        final TextComponent component = Component.text(text, style.style());
+    private static Component textComponent(String text, Style style, Component[] children) {
+        final TextComponent component = Component.text(text, style);
         return children.length == 0 ? component : component.children(java.util.Arrays.asList(children));
     }
 
@@ -598,9 +599,9 @@ interface Token {
         final Component[] chars = new Component[len];
         for (int i = 0; i < len; i++) {
             final float t = len == 1 ? 0f : (float) i / (len - 1);
-            final int rgb = ColorUtils.interpolate(colors, t);
-            final StyleImpl style = new StyleImpl(
-                    ColorUtils.textColorOf(rgb), shadow, deco,
+            final int rgb = StyleUtils.interpolate(colors, t);
+            final Style style = StyleUtils.create(
+                    StyleUtils.textColorOf(rgb), shadow, deco,
                     clickEvent, hoverEvent, null, null
             );
             final char ch = text.charAt(i);
@@ -608,6 +609,6 @@ interface Token {
             chars[i] = textComponent(charStr, style);
         }
 
-        return textComponent("", StyleImpl.EMPTY, chars);
+        return textComponent("", Style.empty(), chars);
     }
 }

@@ -2,24 +2,65 @@ package com.github.groundbreakingmc.gikymessage;
 
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
+import net.kyori.adventure.key.Key;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.ShadowColor;
+import net.kyori.adventure.text.format.Style;
 import net.kyori.adventure.text.format.TextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 
-/**
- * Internal utility class for color parsing, caching, and interpolation.
- */
-final class ColorUtils {
+final class StyleUtils {
+
+    static final int BITS = 2;
+    static final int MASK = 0b11;
+
+    static final int BIT_NOT_SET = 0b00;
+    static final int BIT_TRUE = 0b01;
+    static final int BIT_FALSE = 0b10;
 
     private static final Int2ObjectMap<TextColor> COLOR_CACHE = new Int2ObjectOpenHashMap<>();
     private static final Int2ObjectMap<ShadowColor> SHADOW_COLOR_CACHE = new Int2ObjectOpenHashMap<>();
 
-    private ColorUtils() {
+    private StyleUtils() {
     }
 
-    /**
-     * Returns a cached {@link TextColor} for the given 24-bit RGB value.
-     */
+    static Style create(TextColor color, ShadowColor shadowColor, short decorations) {
+        return create(color, shadowColor, decorations, null, null, null, null);
+    }
+
+    static Style create(
+            TextColor color,
+            ShadowColor shadowColor,
+            short decorations,
+            ClickEvent clickEvent,
+            HoverEvent<?> hoverEvent,
+            String insertion,
+            Key font
+    ) {
+        if (color == null && shadowColor == null && decorations == 0
+                && clickEvent == null && hoverEvent == null && insertion == null && font == null) {
+            return Style.empty();
+        }
+
+        final Style.Builder builder = Style.style();
+        if (color != null) builder.color(color);
+        if (shadowColor != null) builder.shadowColor(shadowColor);
+
+        applyDecoration(builder, decorations, TextDecoration.BOLD);
+        applyDecoration(builder, decorations, TextDecoration.ITALIC);
+        applyDecoration(builder, decorations, TextDecoration.UNDERLINED);
+        applyDecoration(builder, decorations, TextDecoration.STRIKETHROUGH);
+        applyDecoration(builder, decorations, TextDecoration.OBFUSCATED);
+
+        if (clickEvent != null) builder.clickEvent(clickEvent);
+        if (hoverEvent != null) builder.hoverEvent(hoverEvent);
+        if (insertion != null) builder.insertion(insertion);
+        if (font != null) builder.font(font);
+        return builder.build();
+    }
+
     static TextColor textColorOf(int color) {
         TextColor textColor = COLOR_CACHE.get(color);
         if (textColor != null) return textColor;
@@ -28,9 +69,6 @@ final class ColorUtils {
         return textColor;
     }
 
-    /**
-     * Returns a cached {@link ShadowColor} for the given 32-bit ARGB value.
-     */
     static ShadowColor shadowColorOf(int color) {
         ShadowColor shadowColor = SHADOW_COLOR_CACHE.get(color);
         if (shadowColor != null) return shadowColor;
@@ -39,9 +77,6 @@ final class ColorUtils {
         return shadowColor;
     }
 
-    /**
-     * Linearly interpolates across a gradient defined by {@code colors} at position {@code t ∈ [0, 1]}.
-     */
     static int interpolate(int[] colors, float t) {
         if (colors.length == 1) return colors[0];
         final float scaled = t * (colors.length - 1);
@@ -54,11 +89,6 @@ final class ColorUtils {
         return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
     }
 
-    /**
-     * Maps a legacy Minecraft color code character ({@code 0–9}, {@code a–f}) to a {@link TextColor}.
-     *
-     * @return the corresponding {@link TextColor}, or {@code null} if the code is not a color code
-     */
     static TextColor fromLegacyCode(char code) {
         return switch (code) {
             case '0' -> NamedTextColor.BLACK;
@@ -98,13 +128,6 @@ final class ColorUtils {
         return -1;
     }
 
-    /**
-     * Parses a {@code #RGB} or {@code #RRGGBB} hex color from {@code src} starting at {@code start}.
-     *
-     * @return a packed {@code long} where the low 32 bits hold the RGB value and the high 32 bits
-     * hold the total character length consumed (4 for {@code #RGB}, 7 for {@code #RRGGBB}),
-     * or {@code -1L} on failure
-     */
     static long parseHexPacked(char[] src, int start) {
         if (start >= src.length || src[start] != '#') return -1L;
         int count = 0;
@@ -130,5 +153,14 @@ final class ColorUtils {
             return ((long) 7 << 32) | (rgb & 0xFFFFFFFFL);
         }
         return -1L;
+    }
+
+    private static void applyDecoration(Style.Builder builder, short decorations, TextDecoration decoration) {
+        final int state = (decorations >>> (decoration.ordinal() * BITS)) & MASK;
+        if (state == BIT_TRUE) {
+            builder.decoration(decoration, TextDecoration.State.TRUE);
+        } else if (state == BIT_FALSE) {
+            builder.decoration(decoration, TextDecoration.State.FALSE);
+        }
     }
 }

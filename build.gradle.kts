@@ -12,10 +12,10 @@ repositories {
 
 dependencies {
     // Source: https://mvnrepository.com/artifact/net.kyori/adventure-text-serializer-gson
-    compileOnly("net.kyori:adventure-text-serializer-gson:4.26.1")
-    testImplementation("net.kyori:adventure-text-serializer-gson:4.26.1")
+    compileOnly("net.kyori:adventure-text-serializer-gson:5.2.0")
+    testImplementation("net.kyori:adventure-text-serializer-gson:5.2.0")
     // Source: https://mvnrepository.com/artifact/net.kyori/adventure-text-minimessage
-    testImplementation("net.kyori:adventure-text-minimessage:4.26.1")
+    testImplementation("net.kyori:adventure-text-minimessage:5.2.0")
 
     // Source: https://mvnrepository.com/artifact/it.unimi.dsi/fastutil
     compileOnly("it.unimi.dsi:fastutil:8.5.18")

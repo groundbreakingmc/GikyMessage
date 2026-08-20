@@ -5,8 +5,11 @@ import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.ShadowColor;
+import net.kyori.adventure.text.format.Style;
 import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.object.ObjectContents;
+
+import java.util.Arrays;
 
 /**
  * An immutable, compiled unit of formatted text that can render itself into a {@link Component}.
@@ -39,10 +42,10 @@ interface Token {
     final class Plain implements Token {
 
         final String text;
-        final StyleImpl style;
+        final Style style;
         private Component cached;
 
-        Plain(String text, StyleImpl style) {
+        Plain(String text, Style style) {
             this.text = text;
             this.style = style;
         }
@@ -50,7 +53,7 @@ interface Token {
         @Override
         public Component render(Component[] compPh) {
             if (this.cached != null) return this.cached;
-            return this.cached = new TextComponentImpl(this.text, this.style);
+            return this.cached = Component.text(this.text, this.style);
         }
     }
 
@@ -61,10 +64,10 @@ interface Token {
     final class Meta implements Token {
 
         private final String text;
-        private final StyleImpl style;
+        private final Style style;
         private Component cached;
 
-        Meta(String text, StyleImpl style) {
+        Meta(String text, Style style) {
             this.text = text;
             this.style = style;
         }
@@ -72,7 +75,7 @@ interface Token {
         @Override
         public Component render(Component[] compPh) {
             if (this.cached != null) return this.cached;
-            return this.cached = new TextComponentImpl(this.text, this.style);
+            return this.cached = Component.text(this.text, this.style);
         }
     }
 
@@ -83,13 +86,13 @@ interface Token {
     final class Children implements Token {
 
         private final String text;
-        private final StyleImpl style;
+        private final Style style;
         private final Token[] children;
         private final int childCnt;
         final boolean hasDynChild;
         private Component cached;
 
-        Children(String text, StyleImpl style,
+        Children(String text, Style style,
                  Token[] children, int childCnt, boolean hasDynChild) {
             this.text = text;
             this.style = style;
@@ -103,11 +106,14 @@ interface Token {
             if (!this.hasDynChild && this.cached != null) return this.cached;
 
             final Component[] rendered = new Component[this.childCnt];
-            for (int i = 0; i < this.childCnt; i++)
+            for (int i = 0; i < this.childCnt; i++) {
                 rendered[i] = this.children[i].render(compPh);
+            }
 
-            final Component result = new TextComponentImpl(this.text, this.style, rendered);
-            if (!this.hasDynChild) this.cached = result;
+            final Component result = text(this.text, this.style, rendered);
+            if (!this.hasDynChild) {
+                this.cached = result;
+            }
             return result;
         }
     }
@@ -136,9 +142,9 @@ interface Token {
 
         final String[] staticParts;
         final int[] phIndices;
-        private final StyleImpl style;
+        private final Style style;
 
-        PlainDyn(String[] staticParts, int[] phIndices, StyleImpl style) {
+        PlainDyn(String[] staticParts, int[] phIndices, Style style) {
             this.staticParts = staticParts;
             this.phIndices = phIndices;
             this.style = style;
@@ -148,9 +154,8 @@ interface Token {
         public Component render(Component[] compPh) {
             final String rootText = this.staticParts.length > 0 && this.staticParts[0] != null
                     ? this.staticParts[0] : "";
-            final Component[] children = buildDynContent(this.staticParts, this.phIndices, compPh);
-            if (children.length == 0) return new TextComponentImpl(rootText, this.style);
-            return new TextComponentImpl(rootText, this.style, children);
+
+            return text(rootText, this.style, buildDynContent(this.staticParts, this.phIndices, compPh));
         }
     }
 
@@ -162,9 +167,9 @@ interface Token {
 
         private final String[] staticParts;
         private final int[] phIndices;
-        private final StyleImpl style;
+        private final Style style;
 
-        MetaDynContent(String[] staticParts, int[] phIndices, StyleImpl style) {
+        MetaDynContent(String[] staticParts, int[] phIndices, Style style) {
             this.staticParts = staticParts;
             this.phIndices = phIndices;
             this.style = style;
@@ -174,9 +179,8 @@ interface Token {
         public Component render(Component[] compPh) {
             final String rootText = this.staticParts.length > 0 && this.staticParts[0] != null
                     ? this.staticParts[0] : "";
-            final Component[] children = buildDynContent(this.staticParts, this.phIndices, compPh);
-            if (children.length == 0) return new TextComponentImpl(rootText, this.style);
-            return new TextComponentImpl(rootText, this.style, children);
+
+            return text(rootText, this.style, buildDynContent(this.staticParts, this.phIndices, compPh));
         }
     }
 
@@ -200,21 +204,21 @@ interface Token {
         private final String[] metaStatic;
         private final int[] metaPh;
         private final HoverEvent<?> staticHover;
-        private final ClickEvent staticClick;
+        private final ClickEvent<?> staticClick;
         private final Token[] children;
         final int childCnt;
         final boolean hasDynChild;
 
         MetaDyn(String text, short deco, TextColor color, ShadowColor shadow,
                 byte actionType, String[] metaStatic, int[] metaPh,
-                HoverEvent<?> staticHover, ClickEvent staticClick) {
+                HoverEvent<?> staticHover, ClickEvent<?> staticClick) {
             this(text, deco, color, shadow, actionType, metaStatic, metaPh,
                     staticHover, staticClick, null, 0, false);
         }
 
         MetaDyn(String text, short deco, TextColor color, ShadowColor shadow,
                 byte actionType, String[] metaStatic, int[] metaPh,
-                HoverEvent<?> staticHover, ClickEvent staticClick,
+                HoverEvent<?> staticHover, ClickEvent<?> staticClick,
                 Token[] children, int childCnt, boolean hasDynChild) {
             this.text = text;
             this.deco = deco;
@@ -235,7 +239,7 @@ interface Token {
             // Action values always require a plain string — extract text from the component
             final String value = buildText(this.metaStatic, this.metaPh, compPh);
 
-            ClickEvent click = this.staticClick;
+            ClickEvent<?> click = this.staticClick;
             HoverEvent<?> hover = this.staticHover;
             switch (this.actionType) {
                 case RUN -> click = ClickEvent.runCommand(value);
@@ -245,16 +249,19 @@ interface Token {
                 case SHOW -> hover = HoverEvent.showText(Text.of(value).render());
             }
 
-            final StyleImpl style = new StyleImpl(
-                    this.color, this.shadow, this.deco, click, hover, null, null);
+            final Style style = Compiler.style(
+                    this.color, this.shadow, this.deco, click, hover, null);
 
             if (this.childCnt > 0) {
                 final Component[] rendered = new Component[this.childCnt];
-                for (int i = 0; i < this.childCnt; i++)
+                for (int i = 0; i < this.childCnt; i++) {
                     rendered[i] = this.children[i].render(compPh);
-                return new TextComponentImpl(this.text, style, rendered);
+                }
+
+                return text(this.text, style, rendered);
             }
-            return new TextComponentImpl(this.text, style);
+
+            return Component.text(this.text, style);
         }
     }
 
@@ -304,39 +311,44 @@ interface Token {
             // buildText reuses TL_SB; each call returns a String copy, so sequential reuse is safe
             final String val1 = buildText(this.metaStatic, this.metaPh, compPh);
 
-            ClickEvent click = buildClick(this.actionType, val1);
+            ClickEvent<?> click = buildClick(this.actionType, val1);
             HoverEvent<?> hover = this.actionType == MetaDyn.SHOW
                     ? HoverEvent.showText(Text.of(val1).render()) : null;
 
             if (this.meta2Static != null) {
                 final String val2 = buildText(this.meta2Static, this.meta2Ph, compPh);
-                if (this.action2Type == MetaDyn.SHOW)
+
+                if (this.action2Type == MetaDyn.SHOW) {
                     hover = HoverEvent.showText(Text.of(val2).render());
-                else
+                } else {
                     click = buildClick(this.action2Type, val2);
+                }
             }
 
-            final StyleImpl style = new StyleImpl(
-                    this.color, this.shadow, this.deco, click, hover, null, null);
+            final Style style = Compiler.style(
+                    this.color, this.shadow, this.deco, click, hover, null);
 
-            // Build component children with placeholder-as-parent structure
-            final String rootText = staticParts.length > 0 && staticParts[0] != null
-                    ? staticParts[0] : "";
-            final Component[] dynChildren = buildDynContent(staticParts, phIndices, compPh);
+            final String rootText = this.staticParts.length > 0 && this.staticParts[0] != null
+                    ? this.staticParts[0] : "";
+
+            final Component[] dynChildren =
+                    buildDynContent(this.staticParts, this.phIndices, compPh);
 
             if (dynChildren.length == 0 && this.childCnt == 0) {
-                return new TextComponentImpl(rootText, style);
+                return Component.text(rootText, style);
             }
 
             final Component[] allChildren = new Component[dynChildren.length + this.childCnt];
             System.arraycopy(dynChildren, 0, allChildren, 0, dynChildren.length);
-            for (int i = 0; i < this.childCnt; i++)
-                allChildren[dynChildren.length + i] = this.children[i].render(compPh);
 
-            return new TextComponentImpl(rootText, style, allChildren);
+            for (int i = 0; i < this.childCnt; i++) {
+                allChildren[dynChildren.length + i] = this.children[i].render(compPh);
+            }
+
+            return text(rootText, style, allChildren);
         }
 
-        static ClickEvent buildClick(byte type, String value) {
+        static ClickEvent<?> buildClick(byte type, String value) {
             return switch (type) {
                 case MetaDyn.RUN -> ClickEvent.runCommand(value);
                 case MetaDyn.SUGGEST -> ClickEvent.suggestCommand(value);
@@ -355,12 +367,12 @@ interface Token {
         private final int[] colors;
         private final short deco;
         private final ShadowColor shadow;
-        private final ClickEvent clickEvent;
+        private final ClickEvent<?> clickEvent;
         private final HoverEvent<?> hoverEvent;
         private Component cached;
 
         Gradient(String text, int[] colors, short deco, ShadowColor shadow,
-                 ClickEvent clickEvent, HoverEvent<?> hoverEvent) {
+                 ClickEvent<?> clickEvent, HoverEvent<?> hoverEvent) {
             this.text = text;
             this.colors = colors;
             this.deco = deco;
@@ -385,12 +397,12 @@ interface Token {
         private final int[] colors;
         private final short deco;
         private final ShadowColor shadow;
-        private final ClickEvent clickEvent;
+        private final ClickEvent<?> clickEvent;
         private final HoverEvent<?> hoverEvent;
 
         GradientDyn(String[] staticParts, int[] phIndices, int[] colors,
                     short deco, ShadowColor shadow,
-                    ClickEvent clickEvent, HoverEvent<?> hoverEvent) {
+                    ClickEvent<?> clickEvent, HoverEvent<?> hoverEvent) {
             this.staticParts = staticParts;
             this.phIndices = phIndices;
             this.colors = colors;
@@ -415,10 +427,10 @@ interface Token {
     final class Obj implements Token {
 
         private final ObjectContents contents;
-        private final StyleImpl style;
+        private final Style style;
         private Component cached;
 
-        Obj(ObjectContents contents, StyleImpl style) {
+        Obj(ObjectContents contents, Style style) {
             this.contents = contents;
             this.style = style;
         }
@@ -433,9 +445,9 @@ interface Token {
     final class ObjDyn implements Token {
 
         private final int phIndex;
-        private final StyleImpl style;
+        private final Style style;
 
-        ObjDyn(int phIndex, StyleImpl style) {
+        ObjDyn(int phIndex, Style style) {
             this.phIndex = phIndex;
             this.style = style;
         }
@@ -451,6 +463,19 @@ interface Token {
 
     // ── Shared utilities ────────────────────────────────────────────────────
 
+    Component[] EMPTY_COMPONENTS = new Component[0];
+
+    /**
+     * Creates a text component and attaches children only when necessary.
+     */
+    private static Component text(String content, Style style, Component[] children) {
+        if (children.length == 0) {
+            return Component.text(content, style);
+        }
+
+        return Component.text(content, style).children(Arrays.asList(children));
+    }
+
     /**
      * Per-thread {@link StringBuilder} reused across all {@link #buildText} calls.
      */
@@ -463,7 +488,11 @@ interface Token {
 
     private static String[] buildCharCache() {
         final String[] cache = new String[128];
-        for (int i = 0; i < 128; i++) cache[i] = String.valueOf((char) i);
+
+        for (int i = 0; i < 128; i++) {
+            cache[i] = String.valueOf((char) i);
+        }
+
         return cache;
     }
 
@@ -485,12 +514,19 @@ interface Token {
     private static String buildText(String[] s, int[] idx, Component[] compPh) {
         final StringBuilder sb = TL_SB.get();
         sb.setLength(0);
-        if (s.length > 0 && s[0] != null) sb.append(s[0]);
+
+        if (s.length > 0 && s[0] != null) {
+            sb.append(s[0]);
+        }
+
         for (int i = 0; i < idx.length; i++) {
             sb.append(extractText(compPh[idx[i]]));
             final int j = i + 1;
-            if (j < s.length && s[j] != null) sb.append(s[j]);
+            if (j < s.length && s[j] != null) {
+                sb.append(s[j]);
+            }
         }
+
         return sb.toString();
     }
 
@@ -500,7 +536,10 @@ interface Token {
      * component for use in action values (commands, URLs).
      */
     private static String extractText(Component component) {
-        if (component == null) return "";
+        if (component == null) {
+            return "";
+        }
+
         final StringBuilder sb = TL_SB.get();
         final int mark = sb.length();
         appendText(sb, component);
@@ -510,8 +549,13 @@ interface Token {
     }
 
     private static void appendText(StringBuilder sb, Component component) {
-        if (component instanceof TextComponent tc) sb.append(tc.content());
-        for (final Component child : component.children()) appendText(sb, child);
+        if (component instanceof TextComponent tc) {
+            sb.append(tc.content());
+        }
+
+        for (final Component child : component.children()) {
+            appendText(sb, child);
+        }
     }
 
     /**
@@ -537,7 +581,10 @@ interface Token {
     private static Component[] buildDynContent(
             String[] staticParts, int[] phIndices, Component[] compPh) {
         final int n = phIndices.length;
-        if (n == 0) return TextComponentImpl.EMPTY_CHILDREN;
+
+        if (n == 0) {
+            return EMPTY_COMPONENTS;
+        }
 
         final Component[] result = new Component[n];
         for (int i = 0; i < n; i++) {
@@ -561,25 +608,7 @@ interface Token {
      * intermediate list allocation by constructing the result directly.
      */
     private static Component appendStaticChild(Component parent, String text) {
-        final Component staticChild = new TextComponentImpl(text, StyleImpl.EMPTY);
-        if (parent instanceof TextComponentImpl tci) {
-            final Component[] existing = tci.childrenArray();
-            final Component[] newChildren = new Component[existing.length + 1];
-            System.arraycopy(existing, 0, newChildren, 0, existing.length);
-            newChildren[existing.length] = staticChild;
-            return new TextComponentImpl(tci.content(), tci.style(), newChildren);
-        }
-        // Fallback for any other Component implementation
-        return parent.children(
-                concatList(parent.children(), staticChild));
-    }
-
-    private static java.util.List<Component> concatList(
-            java.util.List<Component> existing, Component extra) {
-        final java.util.List<Component> list = new java.util.ArrayList<>(existing.size() + 1);
-        list.addAll(existing);
-        list.add(extra);
-        return list;
+        return parent.append(Component.text(text));
     }
 
     /**
@@ -587,24 +616,29 @@ interface Token {
      */
     private static Component buildGradient(
             String text, int[] colors, short deco, ShadowColor shadow,
-            ClickEvent clickEvent, HoverEvent<?> hoverEvent
+            ClickEvent<?> clickEvent, HoverEvent<?> hoverEvent
     ) {
         final int len = text.length();
-        if (len == 0) return Component.empty();
+
+        if (len == 0) {
+            return Component.empty();
+        }
 
         final Component[] chars = new Component[len];
         for (int i = 0; i < len; i++) {
             final float t = len == 1 ? 0f : (float) i / (len - 1);
             final int rgb = ColorUtils.interpolate(colors, t);
-            final StyleImpl style = new StyleImpl(
+
+            final Style style = Compiler.style(
                     ColorUtils.textColorOf(rgb), shadow, deco,
-                    clickEvent, hoverEvent, null, null
+                    clickEvent, hoverEvent, null
             );
             final char ch = text.charAt(i);
             final String charStr = ch < 128 ? CHAR_CACHE[ch] : String.valueOf(ch);
-            chars[i] = new TextComponentImpl(charStr, style);
+
+            chars[i] = Component.text(charStr, style);
         }
 
-        return new TextComponentImpl("", StyleImpl.EMPTY, chars);
+        return Component.text("", Style.empty()).children(Arrays.asList(chars));
     }
 }

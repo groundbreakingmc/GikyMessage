@@ -4,6 +4,7 @@ import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.ShadowColor;
+import net.kyori.adventure.text.format.Style;
 import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.object.ObjectContents;
@@ -33,6 +34,13 @@ final class Compiler {
     private static final int PH_CAP = 16;
     private static final int STACK_CAP = 8;
 
+    private static final int STYLE_BITS = 2;
+    private static final int STYLE_MASK = 0b11;
+
+    private static final int STYLE_BIT_NOT_SET = 0b00;
+    private static final int STYLE_BIT_TRUE = 0b01;
+    private static final int STYLE_BIT_FALSE = 0b10;
+
     /**
      * Per-thread scratch buffer for quoted value and action parsing.
      */
@@ -48,7 +56,7 @@ final class Compiler {
     static {
         short bold = 0, italic = 0, underlined = 0, strikethrough = 0, obfuscated = 0;
         for (final TextDecoration d : TextDecoration.values()) {
-            final short bit = (short) (StyleImpl.BIT_TRUE << (d.ordinal() * StyleImpl.BITS));
+            final short bit = (short) (STYLE_BIT_TRUE << (d.ordinal() * STYLE_BITS));
             switch (d) {
                 case BOLD -> bold = bit;
                 case ITALIC -> italic = bit;
@@ -65,6 +73,60 @@ final class Compiler {
     }
 
     private Compiler() {
+    }
+
+    /**
+     * Creates a {@link Style} from the supplied formatting properties and events.
+     *
+     * @param color      the {@link TextColor}, or {@code null}
+     * @param shadow     the {@link ShadowColor}, or {@code null}
+     * @param deco       packed {@link TextDecoration} states
+     * @param clickEvent the {@link ClickEvent}, or {@code null}
+     * @param hoverEvent the {@link HoverEvent}, or {@code null}
+     * @param insertion  the insertion text, or {@code null}
+     * @return the resulting {@link Style}
+     */
+    static Style style(
+            TextColor color, ShadowColor shadow, short deco,
+            ClickEvent<?> clickEvent, HoverEvent<?> hoverEvent, String insertion) {
+
+        if (color == null && shadow == null && deco == 0
+                && clickEvent == null && hoverEvent == null && insertion == null) {
+
+            return Style.empty();
+        }
+
+        final Style.Builder builder = Style.style();
+
+        if (color != null) {
+            builder.color(color);
+        }
+        if (shadow != null) {
+            builder.shadowColor(shadow);
+        }
+
+        for (final TextDecoration decoration : TextDecoration.values()) {
+            final int shift = decoration.ordinal() * STYLE_BITS;
+            final int bits = (deco >> shift) & STYLE_MASK;
+
+            if (bits == STYLE_BIT_TRUE) {
+                builder.decoration(decoration, TextDecoration.State.TRUE);
+            } else if (bits == STYLE_BIT_FALSE) {
+                builder.decoration(decoration, TextDecoration.State.FALSE);
+            }
+        }
+
+        if (clickEvent != null) {
+            builder.clickEvent(clickEvent);
+        }
+        if (hoverEvent != null) {
+            builder.hoverEvent(hoverEvent);
+        }
+        if (insertion != null) {
+            builder.insertion(insertion);
+        }
+
+        return builder.build();
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -448,9 +510,7 @@ final class Compiler {
         final TextColor deltaColor = color != inhColor ? color : null;
         final ShadowColor deltaShadow = shadow != inhShadow ? shadow : null;
 
-        final StyleImpl style = (deltaDeco == 0 && deltaColor == null && deltaShadow == null)
-                ? StyleImpl.EMPTY
-                : new StyleImpl(deltaColor, deltaShadow, deltaDeco, null, null, null, null);
+        final Style style = style(deltaColor, deltaShadow, deltaDeco, null, null, null);
 
         if (!hasDyn) {
             final String s = textBuf.isEmpty() ? "" : textBuf.toString();
@@ -481,32 +541,41 @@ final class Compiler {
 
     /**
      * Computes the decoration delta — the bits from {@code cur} that differ from {@code inh}
-     * and are not {@link StyleImpl#BIT_NOT_SET}. Unrolled over the five decoration slots
-     * (5 decorations × 2 bits = shifts 0, 2, 4, 6, 8).
+     * and are explicitly set. Each of the five decoration slots uses 2 bits (shifts 0, 2, 4, 6, 8).
      */
     private static short decorationDelta(short cur, short inh) {
         short result = 0;
         int c, h;
 
-        c = cur & StyleImpl.MASK;
-        h = inh & StyleImpl.MASK;
-        if (c != StyleImpl.BIT_NOT_SET && c != h) result |= (short) c;
+        c = cur & STYLE_MASK;
+        h = inh & STYLE_MASK;
+        if (c != STYLE_BIT_NOT_SET && c != h) {
+            result |= (short) c;
+        }
 
-        c = (cur >> 2) & StyleImpl.MASK;
-        h = (inh >> 2) & StyleImpl.MASK;
-        if (c != StyleImpl.BIT_NOT_SET && c != h) result |= (short) (c << 2);
+        c = (cur >> 2) & STYLE_MASK;
+        h = (inh >> 2) & STYLE_MASK;
+        if (c != STYLE_BIT_NOT_SET && c != h) {
+            result |= (short) (c << 2);
+        }
 
-        c = (cur >> 4) & StyleImpl.MASK;
-        h = (inh >> 4) & StyleImpl.MASK;
-        if (c != StyleImpl.BIT_NOT_SET && c != h) result |= (short) (c << 4);
+        c = (cur >> 4) & STYLE_MASK;
+        h = (inh >> 4) & STYLE_MASK;
+        if (c != STYLE_BIT_NOT_SET && c != h) {
+            result |= (short) (c << 4);
+        }
 
-        c = (cur >> 6) & StyleImpl.MASK;
-        h = (inh >> 6) & StyleImpl.MASK;
-        if (c != StyleImpl.BIT_NOT_SET && c != h) result |= (short) (c << 6);
+        c = (cur >> 6) & STYLE_MASK;
+        h = (inh >> 6) & STYLE_MASK;
+        if (c != STYLE_BIT_NOT_SET && c != h) {
+            result |= (short) (c << 6);
+        }
 
-        c = (cur >> 8) & StyleImpl.MASK;
-        h = (inh >> 8) & StyleImpl.MASK;
-        if (c != StyleImpl.BIT_NOT_SET && c != h) result |= (short) (c << 8);
+        c = (cur >> 8) & STYLE_MASK;
+        h = (inh >> 8) & STYLE_MASK;
+        if (c != STYLE_BIT_NOT_SET && c != h) {
+            result |= (short) (c << 8);
+        }
 
         return result;
     }
@@ -532,9 +601,12 @@ final class Compiler {
         shadow = deltaShadow;
 
         if (actStart == -1) {
-            if (childCnt == 0) return innerText != null ? innerText : new Token.Plain("", StyleImpl.EMPTY);
+            if (childCnt == 0) {
+                return innerText != null ? innerText : new Token.Plain("", Style.empty());
+            }
+
             final boolean dynChild = hasDynamicChildren(children, childCnt);
-            final StyleImpl style = new StyleImpl(color, shadow, deco, null, null, null, null);
+            final Style style = style(color, shadow, deco, null, null, null);
             final String text = innerText instanceof Token.Plain p ? p.text : "";
             final Token[] ch = Arrays.copyOf(children, childCnt);
             return new Token.Children(text, style, ch, childCnt, dynChild);
@@ -659,7 +731,7 @@ final class Compiler {
 
         // ── Object (head / sprite) ───────────────────────────────────────────
         if (isObject) {
-            final StyleImpl style = new StyleImpl(color, shadow, deco, staticClick, staticHover, insertVal, null);
+            final Style style = style(color, shadow, deco, staticClick, staticHover, insertVal);
             if (headVal != null) {
                 if (headDyn) {
                     final int phIdx = internPlaceholder(phKeys, phCount, headVal.substring(1, headVal.length() - 1));
@@ -683,7 +755,7 @@ final class Compiler {
 
         // ── Meta (click / hover / insert) ────────────────────────────────────
         if (hasMeta || insertVal != null) {
-            final StyleImpl fullStyle = new StyleImpl(color, shadow, deco, staticClick, staticHover, insertVal, null);
+            final Style fullStyle = style(color, shadow, deco, staticClick, staticHover, insertVal);
 
             if (!hasMetaDyn) {
                 if (isContentDyn) {
@@ -695,12 +767,17 @@ final class Compiler {
                     final String txt = extractText(innerText);
                     return new Token.Children(txt, fullStyle, Arrays.copyOf(children, childCnt), childCnt, dynChild);
                 }
+
+                if (innerText instanceof Token.Plain p) {
+                    return new Token.Plain(p.text, fullStyle);
+                }
+
                 return new Token.Plain(extractText(innerText), fullStyle);
             }
 
             // Determine the dynamic action type and its raw value string
-            byte dynActionType = -1;
-            String dynActionVal = null;
+            final byte dynActionType;
+            final String dynActionVal;
             if (runDyn) {
                 dynActionType = Token.MetaDyn.RUN;
                 dynActionVal = runCmd;
@@ -814,7 +891,7 @@ final class Compiler {
             }
 
             // For the static second action (only when it is truly static, i.e. no dynamic second was found)
-            final ClickEvent sc2 = (dynAction2Type == -1 && dynActionType == Token.MetaDyn.SHOW) ? staticClick : null;
+            final ClickEvent<?> sc2 = (dynAction2Type == -1 && dynActionType == Token.MetaDyn.SHOW) ? staticClick : null;
             final HoverEvent<?> sh2 = (dynAction2Type == -1 && dynActionType != Token.MetaDyn.SHOW) ? staticHover : null;
 
             if (!isContentDyn) {
@@ -853,12 +930,12 @@ final class Compiler {
         // ── No meta — plain styled block or children ─────────────────────────
         if (childCnt > 0) {
             final boolean dynChild = hasDynamicChildren(children, childCnt);
-            final StyleImpl style = new StyleImpl(color, shadow, deco, null, null, null, null);
+            final Style style = style(color, shadow, deco, null, null, null);
             final String txt = extractText(innerText);
             return new Token.Children(txt, style, Arrays.copyOf(children, childCnt), childCnt, dynChild);
         }
 
-        return innerText != null ? innerText : new Token.Plain("", StyleImpl.EMPTY);
+        return innerText != null ? innerText : new Token.Plain("", Style.empty());
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -934,8 +1011,7 @@ final class Compiler {
             return new Token.Children(first.text, first.style, children, children.length, dynChild);
         }
         final boolean dynChild = hasDynamicChildren(tokens, count);
-        return new Token.Children("", StyleImpl.EMPTY,
-                Arrays.copyOf(tokens, count), count, dynChild);
+        return new Token.Children("", Style.empty(), Arrays.copyOf(tokens, count), count, dynChild);
     }
 
     private static int findClosingParen(char[] src, int start) {

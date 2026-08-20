@@ -61,6 +61,38 @@ final class StyleUtils {
         return builder.build();
     }
 
+
+    static short withDecoration(short decorations, TextDecoration decoration, int state) {
+        final int shift = decoration.ordinal() * BITS;
+        final int mask = MASK << shift;
+        return (short) ((decorations & ~mask) | (state << shift));
+    }
+
+    static short resetDecorations(short inheritedDecorations) {
+        short result = 0;
+        for (final TextDecoration decoration : TextDecoration.values()) {
+            final int shift = decoration.ordinal() * BITS;
+            final int inheritedState = (inheritedDecorations >>> shift) & MASK;
+            if (inheritedState == BIT_TRUE) {
+                result |= (short) (BIT_FALSE << shift);
+            }
+        }
+        return result;
+    }
+
+    static short decorationDelta(short current, short inherited) {
+        short result = 0;
+        for (final TextDecoration decoration : TextDecoration.values()) {
+            final int shift = decoration.ordinal() * BITS;
+            final int currentState = (current >>> shift) & MASK;
+            final int inheritedState = (inherited >>> shift) & MASK;
+            if (currentState != BIT_NOT_SET && currentState != inheritedState) {
+                result |= (short) (currentState << shift);
+            }
+        }
+        return result;
+    }
+
     static TextColor textColorOf(int color) {
         TextColor textColor = COLOR_CACHE.get(color);
         if (textColor != null) return textColor;
@@ -90,7 +122,7 @@ final class StyleUtils {
     }
 
     static TextColor fromLegacyCode(char code) {
-        return switch (code) {
+        return switch (Character.toLowerCase(code)) {
             case '0' -> NamedTextColor.BLACK;
             case '1' -> NamedTextColor.DARK_BLUE;
             case '2' -> NamedTextColor.DARK_GREEN;

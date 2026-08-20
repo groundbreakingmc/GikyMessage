@@ -3,15 +3,10 @@ package com.github.groundbreakingmc.gikymessage;
 import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
-import net.kyori.adventure.text.format.ShadowColor;
-import net.kyori.adventure.text.format.Style;
-import net.kyori.adventure.text.format.TextColor;
-import net.kyori.adventure.text.format.TextDecoration;
+import net.kyori.adventure.text.format.*;
 import net.kyori.adventure.text.object.ObjectContents;
 
 import java.util.Arrays;
-
-import static com.github.groundbreakingmc.gikymessage.StyleUtils.*;
 
 /**
  * Compiles raw format strings into {@link Token} trees consumed by {@link TextImpl}.
@@ -31,8 +26,8 @@ import static com.github.groundbreakingmc.gikymessage.StyleUtils.*;
  */
 final class Compiler {
 
-    private static final int PH_CAP = 16;
-    private static final int STACK_CAP = 8;
+    private static final int INITIAL_PLACEHOLDER_CAPACITY = 16;
+    private static final int INITIAL_STACK_CAPACITY = 8;
 
     /**
      * Per-thread scratch buffer for quoted value and action parsing.
@@ -40,30 +35,17 @@ final class Compiler {
     private static final ThreadLocal<StringBuilder> SCRATCH_BUFFER =
             ThreadLocal.withInitial(() -> new StringBuilder(64));
 
-    private static final short DECO_BOLD;
-    private static final short DECO_ITALIC;
-    private static final short DECO_UNDERLINED;
-    private static final short DECO_STRIKETHROUGH;
-    private static final short DECO_OBFUSCATED;
-
-    static {
-        short bold = 0, italic = 0, underlined = 0, strikethrough = 0, obfuscated = 0;
-        for (final TextDecoration d : TextDecoration.values()) {
-            final short bit = (short) (StyleUtils.BIT_TRUE << (d.ordinal() * StyleUtils.BITS));
-            switch (d) {
-                case BOLD -> bold = bit;
-                case ITALIC -> italic = bit;
-                case UNDERLINED -> underlined = bit;
-                case STRIKETHROUGH -> strikethrough = bit;
-                case OBFUSCATED -> obfuscated = bit;
-            }
-        }
-        DECO_BOLD = bold;
-        DECO_ITALIC = italic;
-        DECO_UNDERLINED = underlined;
-        DECO_STRIKETHROUGH = strikethrough;
-        DECO_OBFUSCATED = obfuscated;
-    }
+    private static final byte ACTION_UNKNOWN = 0;
+    private static final byte ACTION_RUN = 1;
+    private static final byte ACTION_SUGGEST = 2;
+    private static final byte ACTION_URL = 3;
+    private static final byte ACTION_COPY = 4;
+    private static final byte ACTION_INSERT = 5;
+    private static final byte ACTION_SHOW = 6;
+    private static final byte ACTION_HEAD = 7;
+    private static final byte ACTION_SPRITE = 8;
+    private static final byte ACTION_PAGE = 9;
+    private static final byte ACTION_GRADIENT = 10;
 
     private Compiler() {
     }
@@ -78,23 +60,14 @@ final class Compiler {
         final char[] src = raw.toCharArray();
         final int len = src.length;
 
-        String[] phKeys = new String[PH_CAP];
-        int phCount = 0;
+        final PlaceholderTable placeholders = new PlaceholderTable();
 
         short curDeco = 0;
         TextColor curColor = null;
         ShadowColor curShadow = null;
 
-        final short[] stackDeco = new short[STACK_CAP];
-        final TextColor[] stackColor = new TextColor[STACK_CAP];
-        final ShadowColor[] stackShadow = new ShadowColor[STACK_CAP];
-        final Token[][] stackChildren = new Token[STACK_CAP][8];
-        final int[] stackChildCnt = new int[STACK_CAP];
+        Frame[] stack = new Frame[INITIAL_STACK_CAPACITY];
         int depth = 0;
-
-        final short[] stackInhDeco = new short[STACK_CAP];
-        final TextColor[] stackInhColor = new TextColor[STACK_CAP];
-        final ShadowColor[] stackInhShadow = new ShadowColor[STACK_CAP];
 
         short inhDeco = 0;
         TextColor inhColor = null;
@@ -103,10 +76,15 @@ final class Compiler {
         final StringBuilder textBuf = new StringBuilder();
         Token[] rootTokens = new Token[8];
         int rootTokenCnt = 0;
+
+        // The first plain token can normally be stored directly in the root
+        // component. A later root-level &r makes that unsafe: Adventure would
+        // have to emit explicit negative decorations / white to cancel the
+        // root style. Decide lazily when the first styled root token is flushed.
         boolean canHoistRootStyle = true;
 
-        final String[] dynStatic = new String[PH_CAP + 1];
-        final int[] dynPh = new int[PH_CAP];
+        String[] dynStatic = new String[INITIAL_PLACEHOLDER_CAPACITY + 1];
+        int[] dynPh = new int[INITIAL_PLACEHOLDER_CAPACITY];
         int dynPhCnt = 0;
         boolean hasDyn = false;
 
@@ -160,14 +138,18 @@ final class Compiler {
             // ── Color / decoration codes: & ──────────────────────────────────
             if (c == '&' && pos + 1 < len) {
                 final char next = src[pos + 1];
+                final char code = Character.toLowerCase(next);
+                final TextColor legacyColor = StyleUtils.fromLegacyCode(next);
+                final long packedColor = next == '#'
+                        ? StyleUtils.parseHexPacked(src, pos + 1)
+                        : -1L;
 
                 // Determine whether this is a valid style-changing code before
                 // touching any state. If it is, flush any accumulated text first
                 // so it gets the OLD style, not the incoming one.
-                final boolean willChangeColor = fromLegacyCode(next) != null
-                        || (next == '#' && parseHexPacked(src, pos + 1) != -1L);
-                final boolean willChangeDeco = next == 'b' || next == 'l' || next == 'o' || next == 'n'
-                        || next == 'm' || next == 'k' || next == 'r';
+                final boolean willChangeColor = legacyColor != null || packedColor != -1L;
+                final boolean willChangeDeco = code == 'l' || code == 'o' || code == 'n'
+                        || code == 'm' || code == 'k' || code == 'r';
 
                 if (willChangeColor || willChangeDeco) {
                     final Token styleFlush = flushText(textBuf, dynStatic, dynPh, dynPhCnt, hasDyn,
@@ -175,14 +157,18 @@ final class Compiler {
                     if (styleFlush != null) {
                         if (depth == 0) {
                             if (rootTokenCnt == 0 && styleFlush instanceof Token.Plain) {
-                                inhDeco = curDeco;
-                                inhColor = curColor;
-                                inhShadow = curShadow;
+                                if (curDeco != 0 || curColor != null || curShadow != null) {
+                                    canHoistRootStyle = !hasRootResetAhead(src, pos);
+                                }
+                                if (canHoistRootStyle) {
+                                    inhDeco = curDeco;
+                                    inhColor = curColor;
+                                    inhShadow = curShadow;
+                                }
                             }
                             rootTokens = pushToken(rootTokens, rootTokenCnt++, styleFlush);
                         } else {
-                            final int d = depth - 1;
-                            stackChildren[d] = pushToken(stackChildren[d], stackChildCnt[d]++, styleFlush);
+                            stack[depth - 1].add(styleFlush);
                         }
                     }
                     textBuf.setLength(0);
@@ -190,53 +176,48 @@ final class Compiler {
                     hasDyn = false;
                 }
 
-                if (next == '#') {
-                    final long packed = parseHexPacked(src, pos + 1);
-                    if (packed != -1L) {
-                        curColor = textColorOf((int) packed);
-                        pos += 1 + (int) (packed >>> 32);
-                        continue;
-                    }
+                if (packedColor != -1L) {
+                    curColor = StyleUtils.textColorOf((int) packedColor);
+                    pos += 1 + (int) (packedColor >>> 32);
+                    continue;
                 }
 
-                final TextColor legacy = fromLegacyCode(next);
-                if (legacy != null) {
-                    curColor = legacy;
+                if (legacyColor != null) {
+                    curColor = legacyColor;
                     pos += 2;
                     continue;
                 }
 
-                switch (next) {
+                switch (code) {
                     case 'l' -> {
-                        curDeco |= DECO_BOLD;
+                        curDeco = StyleUtils.withDecoration(curDeco, TextDecoration.BOLD, StyleUtils.BIT_TRUE);
                         pos += 2;
                         continue;
                     }
                     case 'o' -> {
-                        curDeco |= DECO_ITALIC;
+                        curDeco = StyleUtils.withDecoration(curDeco, TextDecoration.ITALIC, StyleUtils.BIT_TRUE);
                         pos += 2;
                         continue;
                     }
                     case 'n' -> {
-                        curDeco |= DECO_UNDERLINED;
+                        curDeco = StyleUtils.withDecoration(curDeco, TextDecoration.UNDERLINED, StyleUtils.BIT_TRUE);
                         pos += 2;
                         continue;
                     }
                     case 'm' -> {
-                        curDeco |= DECO_STRIKETHROUGH;
+                        curDeco = StyleUtils.withDecoration(curDeco, TextDecoration.STRIKETHROUGH, StyleUtils.BIT_TRUE);
                         pos += 2;
                         continue;
                     }
                     case 'k' -> {
-                        curDeco |= DECO_OBFUSCATED;
+                        curDeco = StyleUtils.withDecoration(curDeco, TextDecoration.OBFUSCATED, StyleUtils.BIT_TRUE);
                         pos += 2;
                         continue;
                     }
                     case 'r' -> {
-                        if (depth == 0 && rootTokenCnt > 0) canHoistRootStyle = false;
-                        curDeco = 0;
-                        curColor = null;
-                        curShadow = null;
+                        curDeco = StyleUtils.resetDecorations(inhDeco);
+                        curColor = inhColor == null ? null : NamedTextColor.WHITE;
+                        curShadow = inhShadow == null ? null : ShadowColor.none();
                         pos += 2;
                         continue;
                     }
@@ -252,7 +233,7 @@ final class Compiler {
                 final char next = src[pos + 1];
 
                 if (next == '#') {
-                    final long packed = parseHexPacked(src, pos + 1);
+                    final long packed = StyleUtils.parseHexPacked(src, pos + 1);
                     if (packed != -1L) {
                         // Flush accumulated text before the shadow style changes.
                         final Token shadowFlush = flushText(textBuf, dynStatic, dynPh, dynPhCnt, hasDyn,
@@ -260,20 +241,24 @@ final class Compiler {
                         if (shadowFlush != null) {
                             if (depth == 0) {
                                 if (rootTokenCnt == 0 && shadowFlush instanceof Token.Plain) {
-                                    inhDeco = curDeco;
-                                    inhColor = curColor;
-                                    inhShadow = curShadow;
+                                    if (curDeco != 0 || curColor != null || curShadow != null) {
+                                        canHoistRootStyle = !hasRootResetAhead(src, pos);
+                                    }
+                                    if (canHoistRootStyle) {
+                                        inhDeco = curDeco;
+                                        inhColor = curColor;
+                                        inhShadow = curShadow;
+                                    }
                                 }
                                 rootTokens = pushToken(rootTokens, rootTokenCnt++, shadowFlush);
                             } else {
-                                final int d = depth - 1;
-                                stackChildren[d] = pushToken(stackChildren[d], stackChildCnt[d]++, shadowFlush);
+                                stack[depth - 1].add(shadowFlush);
                             }
                         }
                         textBuf.setLength(0);
                         dynPhCnt = 0;
                         hasDyn = false;
-                        curShadow = shadowColorOf((int) packed);
+                        curShadow = StyleUtils.shadowColorOf((int) packed);
                         pos += 1 + (int) (packed >>> 32);
                         continue;
                     }
@@ -292,18 +277,10 @@ final class Compiler {
                 if (braceEnd < len) {
                     final int keyOff = pos + 1;
                     final int keyLen = braceEnd - keyOff;
-                    int phIdx = -1;
-                    for (int i = 0; i < phCount; i++) {
-                        if (regionEquals(src, keyOff, keyLen, phKeys[i])) {
-                            phIdx = i;
-                            break;
-                        }
-                    }
-                    if (phIdx == -1) {
-                        if (phCount == phKeys.length)
-                            phKeys = Arrays.copyOf(phKeys, phKeys.length * 2);
-                        phKeys[phCount] = new String(src, keyOff, keyLen);
-                        phIdx = phCount++;
+                    final int phIdx = placeholders.intern(src, keyOff, keyLen);
+                    if (dynPhCnt == dynPh.length) {
+                        dynPh = Arrays.copyOf(dynPh, dynPh.length << 1);
+                        dynStatic = Arrays.copyOf(dynStatic, dynStatic.length << 1);
                     }
 
                     dynStatic[dynPhCnt] = textBuf.isEmpty() ? "" : textBuf.toString();
@@ -330,27 +307,33 @@ final class Compiler {
                 if (accumulated != null) {
                     if (depth == 0) {
                         if (rootTokenCnt == 0 && accumulated instanceof Token.Plain) {
-                            inhDeco = curDeco;
-                            inhColor = curColor;
-                            inhShadow = curShadow;
+                            if (curDeco != 0 || curColor != null || curShadow != null) {
+                                canHoistRootStyle = !hasRootResetAhead(src, pos);
+                            }
+                            if (canHoistRootStyle) {
+                                inhDeco = curDeco;
+                                inhColor = curColor;
+                                inhShadow = curShadow;
+                            }
                         }
                         rootTokens = pushToken(rootTokens, rootTokenCnt++, accumulated);
                     } else {
-                        final int d = depth - 1;
-                        stackChildren[d] = pushToken(stackChildren[d], stackChildCnt[d]++, accumulated);
+                        stack[depth - 1].add(accumulated);
                     }
                 }
                 textBuf.setLength(0);
                 dynPhCnt = 0;
                 hasDyn = false;
 
-                stackDeco[depth] = curDeco;
-                stackColor[depth] = curColor;
-                stackShadow[depth] = curShadow;
-                stackChildCnt[depth] = 0;
-                stackInhDeco[depth] = inhDeco;
-                stackInhColor[depth] = inhColor;
-                stackInhShadow[depth] = inhShadow;
+                if (depth == stack.length) {
+                    stack = Arrays.copyOf(stack, stack.length << 1);
+                }
+                Frame frame = stack[depth];
+                if (frame == null) {
+                    frame = new Frame();
+                    stack[depth] = frame;
+                }
+                frame.reset(curDeco, curColor, curShadow, inhDeco, inhColor, inhShadow);
                 inhDeco = curDeco;
                 inhColor = curColor;
                 inhShadow = curShadow;
@@ -386,33 +369,25 @@ final class Compiler {
                 dynPhCnt = 0;
                 hasDyn = false;
 
-                // Save the style active at the closing ']' (inner scope)
-                // BEFORE restoring the outer scope — this is the bracket's own style.
-                final short bracketDeco = curDeco;
-                final TextColor bracketColor = curColor;
-                final ShadowColor bracketShadow = curShadow;
+                final Frame frame = stack[--depth];
+                curDeco = frame.outerDecorations;
+                curColor = frame.outerColor;
+                curShadow = frame.outerShadow;
+                inhDeco = frame.inheritedDecorations;
+                inhColor = frame.inheritedColor;
+                inhShadow = frame.inheritedShadow;
 
-                depth--;
-                curDeco = stackDeco[depth];
-                curColor = stackColor[depth];
-                curShadow = stackShadow[depth];
-                inhDeco = stackInhDeco[depth];
-                inhColor = stackInhColor[depth];
-                inhShadow = stackInhShadow[depth];
-
-                final int[] phCountHolder = {phCount};
                 final Token bracketToken = buildBracketToken(
-                        innerText, bracketDeco, bracketColor, bracketShadow,
-                        stackChildren[depth], stackChildCnt[depth],
-                        src, actStart, actEnd, phKeys, phCountHolder,
+                        innerText,
+                        frame.outerDecorations,
+                        frame.outerColor,
+                        frame.outerShadow,
+                        frame.children, frame.childCount,
+                        src, actStart, actEnd, placeholders,
                         inhDeco, inhColor, inhShadow);
-                phCount = phCountHolder[0];
 
                 if (depth == 0) rootTokens = pushToken(rootTokens, rootTokenCnt++, bracketToken);
-                else {
-                    final int d = depth - 1;
-                    stackChildren[d] = pushToken(stackChildren[d], stackChildCnt[d]++, bracketToken);
-                }
+                else stack[depth - 1].add(bracketToken);
                 continue;
             }
 
@@ -422,17 +397,39 @@ final class Compiler {
         }
 
         // ── End of input ─────────────────────────────────────────────────────
-        final Token last = flushText(textBuf, dynStatic, dynPh, dynPhCnt, hasDyn,
+        Token pending = flushText(textBuf, dynStatic, dynPh, dynPhCnt, hasDyn,
                 curDeco, curColor, curShadow,
                 inhDeco, inhColor, inhShadow);
-        if (last != null) rootTokens = pushToken(rootTokens, rootTokenCnt++, last);
 
-        final String[] finalPhKeys = Arrays.copyOf(phKeys, phCount);
+        // Be lenient with missing closing brackets: close every open frame at EOF
+        // instead of dropping the already compiled content.
+        while (depth > 0) {
+            final Frame frame = stack[--depth];
+            curDeco = frame.outerDecorations;
+            curColor = frame.outerColor;
+            curShadow = frame.outerShadow;
+            inhDeco = frame.inheritedDecorations;
+            inhColor = frame.inheritedColor;
+            inhShadow = frame.inheritedShadow;
+
+            pending = buildBracketToken(
+                    pending,
+                    frame.outerDecorations,
+                    frame.outerColor,
+                    frame.outerShadow,
+                    frame.children, frame.childCount,
+                    src, -1, -1, placeholders,
+                    inhDeco, inhColor, inhShadow
+            );
+        }
+
+        if (pending != null) rootTokens = pushToken(rootTokens, rootTokenCnt++, pending);
+
         final Token root = rootTokenCnt == 1
                 ? rootTokens[0]
                 : buildRootToken(rootTokens, rootTokenCnt, canHoistRootStyle);
 
-        return new TextImpl(root, finalPhKeys, cacheable);
+        return new TextImpl(root, placeholders.toArray(), cacheable);
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -447,7 +444,7 @@ final class Compiler {
     ) {
         if (textBuf.isEmpty() && dynPhCnt == 0) return null;
 
-        final short deltaDeco = decorationDelta(deco, inhDeco);
+        final short deltaDeco = StyleUtils.decorationDelta(deco, inhDeco);
         final TextColor deltaColor = color != inhColor ? color : null;
         final ShadowColor deltaShadow = shadow != inhShadow ? shadow : null;
 
@@ -480,38 +477,6 @@ final class Compiler {
         }
     }
 
-    /**
-     * Computes the decoration delta — the bits from {@code cur} that differ from {@code inh}
-     * and are not {@link StyleUtils#BIT_NOT_SET}. Unrolled over the five decoration slots
-     * (5 decorations × 2 bits = shifts 0, 2, 4, 6, 8).
-     */
-    private static short decorationDelta(short cur, short inh) {
-        short result = 0;
-        int c, h;
-
-        c = cur & StyleUtils.MASK;
-        h = inh & StyleUtils.MASK;
-        if (c != StyleUtils.BIT_NOT_SET && c != h) result |= (short) c;
-
-        c = (cur >> 2) & StyleUtils.MASK;
-        h = (inh >> 2) & StyleUtils.MASK;
-        if (c != StyleUtils.BIT_NOT_SET && c != h) result |= (short) (c << 2);
-
-        c = (cur >> 4) & StyleUtils.MASK;
-        h = (inh >> 4) & StyleUtils.MASK;
-        if (c != StyleUtils.BIT_NOT_SET && c != h) result |= (short) (c << 4);
-
-        c = (cur >> 6) & StyleUtils.MASK;
-        h = (inh >> 6) & StyleUtils.MASK;
-        if (c != StyleUtils.BIT_NOT_SET && c != h) result |= (short) (c << 6);
-
-        c = (cur >> 8) & StyleUtils.MASK;
-        h = (inh >> 8) & StyleUtils.MASK;
-        if (c != StyleUtils.BIT_NOT_SET && c != h) result |= (short) (c << 8);
-
-        return result;
-    }
-
     // ════════════════════════════════════════════════════════════════════════
     //  Build bracket token
     //  Receives src + actStart/actEnd offsets to avoid substring allocation.
@@ -519,347 +484,697 @@ final class Compiler {
 
     private static Token buildBracketToken(
             Token innerText,
-            short deco, TextColor color, ShadowColor shadow,
-            Token[] children, int childCnt,
-            char[] src, int actStart, int actEnd,
-            String[] phKeys, int[] phCount,
-            short inhDeco, TextColor inhColor, ShadowColor inhShadow
+            short decorations,
+            TextColor color,
+            ShadowColor shadow,
+            Token[] children,
+            int childCount,
+            char[] source,
+            int actionStart,
+            int actionEnd,
+            PlaceholderTable placeholders,
+            short inheritedDecorations,
+            TextColor inheritedColor,
+            ShadowColor inheritedShadow
     ) {
-        final short deltaDeco = decorationDelta(deco, inhDeco);
-        final TextColor deltaColor = color != inhColor ? color : null;
-        final ShadowColor deltaShadow = shadow != inhShadow ? shadow : null;
-        deco = deltaDeco;
-        color = deltaColor;
-        shadow = deltaShadow;
+        decorations = StyleUtils.decorationDelta(
+                decorations,
+                inheritedDecorations
+        );
 
-        if (actStart == -1) {
-            if (childCnt == 0) return innerText != null ? innerText : new Token.Plain("", Style.empty());
-            final boolean dynChild = hasDynamicChildren(children, childCnt);
-            final Style style = StyleUtils.create(color, shadow, deco);
-            final String text = innerText instanceof Token.Plain p ? p.text : "";
-            final Token[] ch = Arrays.copyOf(children, childCnt);
-            return new Token.Children(text, style, ch, childCnt, dynChild);
+        color = color != inheritedColor
+                ? color
+                : null;
+
+        shadow = shadow != inheritedShadow
+                ? shadow
+                : null;
+
+        final Style visualStyle = StyleUtils.create(
+                color,
+                shadow,
+                decorations
+        );
+
+        if (actionStart == -1) {
+            final TokenSequence sequence = orderedContent(
+                    innerText,
+                    children,
+                    childCount
+            );
+
+            return wrapContent(
+                    sequence.tokens,
+                    sequence.count,
+                    visualStyle
+            );
         }
 
-        // ── Parse actions directly from src[actStart..actEnd) ────────────────
-        String runCmd = null;
-        boolean runDyn = false;
-        String suggestCmd = null;
-        boolean suggestDyn = false;
-        String urlVal = null;
-        boolean urlDyn = false;
-        String copyVal = null;
-        boolean copyDyn = false;
+        byte selectedClickType = -1;
+        int selectedClickPriority = Integer.MAX_VALUE;
+        boolean selectedClickDynamic = false;
+
+        String selectedClickValue = null;
+        int selectedClickValueStart = -1;
+        int selectedClickValueEnd = -1;
+
+        int pageValue = -1;
+
+        byte selectedContentType = ACTION_UNKNOWN;
+        int selectedContentPriority = Integer.MAX_VALUE;
+        boolean selectedContentDynamic = false;
+
+        String selectedContentValue = null;
+        int selectedContentValueStart = -1;
+        int selectedContentValueEnd = -1;
+
+        boolean hasShow = false;
+        boolean showDynamic = false;
+
         String showText = null;
-        boolean showDyn = false;
-        int pageVal = -1;
-        String dialogVal = null;
-        String itemVal = null;
-        String entityVal = null;
-        int[] gradColors = null;
-        String headVal = null;
-        boolean headDyn = false;
-        String spriteVal = null;
-        String insertVal = null;
+        int showTextStart = -1;
+        int showTextEnd = -1;
 
-        final StringBuilder sb = SCRATCH_BUFFER.get();
+        boolean hasInsertion = false;
 
-        int aPos = actStart;
+        String insertionValue = null;
+        int insertionValueStart = -1;
+        int insertionValueEnd = -1;
 
-        while (aPos < actEnd) {
-            while (aPos < actEnd && (src[aPos] == ' ' || src[aPos] == ',')) aPos++;
-            if (aPos >= actEnd) break;
+        final StringBuilder scratch = SCRATCH_BUFFER.get();
+        int position = actionStart;
 
-            final int keyStart = aPos;
-            while (aPos < actEnd && src[aPos] != ':') aPos++;
-            if (aPos >= actEnd) break;
+        while (position < actionEnd) {
+            while (position < actionEnd) {
+                final char character = source[position];
 
-            int keyS = keyStart, keyE = aPos;
-            while (keyS < keyE && src[keyS] == ' ') keyS++;
-            while (keyE > keyS && src[keyE - 1] == ' ') keyE--;
-            aPos++;
-
-            while (aPos < actEnd && src[aPos] == ' ') aPos++;
-            if (aPos >= actEnd) break;
-
-            final String value;
-            final boolean valueDyn;
-            if (src[aPos] == '"' || src[aPos] == '\'') {
-                final char quote = src[aPos++];
-                sb.setLength(0);
-                boolean dyn = false;
-                while (aPos < actEnd && src[aPos] != quote) {
-                    if (src[aPos] == '\\' && aPos + 1 < actEnd) aPos++;
-                    if (src[aPos] == '{') dyn = true;
-                    sb.append(src[aPos++]);
+                if (character != ' ' && character != ',') {
+                    break;
                 }
-                aPos++;
-                value = sb.toString();
-                valueDyn = dyn;
-            } else {
-                int valStart = aPos;
-                boolean dyn = false;
-                while (aPos < actEnd && src[aPos] != ',') {
-                    if (src[aPos] == '{') dyn = true;
-                    aPos++;
-                }
-                while (valStart < aPos && src[valStart] == ' ') valStart++;
-                value = new String(src, valStart, aPos - valStart);
-                valueDyn = dyn;
+
+                position++;
             }
 
-            if (regionEquals(src, keyS, keyE - keyS, "run")) {
-                runCmd = value;
-                runDyn = valueDyn;
-            } else if (regionEquals(src, keyS, keyE - keyS, "suggest")) {
-                suggestCmd = value;
-                suggestDyn = valueDyn;
-            } else if (regionEquals(src, keyS, keyE - keyS, "url")) {
-                urlVal = value;
-                urlDyn = valueDyn;
-            } else if (regionEquals(src, keyS, keyE - keyS, "copy")) {
-                copyVal = value;
-                copyDyn = valueDyn;
-            } else if (regionEquals(src, keyS, keyE - keyS, "insert")) {
-                insertVal = value;
-            } else if (regionEquals(src, keyS, keyE - keyS, "show")) {
-                showText = value;
-                showDyn = valueDyn;
-            } else if (regionEquals(src, keyS, keyE - keyS, "item")) {
-                itemVal = value;
-            } else if (regionEquals(src, keyS, keyE - keyS, "entity")) {
-                entityVal = value;
-            } else if (regionEquals(src, keyS, keyE - keyS, "head")) {
-                headVal = value;
-                headDyn = valueDyn;
-            } else if (regionEquals(src, keyS, keyE - keyS, "sprite")) {
-                spriteVal = value;
-            } else if (regionEquals(src, keyS, keyE - keyS, "dialog")) {
-                dialogVal = value;
-            } else if (regionEquals(src, keyS, keyE - keyS, "page")) {
-                try {
-                    pageVal = Integer.parseInt(value);
-                } catch (NumberFormatException ignored) {
+            if (position >= actionEnd) {
+                break;
+            }
+
+            int keyOffset = position;
+
+            while (position < actionEnd && source[position] != ':') {
+                position++;
+            }
+
+            if (position >= actionEnd) {
+                break;
+            }
+
+            int keyEnd = position;
+
+            while (keyOffset < keyEnd && source[keyOffset] == ' ') {
+                keyOffset++;
+            }
+
+            while (keyEnd > keyOffset && source[keyEnd - 1] == ' ') {
+                keyEnd--;
+            }
+
+            final int keyLength = keyEnd - keyOffset;
+            final byte action = actionType(
+                    source,
+                    keyOffset,
+                    keyLength
+            );
+
+            position++;
+
+            while (position < actionEnd && source[position] == ' ') {
+                position++;
+            }
+
+            if (position >= actionEnd) {
+                break;
+            }
+
+            final boolean captureValue = switch (action) {
+                case ACTION_RUN, ACTION_HEAD, ACTION_SHOW, ACTION_INSERT -> true;
+
+                case ACTION_SUGGEST -> selectedClickPriority >= 1;
+
+                case ACTION_URL -> selectedClickPriority >= 2;
+
+                case ACTION_COPY -> selectedClickPriority >= 3;
+
+                case ACTION_PAGE -> selectedClickPriority >= 4;
+
+                case ACTION_SPRITE -> selectedContentPriority >= 1;
+
+                case ACTION_GRADIENT -> selectedContentPriority >= 2;
+
+                default -> false;
+            };
+
+            final boolean detectDynamic = switch (action) {
+                case ACTION_RUN,
+                        ACTION_SUGGEST,
+                        ACTION_URL,
+                        ACTION_COPY,
+                        ACTION_SHOW,
+                        ACTION_HEAD -> true;
+
+                default -> false;
+            };
+
+            final boolean quoted;
+
+            int valueStart = -1;
+            int valueEnd = -1;
+
+            boolean dynamic = false;
+
+            final char firstCharacter = source[position];
+
+            if (firstCharacter == '"' || firstCharacter == '\'') {
+                quoted = true;
+
+                final char quote = firstCharacter;
+                position++;
+
+                if (captureValue) {
+                    scratch.setLength(0);
                 }
-            } else if (regionEquals(src, keyS, keyE - keyS, "gradient")) {
-                gradColors = parseGradientColors(value);
-            }
-        }
 
-        final boolean isObject = headVal != null || spriteVal != null;
-        final boolean hasGradient = gradColors != null;
-        final boolean isContentDyn = innerText instanceof Token.PlainDyn
-                || innerText instanceof Token.MetaDynContent;
-        final boolean hasMetaDyn = runDyn || suggestDyn || urlDyn || copyDyn || showDyn;
-        final boolean hasMeta = runCmd != null || suggestCmd != null || urlVal != null
-                || copyVal != null || pageVal != -1 || dialogVal != null
-                || showText != null || itemVal != null || entityVal != null;
+                while (position < actionEnd) {
+                    final char character = source[position++];
 
-        final ClickEvent staticClick = buildStaticClick(runCmd, suggestCmd, urlVal, copyVal, pageVal, dialogVal);
-        final HoverEvent<?> staticHover = buildStaticHover(showText);
+                    if (character == quote) {
+                        break;
+                    }
 
-        // ── Object (head / sprite) ───────────────────────────────────────────
-        if (isObject) {
-            final Style style = StyleUtils.create(color, shadow, deco, staticClick, staticHover, insertVal, null);
-            if (headVal != null) {
-                if (headDyn) {
-                    final int phIdx = internPlaceholder(phKeys, phCount, headVal.substring(1, headVal.length() - 1));
-                    return new Token.ObjDyn(phIdx, style);
-                }
-                return new Token.Obj(ObjectContents.playerHead(headVal), style);
-            }
-            return new Token.Obj(ObjectContents.sprite(Key.key(spriteVal)), style);
-        }
+                    if (character == '\\' && position < actionEnd) {
+                        final char escapedCharacter = source[position++];
 
-        // ── Gradient ─────────────────────────────────────────────────────────
-        if (hasGradient) {
-            final String text = extractText(innerText);
-            if (isContentDyn) {
-                final Token.PlainDyn pd = (Token.PlainDyn) innerText;
-                return new Token.GradientDyn(pd.staticParts, pd.phIndices, gradColors,
-                        deco, shadow, staticClick, staticHover);
-            }
-            return new Token.Gradient(text, gradColors, deco, shadow, staticClick, staticHover);
-        }
+                        if (captureValue) {
+                            scratch.append(escapedCharacter);
+                        }
 
-        // ── Meta (click / hover / insert) ────────────────────────────────────
-        if (hasMeta || insertVal != null) {
-            final Style fullStyle = StyleUtils.create(color, shadow, deco, staticClick, staticHover, insertVal, null);
-
-            if (!hasMetaDyn) {
-                if (isContentDyn) {
-                    final Token.PlainDyn pd = (Token.PlainDyn) innerText;
-                    return new Token.MetaDynContent(pd.staticParts, pd.phIndices, fullStyle);
-                }
-                if (childCnt > 0) {
-                    final boolean dynChild = hasDynamicChildren(children, childCnt);
-                    final String txt = extractText(innerText);
-                    return new Token.Children(txt, fullStyle, Arrays.copyOf(children, childCnt), childCnt, dynChild);
-                }
-                return new Token.Plain(extractText(innerText), fullStyle);
-            }
-
-            // Determine the dynamic action type and its raw value string
-            byte dynActionType = -1;
-            String dynActionVal = null;
-            if (runDyn) {
-                dynActionType = Token.MetaDyn.RUN;
-                dynActionVal = runCmd;
-            } else if (suggestDyn) {
-                dynActionType = Token.MetaDyn.SUGGEST;
-                dynActionVal = suggestCmd;
-            } else if (urlDyn) {
-                dynActionType = Token.MetaDyn.URL;
-                dynActionVal = urlVal;
-            } else if (copyDyn) {
-                dynActionType = Token.MetaDyn.COPY;
-                dynActionVal = copyVal;
-            } else if (showDyn) {
-                dynActionType = Token.MetaDyn.SHOW;
-                dynActionVal = showText;
-            } else {
-                // unreachable
-                throw new UnsupportedOperationException();
-            }
-
-            // Parse placeholders inside the dynamic action value
-            final char[] av = dynActionVal.toCharArray();
-            final String[] mStatic = new String[PH_CAP + 1];
-            final int[] mPh = new int[PH_CAP];
-            int mPhCnt = 0;
-            sb.setLength(0);
-
-            for (int i = 0; i < av.length; i++) {
-                if (av[i] == '{') {
-                    int end = i + 1;
-                    while (end < av.length && av[end] != '}') end++;
-                    if (end < av.length) {
-                        mStatic[mPhCnt] = sb.isEmpty() ? null : sb.toString();
-                        sb.setLength(0);
-                        mPh[mPhCnt] = internPlaceholder(phKeys, phCount, new String(av, i + 1, end - i - 1));
-                        mPhCnt++;
-                        i = end;
                         continue;
                     }
+
+                    if (captureValue) {
+                        if (detectDynamic && character == '{') {
+                            dynamic = true;
+                        }
+
+                        scratch.append(character);
+                    }
                 }
-                sb.append(av[i]);
-            }
 
-            final String tail = sb.isEmpty() ? null : sb.toString();
-            int mTrimLen;
-            if (tail != null) {
-                mTrimLen = mPhCnt + 1;
+                while (position < actionEnd && source[position] != ',') {
+                    position++;
+                }
             } else {
-                mTrimLen = mPhCnt;
-                while (mTrimLen > 0 && mStatic[mTrimLen - 1] == null) mTrimLen--;
-            }
+                quoted = false;
+                valueStart = position;
 
-            final String[] metaStatic = mTrimLen == 0 ? Token.NO_PARTS : Arrays.copyOf(mStatic, mTrimLen);
-            if (tail != null) metaStatic[mPhCnt] = tail;
-            final int[] metaPh = mPhCnt == 0 ? Token.NO_PH : Arrays.copyOf(mPh, mPhCnt);
+                while (position < actionEnd && source[position] != ',') {
+                    if (captureValue
+                            && detectDynamic
+                            && source[position] == '{') {
+                        dynamic = true;
+                        break;
+                    }
 
-            // ── Second dynamic action ─────────────────────────────────────────
-            // When two actions are both dynamic (e.g. run:'/cmd {x}', show:'{y}')
-            // the first if/else chain above only captured one. Detect the second here.
-            byte dynAction2Type = -1;
-            String[] meta2Static = null;
-            int[] meta2Ph = null;
+                    position++;
+                }
 
-            final String dynAction2Val;
-            if (dynActionType != Token.MetaDyn.SHOW && showDyn) {
-                dynAction2Type = Token.MetaDyn.SHOW;
-                dynAction2Val = showText;
-            } else if (dynActionType != Token.MetaDyn.RUN && runDyn) {
-                dynAction2Type = Token.MetaDyn.RUN;
-                dynAction2Val = runCmd;
-            } else if (dynActionType != Token.MetaDyn.SUGGEST && suggestDyn) {
-                dynAction2Type = Token.MetaDyn.SUGGEST;
-                dynAction2Val = suggestCmd;
-            } else if (dynActionType != Token.MetaDyn.URL && urlDyn) {
-                dynAction2Type = Token.MetaDyn.URL;
-                dynAction2Val = urlVal;
-            } else if (dynActionType != Token.MetaDyn.COPY && copyDyn) {
-                dynAction2Type = Token.MetaDyn.COPY;
-                dynAction2Val = copyVal;
-            } else {
-                dynAction2Val = null;
-            }
+                valueEnd = position;
 
-            if (dynAction2Val != null) {
-                final char[] av2 = dynAction2Val.toCharArray();
-                final String[] m2St = new String[PH_CAP + 1];
-                final int[] m2Ph = new int[PH_CAP];
-                int m2PhCnt = 0;
-                sb.setLength(0);
-                for (int i = 0; i < av2.length; i++) {
-                    if (av2[i] == '{') {
-                        int end = i + 1;
-                        while (end < av2.length && av2[end] != '}') end++;
-                        if (end < av2.length) {
-                            m2St[m2PhCnt] = sb.isEmpty() ? null : sb.toString();
-                            sb.setLength(0);
-                            m2Ph[m2PhCnt] = internPlaceholder(phKeys, phCount, new String(av2, i + 1, end - i - 1));
-                            m2PhCnt++;
-                            i = end;
-                            continue;
+                if (captureValue) {
+                    while (valueStart < valueEnd
+                            && source[valueStart] == ' ') {
+                        valueStart++;
+                    }
+
+                    if (action != ACTION_SUGGEST) {
+                        while (valueEnd > valueStart
+                                && source[valueEnd - 1] == ' ') {
+                            valueEnd--;
                         }
                     }
-                    sb.append(av2[i]);
                 }
-                final String tail2 = sb.isEmpty() ? null : sb.toString();
-                int m2TrimLen = tail2 != null ? m2PhCnt + 1 : m2PhCnt;
-                while (m2TrimLen > 0 && tail2 == null && m2St[m2TrimLen - 1] == null) m2TrimLen--;
-                meta2Static = m2TrimLen == 0 ? Token.NO_PARTS : Arrays.copyOf(m2St, m2TrimLen);
-                if (tail2 != null) meta2Static[m2PhCnt] = tail2;
-                meta2Ph = m2PhCnt == 0 ? Token.NO_PH : Arrays.copyOf(m2Ph, m2PhCnt);
             }
 
-            // For the static second action (only when it is truly static, i.e. no dynamic second was found)
-            final ClickEvent sc2 = (dynAction2Type == -1 && dynActionType == Token.MetaDyn.SHOW) ? staticClick : null;
-            final HoverEvent<?> sh2 = (dynAction2Type == -1 && dynActionType != Token.MetaDyn.SHOW) ? staticHover : null;
+            if (!captureValue) {
+                continue;
+            }
 
-            if (!isContentDyn) {
-                final Token[] ch = childCnt > 0 ? Arrays.copyOf(children, childCnt) : null;
-                final boolean dynChild = childCnt > 0 && hasDynamicChildren(children, childCnt);
-                // If there is a second dynamic action, represent static content via MetaFullDyn
-                if (dynAction2Type != -1) {
-                    final String txt = extractText(innerText);
-                    final String[] singleStatic = txt.isEmpty() ? Token.NO_PARTS : new String[]{txt};
-                    return new Token.MetaFullDyn(singleStatic, Token.NO_PH, deco, color, shadow,
-                            dynActionType, metaStatic, metaPh,
-                            dynAction2Type, meta2Static, meta2Ph,
-                            ch, childCnt, dynChild);
+            final String quotedValue =
+                    quoted && action != ACTION_PAGE
+                            ? scratch.toString()
+                            : null;
+
+            switch (action) {
+                case ACTION_RUN -> {
+                    selectedClickPriority = 0;
+                    selectedClickType = Token.MetaDyn.RUN;
+                    selectedClickDynamic = dynamic;
+
+                    pageValue = -1;
+
+                    if (quoted) {
+                        selectedClickValue = quotedValue;
+                        selectedClickValueStart = -1;
+                        selectedClickValueEnd = -1;
+                    } else {
+                        selectedClickValue = null;
+                        selectedClickValueStart = valueStart;
+                        selectedClickValueEnd = valueEnd;
+                    }
                 }
-                return new Token.MetaDyn(extractText(innerText), deco, color, shadow,
-                        dynActionType, metaStatic, metaPh, sh2, sc2, ch, childCnt, dynChild);
+
+                case ACTION_SUGGEST -> {
+                    selectedClickPriority = 1;
+                    selectedClickType = Token.MetaDyn.SUGGEST;
+                    selectedClickDynamic = dynamic;
+
+                    pageValue = -1;
+
+                    if (quoted) {
+                        selectedClickValue = quotedValue;
+                        selectedClickValueStart = -1;
+                        selectedClickValueEnd = -1;
+                    } else {
+                        selectedClickValue = null;
+                        selectedClickValueStart = valueStart;
+                        selectedClickValueEnd = valueEnd;
+                    }
+                }
+
+                case ACTION_URL -> {
+                    selectedClickPriority = 2;
+                    selectedClickType = Token.MetaDyn.URL;
+                    selectedClickDynamic = dynamic;
+
+                    pageValue = -1;
+
+                    if (quoted) {
+                        selectedClickValue = quotedValue;
+                        selectedClickValueStart = -1;
+                        selectedClickValueEnd = -1;
+                    } else {
+                        selectedClickValue = null;
+                        selectedClickValueStart = valueStart;
+                        selectedClickValueEnd = valueEnd;
+                    }
+                }
+
+                case ACTION_COPY -> {
+                    selectedClickPriority = 3;
+                    selectedClickType = Token.MetaDyn.COPY;
+                    selectedClickDynamic = dynamic;
+
+                    pageValue = -1;
+
+                    if (quoted) {
+                        selectedClickValue = quotedValue;
+                        selectedClickValueStart = -1;
+                        selectedClickValueEnd = -1;
+                    } else {
+                        selectedClickValue = null;
+                        selectedClickValueStart = valueStart;
+                        selectedClickValueEnd = valueEnd;
+                    }
+                }
+
+                case ACTION_PAGE -> {
+                    selectedClickPriority = 4;
+                    selectedClickType = -1;
+                    selectedClickDynamic = false;
+
+                    selectedClickValue = null;
+                    selectedClickValueStart = -1;
+                    selectedClickValueEnd = -1;
+
+                    pageValue = quoted
+                            ? parseIntOrMinusOne(scratch)
+                            : parseIntOrMinusOne(
+                            source,
+                            valueStart,
+                            valueEnd
+                    );
+                }
+
+                case ACTION_SHOW -> {
+                    hasShow = true;
+                    showDynamic = dynamic;
+
+                    if (quoted) {
+                        showText = quotedValue;
+                        showTextStart = -1;
+                        showTextEnd = -1;
+                    } else {
+                        showText = null;
+                        showTextStart = valueStart;
+                        showTextEnd = valueEnd;
+                    }
+                }
+
+                case ACTION_INSERT -> {
+                    hasInsertion = true;
+
+                    if (quoted) {
+                        insertionValue = quotedValue;
+                        insertionValueStart = -1;
+                        insertionValueEnd = -1;
+                    } else {
+                        insertionValue = null;
+                        insertionValueStart = valueStart;
+                        insertionValueEnd = valueEnd;
+                    }
+                }
+
+                case ACTION_HEAD -> {
+                    selectedContentPriority = 0;
+                    selectedContentType = ACTION_HEAD;
+                    selectedContentDynamic = dynamic;
+
+                    if (quoted) {
+                        selectedContentValue = quotedValue;
+                        selectedContentValueStart = -1;
+                        selectedContentValueEnd = -1;
+                    } else {
+                        selectedContentValue = null;
+                        selectedContentValueStart = valueStart;
+                        selectedContentValueEnd = valueEnd;
+                    }
+                }
+
+                case ACTION_SPRITE -> {
+                    selectedContentPriority = 1;
+                    selectedContentType = ACTION_SPRITE;
+                    selectedContentDynamic = false;
+
+                    if (quoted) {
+                        selectedContentValue = quotedValue;
+                        selectedContentValueStart = -1;
+                        selectedContentValueEnd = -1;
+                    } else {
+                        selectedContentValue = null;
+                        selectedContentValueStart = valueStart;
+                        selectedContentValueEnd = valueEnd;
+                    }
+                }
+
+                case ACTION_GRADIENT -> {
+                    selectedContentPriority = 2;
+                    selectedContentType = ACTION_GRADIENT;
+                    selectedContentDynamic = false;
+
+                    if (quoted) {
+                        selectedContentValue = quotedValue;
+                        selectedContentValueStart = -1;
+                        selectedContentValueEnd = -1;
+                    } else {
+                        selectedContentValue = null;
+                        selectedContentValueStart = valueStart;
+                        selectedContentValueEnd = valueEnd;
+                    }
+                }
             }
-
-            final Token.PlainDyn pd = (Token.PlainDyn) innerText;
-
-            if (childCnt > 0) {
-                final Token[] ch = Arrays.copyOf(children, childCnt);
-                final boolean dynChild = hasDynamicChildren(children, childCnt);
-                return new Token.MetaFullDyn(pd.staticParts, pd.phIndices, deco, color, shadow,
-                        dynActionType, metaStatic, metaPh,
-                        dynAction2Type, meta2Static, meta2Ph,
-                        ch, childCnt, dynChild);
-            }
-
-            return new Token.MetaFullDyn(pd.staticParts, pd.phIndices, deco, color, shadow,
-                    dynActionType, metaStatic, metaPh,
-                    dynAction2Type, meta2Static, meta2Ph,
-                    null, 0, false);
         }
 
-        // ── No meta — plain styled block or children ─────────────────────────
-        if (childCnt > 0) {
-            final boolean dynChild = hasDynamicChildren(children, childCnt);
-            final Style style = StyleUtils.create(color, shadow, deco);
-            final String txt = extractText(innerText);
-            return new Token.Children(txt, style, Arrays.copyOf(children, childCnt), childCnt, dynChild);
+        if (selectedClickType != -1
+                && selectedClickValue == null
+                && selectedClickValueStart != -1) {
+            selectedClickValue = new String(
+                    source,
+                    selectedClickValueStart,
+                    selectedClickValueEnd - selectedClickValueStart
+            );
         }
 
-        return innerText != null ? innerText : new Token.Plain("", Style.empty());
+        if (selectedContentType != ACTION_UNKNOWN
+                && selectedContentValue == null
+                && selectedContentValueStart != -1) {
+            selectedContentValue = new String(
+                    source,
+                    selectedContentValueStart,
+                    selectedContentValueEnd - selectedContentValueStart
+            );
+        }
+
+        if (hasShow
+                && showText == null
+                && showTextStart != -1) {
+            showText = new String(
+                    source,
+                    showTextStart,
+                    showTextEnd - showTextStart
+            );
+        }
+
+        if (hasInsertion
+                && insertionValue == null
+                && insertionValueStart != -1) {
+            insertionValue = new String(
+                    source,
+                    insertionValueStart,
+                    insertionValueEnd - insertionValueStart
+            );
+        }
+
+        final byte clickType = selectedClickType;
+        final String clickValue = selectedClickValue;
+        final boolean clickDynamic = selectedClickDynamic;
+
+        final ClickEvent staticClick;
+
+        if (clickType != -1) {
+            staticClick = clickDynamic
+                    ? null
+                    : Token.MetaFullDyn.buildClick(
+                    clickType,
+                    clickValue
+            );
+        } else if (pageValue != -1) {
+            staticClick = ClickEvent.changePage(pageValue);
+        } else {
+            staticClick = null;
+        }
+
+        final HoverEvent<?> staticHover =
+                showText != null && !showDynamic
+                        ? buildStaticHover(showText)
+                        : null;
+
+        // Visual properties and all static metadata belong to the same root
+        // component. Dynamic actions later replace only their corresponding
+        // event on that component instead of introducing a wrapper component.
+        final Style contentStyle = StyleUtils.create(
+                color,
+                shadow,
+                decorations,
+                staticClick,
+                staticHover,
+                insertionValue,
+                null
+        );
+
+        final Token contentToken;
+
+        if (selectedContentType == ACTION_HEAD) {
+            if (selectedContentDynamic) {
+                final DynamicValue dynamicHead = parseDynamicValue(
+                        selectedContentValue,
+                        placeholders,
+                        scratch
+                );
+
+                contentToken = new Token.ObjDyn(
+                        dynamicHead.staticParts,
+                        dynamicHead.placeholderIndices,
+                        contentStyle
+                );
+            } else {
+                contentToken = new Token.Obj(
+                        ObjectContents.playerHead(selectedContentValue),
+                        contentStyle
+                );
+            }
+        } else if (selectedContentType == ACTION_SPRITE) {
+            contentToken = new Token.Obj(
+                    ObjectContents.sprite(
+                            Key.key(selectedContentValue)
+                    ),
+                    contentStyle
+            );
+        } else {
+            final TokenSequence sequence = orderedContent(
+                    innerText,
+                    children,
+                    childCount
+            );
+
+            if (selectedContentType == ACTION_GRADIENT) {
+                final int[] gradientColors =
+                        parseGradientColors(selectedContentValue);
+
+                if (gradientColors != null) {
+                    final Token rawContent = wrapContent(
+                            sequence.tokens,
+                            sequence.count,
+                            Style.empty()
+                    );
+
+                    contentToken = new Token.GradientContent(
+                            rawContent,
+                            gradientColors,
+                            contentStyle,
+                            isDynamic(rawContent)
+                    );
+                } else {
+                    contentToken = wrapContent(
+                            sequence.tokens,
+                            sequence.count,
+                            contentStyle
+                    );
+                }
+            } else {
+                contentToken = wrapContent(
+                        sequence.tokens,
+                        sequence.count,
+                        contentStyle
+                );
+            }
+        }
+
+        if (!clickDynamic && !showDynamic) {
+            return contentToken;
+        }
+
+        if (clickDynamic && showDynamic) {
+            final DynamicValue dynamicClick = parseDynamicValue(
+                    clickValue,
+                    placeholders,
+                    scratch
+            );
+
+            final Token.DynamicHover dynamicHover =
+                    compileDynamicHover(
+                            showText,
+                            placeholders
+                    );
+
+            return new Token.MetaFullDyn(
+                    contentToken,
+                    clickType,
+                    dynamicClick.staticParts,
+                    dynamicClick.placeholderIndices,
+                    null,
+                    Token.MetaDyn.SHOW,
+                    null,
+                    null,
+                    dynamicHover
+            );
+        }
+
+        if (clickDynamic) {
+            final DynamicValue dynamicClick = parseDynamicValue(
+                    clickValue,
+                    placeholders,
+                    scratch
+            );
+
+            return new Token.MetaDyn(
+                    contentToken,
+                    clickType,
+                    dynamicClick.staticParts,
+                    dynamicClick.placeholderIndices,
+                    null
+            );
+        }
+
+        return new Token.MetaDyn(
+                contentToken,
+                Token.MetaDyn.SHOW,
+                Token.NO_PARTS,
+                Token.NO_PH,
+                compileDynamicHover(
+                        showText,
+                        placeholders
+                )
+        );
+    }
+
+    private static DynamicValue parseDynamicValue(
+            String value,
+            PlaceholderTable placeholders,
+            StringBuilder scratch
+    ) {
+        String[] staticParts = new String[INITIAL_PLACEHOLDER_CAPACITY + 1];
+        int[] placeholderIndices = new int[INITIAL_PLACEHOLDER_CAPACITY];
+        int count = 0;
+        scratch.setLength(0);
+
+        for (int index = 0; index < value.length(); index++) {
+            final char character = value.charAt(index);
+            if (character == '{') {
+                int end = index + 1;
+                while (end < value.length() && value.charAt(end) != '}') end++;
+                if (end < value.length()) {
+                    if (count == placeholderIndices.length) {
+                        placeholderIndices = Arrays.copyOf(
+                                placeholderIndices,
+                                placeholderIndices.length << 1
+                        );
+                        staticParts = Arrays.copyOf(staticParts, staticParts.length << 1);
+                    }
+                    staticParts[count] = scratch.isEmpty() ? null : scratch.toString();
+                    scratch.setLength(0);
+                    placeholderIndices[count] = placeholders.intern(
+                            value.substring(index + 1, end)
+                    );
+                    count++;
+                    index = end;
+                    continue;
+                }
+            }
+            scratch.append(character);
+        }
+
+        final String tail = scratch.isEmpty() ? null : scratch.toString();
+        int staticCount = tail == null ? count : count + 1;
+        while (staticCount > 0 && tail == null && staticParts[staticCount - 1] == null) {
+            staticCount--;
+        }
+
+        final String[] resultStatic = staticCount == 0
+                ? Token.NO_PARTS
+                : Arrays.copyOf(staticParts, staticCount);
+        if (tail != null) resultStatic[count] = tail;
+
+        final int[] resultIndices = count == 0
+                ? Token.NO_PH
+                : Arrays.copyOf(placeholderIndices, count);
+        return new DynamicValue(resultStatic, resultIndices);
+    }
+
+    private static Token.DynamicHover compileDynamicHover(
+            String value,
+            PlaceholderTable outerPlaceholders
+    ) {
+        final TextImpl text = (TextImpl) compile(value, false);
+        final String[] hoverKeys = text.placeholderKeys();
+        if (hoverKeys.length == 0) {
+            return new Token.DynamicHover(text, Token.NO_PH);
+        }
+
+        final int[] sourceIndices = new int[hoverKeys.length];
+        for (int index = 0; index < hoverKeys.length; index++) {
+            sourceIndices[index] = outerPlaceholders.intern(hoverKeys[index]);
+        }
+        return new Token.DynamicHover(text, sourceIndices);
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -876,50 +1191,53 @@ final class Compiler {
         return true;
     }
 
-    /**
-     * Returns the index of {@code key} in the placeholder table, inserting it if absent.
-     *
-     * @throws IllegalStateException if the placeholder capacity is exceeded
-     */
-    private static int internPlaceholder(String[] phKeys, int[] phCount, String key) {
-        for (int i = 0; i < phCount[0]; i++)
-            if (phKeys[i].equals(key)) return i;
-        if (phCount[0] == phKeys.length)
-            throw new IllegalStateException("Too many placeholders (max " + phKeys.length + ")");
-        phKeys[phCount[0]] = key;
-        return phCount[0]++;
+    private static TokenSequence orderedContent(
+            Token innerText,
+            Token[] children,
+            int childCount
+    ) {
+        final int count = childCount + (innerText == null ? 0 : 1);
+        if (count == 0) return new TokenSequence(new Token[0], 0);
+
+        final Token[] ordered = Arrays.copyOf(children, count);
+        if (innerText != null) ordered[childCount] = innerText;
+        return new TokenSequence(ordered, count);
     }
 
-    private static String extractText(Token token) {
-        if (token instanceof Token.Plain p) return p.text;
-        return "";
+    private static Token wrapContent(Token[] tokens, int count, Style style) {
+        if (count == 0) return new Token.Plain("", style);
+
+        if (count == 1 && tokens[0] instanceof Token.Plain plain) {
+            final Style merged = plain.style.merge(
+                    style,
+                    Style.Merge.Strategy.IF_ABSENT_ON_TARGET
+            );
+            return new Token.Plain(plain.text, merged);
+        }
+
+        final Token[] content = tokens.length == count
+                ? tokens
+                : Arrays.copyOf(tokens, count);
+
+        return hasDynamicChildren(content, count)
+                ? new Token.DynChildren("", style, content, count)
+                : new Token.Children("", style, content, count);
     }
 
-    private static boolean hasDynamicChildren(Token[] children, int cnt) {
-        for (int i = 0; i < cnt; i++)
-            if (isDynamic(children[i])) return true;
+    private static boolean hasDynamicChildren(Token[] children, int count) {
+        for (int index = 0; index < count; index++) {
+            if (isDynamic(children[index])) return true;
+        }
         return false;
     }
 
-    private static boolean isDynamic(Token t) {
-        return t instanceof Token.PlainDyn
-                || t instanceof Token.MetaDynContent
-                || t instanceof Token.MetaDyn
-                || t instanceof Token.MetaFullDyn
-                || t instanceof Token.GradientDyn
-                || t instanceof Token.ObjDyn
-                || (t instanceof Token.Children ch && ch.hasDynChild);
-    }
-
-    private static ClickEvent buildStaticClick(
-            String run, String suggest, String url, String copy, int page, String dialog) {
-        if (run != null && !run.contains("{")) return ClickEvent.runCommand(run);
-        if (suggest != null && !suggest.contains("{")) return ClickEvent.suggestCommand(suggest);
-        if (url != null && !url.contains("{")) return ClickEvent.openUrl(url);
-        if (copy != null && !copy.contains("{")) return ClickEvent.copyToClipboard(copy);
-        if (page != -1) return ClickEvent.changePage(page);
-        if (dialog != null) return ClickEvent.showDialog(null); // TODO: make
-        return null;
+    private static boolean isDynamic(Token token) {
+        return token instanceof Token.PlainDyn
+                || token instanceof Token.MetaDyn
+                || token instanceof Token.MetaFullDyn
+                || token instanceof Token.ObjDyn
+                || token instanceof Token.DynChildren
+                || token instanceof Token.GradientContent gradientContent && gradientContent.dynamic;
     }
 
     private static HoverEvent<?> buildStaticHover(String show) {
@@ -932,11 +1250,74 @@ final class Compiler {
         if (canHoistRootStyle && count > 1 && tokens[0] instanceof Token.Plain first) {
             final Token[] children = Arrays.copyOfRange(tokens, 1, count);
             final boolean dynChild = hasDynamicChildren(children, children.length);
-            return new Token.Children(first.text, first.style, children, children.length, dynChild);
+            return dynChild
+                    ? new Token.DynChildren(first.text, first.style, children, children.length)
+                    : new Token.Children(first.text, first.style, children, children.length);
         }
         final boolean dynChild = hasDynamicChildren(tokens, count);
-        return new Token.Children("", Style.empty(),
-                Arrays.copyOf(tokens, count), count, dynChild);
+        return dynChild
+                ? new Token.DynChildren("", Style.empty(), Arrays.copyOf(tokens, count), count)
+                : new Token.Children("", Style.empty(), Arrays.copyOf(tokens, count), count);
+    }
+
+    /**
+     * Checks whether the remaining source contains an effective root-level
+     * legacy reset. Escaped characters, placeholders, nested bracket content,
+     * and action payloads are skipped because they do not reset the root style.
+     *
+     * <p>This is allocation-free and is invoked at most once per compilation,
+     * only when the first root token actually carries a visual style.</p>
+     */
+    private static boolean hasRootResetAhead(char[] src, int start) {
+        int bracketDepth = 0;
+
+        for (int index = start; index < src.length; index++) {
+            final char character = src[index];
+
+            if (character == '\\' && index + 1 < src.length) {
+                final char escaped = src[index + 1];
+                if (escaped == 'n'
+                        || escaped == '['
+                        || escaped == ']'
+                        || escaped == '{'
+                        || escaped == '}'
+                        || escaped == '\\') {
+                    index++;
+                }
+                continue;
+            }
+
+            if (character == '{') {
+                int end = index + 1;
+                while (end < src.length && src[end] != '}') end++;
+                if (end < src.length) index = end;
+                continue;
+            }
+
+            if (character == '[') {
+                bracketDepth++;
+                continue;
+            }
+
+            if (character == ']') {
+                if (bracketDepth > 0) bracketDepth--;
+
+                if (index + 1 < src.length && src[index + 1] == '(') {
+                    final int end = findClosingParen(src, index + 1);
+                    if (end != -1) index = end;
+                }
+                continue;
+            }
+
+            if (bracketDepth == 0
+                    && character == '&'
+                    && index + 1 < src.length) {
+                final char code = src[index + 1];
+                if (code == 'r' || code == 'R') return true;
+            }
+        }
+
+        return false;
     }
 
     private static int findClosingParen(char[] src, int start) {
@@ -969,7 +1350,7 @@ final class Compiler {
 
         int count = 1;
         for (int i = 1; i < len; i++) {
-            if (src[i] == '-' && i + 1 < len && (src[i + 1] == '#' || isHexChar(src[i + 1])))
+            if (src[i] == '-' && i + 1 < len && (src[i + 1] == '#' || StyleUtils.isHexChar(src[i + 1])))
                 count++;
         }
         if (count < 2) return null;
@@ -984,12 +1365,12 @@ final class Compiler {
             if (i >= len) return null;
 
             if (src[i] == '#') {
-                final long packed = parseHexPacked(src, i);
+                final long packed = StyleUtils.parseHexPacked(src, i);
                 if (packed == -1L) return null;
                 colors[ci++] = (int) packed;
                 i += (int) (packed >>> 32);
             } else {
-                final TextColor legacy = fromLegacyCode(src[i]);
+                final TextColor legacy = StyleUtils.fromLegacyCode(src[i]);
                 if (legacy == null) return null;
                 colors[ci++] = legacy.value();
                 i++;
@@ -1005,5 +1386,289 @@ final class Compiler {
         if (count == arr.length) arr = Arrays.copyOf(arr, arr.length * 2);
         arr[count] = token;
         return arr;
+    }
+
+    private static byte actionType(char[] source, int offset, int length) {
+        return switch (length) {
+            case 3 -> {
+                final char first = source[offset];
+
+                if (first == 'r'
+                        && source[offset + 1] == 'u'
+                        && source[offset + 2] == 'n') {
+                    yield ACTION_RUN;
+                }
+
+                if (first == 'u'
+                        && source[offset + 1] == 'r'
+                        && source[offset + 2] == 'l') {
+                    yield ACTION_URL;
+                }
+
+                yield ACTION_UNKNOWN;
+            }
+
+            case 4 -> {
+                final char first = source[offset];
+
+                if (first == 'c'
+                        && source[offset + 1] == 'o'
+                        && source[offset + 2] == 'p'
+                        && source[offset + 3] == 'y') {
+                    yield ACTION_COPY;
+                }
+
+                if (first == 's'
+                        && source[offset + 1] == 'h'
+                        && source[offset + 2] == 'o'
+                        && source[offset + 3] == 'w') {
+                    yield ACTION_SHOW;
+                }
+
+                if (first == 'h'
+                        && source[offset + 1] == 'e'
+                        && source[offset + 2] == 'a'
+                        && source[offset + 3] == 'd') {
+                    yield ACTION_HEAD;
+                }
+
+                if (first == 'p'
+                        && source[offset + 1] == 'a'
+                        && source[offset + 2] == 'g'
+                        && source[offset + 3] == 'e') {
+                    yield ACTION_PAGE;
+                }
+
+                yield ACTION_UNKNOWN;
+            }
+
+            case 6 -> {
+                final char first = source[offset];
+
+                if (first == 'i'
+                        && source[offset + 1] == 'n'
+                        && source[offset + 2] == 's'
+                        && source[offset + 3] == 'e'
+                        && source[offset + 4] == 'r'
+                        && source[offset + 5] == 't') {
+                    yield ACTION_INSERT;
+                }
+
+                if (first == 's'
+                        && source[offset + 1] == 'p'
+                        && source[offset + 2] == 'r'
+                        && source[offset + 3] == 'i'
+                        && source[offset + 4] == 't'
+                        && source[offset + 5] == 'e') {
+                    yield ACTION_SPRITE;
+                }
+
+                yield ACTION_UNKNOWN;
+            }
+
+            case 7 -> source[offset] == 's'
+                    && source[offset + 1] == 'u'
+                    && source[offset + 2] == 'g'
+                    && source[offset + 3] == 'g'
+                    && source[offset + 4] == 'e'
+                    && source[offset + 5] == 's'
+                    && source[offset + 6] == 't'
+                    ? ACTION_SUGGEST
+                    : ACTION_UNKNOWN;
+
+            case 8 -> source[offset] == 'g'
+                    && source[offset + 1] == 'r'
+                    && source[offset + 2] == 'a'
+                    && source[offset + 3] == 'd'
+                    && source[offset + 4] == 'i'
+                    && source[offset + 5] == 'e'
+                    && source[offset + 6] == 'n'
+                    && source[offset + 7] == 't'
+                    ? ACTION_GRADIENT
+                    : ACTION_UNKNOWN;
+
+            default -> ACTION_UNKNOWN;
+        };
+    }
+
+    private static int parseIntOrMinusOne(char[] source, int start, int end) {
+        if (start >= end) {
+            return -1;
+        }
+
+        int index = start;
+        boolean negative = false;
+        int limit = -Integer.MAX_VALUE;
+
+        final char first = source[index];
+
+        if (first < '0' || first > '9') {
+            if (first == '-') {
+                negative = true;
+                limit = Integer.MIN_VALUE;
+            } else if (first != '+') {
+                return -1;
+            }
+
+            index++;
+
+            if (index == end) {
+                return -1;
+            }
+        }
+
+        final int multiplyLimit = limit / 10;
+        int result = 0;
+
+        while (index < end) {
+            final int digit = source[index++] - '0';
+
+            if (digit < 0 || digit > 9) {
+                return -1;
+            }
+
+            if (result < multiplyLimit) {
+                return -1;
+            }
+
+            result *= 10;
+
+            if (result < limit + digit) {
+                return -1;
+            }
+
+            result -= digit;
+        }
+
+        return negative ? result : -result;
+    }
+
+    private static int parseIntOrMinusOne(CharSequence value) {
+        final int length = value.length();
+
+        if (length == 0) {
+            return -1;
+        }
+
+        int index = 0;
+        boolean negative = false;
+        int limit = -Integer.MAX_VALUE;
+
+        final char first = value.charAt(0);
+
+        if (first < '0' || first > '9') {
+            if (first == '-') {
+                negative = true;
+                limit = Integer.MIN_VALUE;
+            } else if (first != '+') {
+                return -1;
+            }
+
+            index++;
+
+            if (index == length) {
+                return -1;
+            }
+        }
+
+        final int multiplyLimit = limit / 10;
+        int result = 0;
+
+        while (index < length) {
+            final int digit = value.charAt(index++) - '0';
+
+            if (digit < 0 || digit > 9) {
+                return -1;
+            }
+
+            if (result < multiplyLimit) {
+                return -1;
+            }
+
+            result *= 10;
+
+            if (result < limit + digit) {
+                return -1;
+            }
+
+            result -= digit;
+        }
+
+        return negative ? result : -result;
+    }
+
+    private record DynamicValue(String[] staticParts, int[] placeholderIndices) {
+    }
+
+    private record TokenSequence(Token[] tokens, int count) {
+    }
+
+    private static final class Frame {
+
+        private short outerDecorations;
+        private TextColor outerColor;
+        private ShadowColor outerShadow;
+        private short inheritedDecorations;
+        private TextColor inheritedColor;
+        private ShadowColor inheritedShadow;
+        private Token[] children = new Token[8];
+        private int childCount;
+
+        private void reset(
+                short outerDecorations,
+                TextColor outerColor,
+                ShadowColor outerShadow,
+                short inheritedDecorations,
+                TextColor inheritedColor,
+                ShadowColor inheritedShadow
+        ) {
+            this.outerDecorations = outerDecorations;
+            this.outerColor = outerColor;
+            this.outerShadow = outerShadow;
+            this.inheritedDecorations = inheritedDecorations;
+            this.inheritedColor = inheritedColor;
+            this.inheritedShadow = inheritedShadow;
+            this.childCount = 0;
+        }
+
+        private void add(Token token) {
+            this.children = pushToken(this.children, this.childCount++, token);
+        }
+    }
+
+    private static final class PlaceholderTable {
+
+        private String[] keys = new String[INITIAL_PLACEHOLDER_CAPACITY];
+        private int count;
+
+        private int intern(char[] source, int offset, int length) {
+            for (int index = 0; index < this.count; index++) {
+                if (regionEquals(source, offset, length, this.keys[index])) return index;
+            }
+
+            this.ensureCapacity();
+            this.keys[this.count] = new String(source, offset, length);
+            return this.count++;
+        }
+
+        private int intern(String key) {
+            for (int index = 0; index < this.count; index++) {
+                if (this.keys[index].equals(key)) return index;
+            }
+
+            this.ensureCapacity();
+            this.keys[this.count] = key;
+            return this.count++;
+        }
+
+        private String[] toArray() {
+            return Arrays.copyOf(this.keys, this.count);
+        }
+
+        private void ensureCapacity() {
+            if (this.count == this.keys.length) {
+                this.keys = Arrays.copyOf(this.keys, this.keys.length << 1);
+            }
+        }
     }
 }

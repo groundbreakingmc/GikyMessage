@@ -4,35 +4,31 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
-import net.kyori.adventure.text.format.ShadowColor;
 import net.kyori.adventure.text.format.Style;
-import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.object.ObjectContents;
+
+import java.util.List;
+import java.util.Objects;
 
 /**
  * An immutable, compiled unit of formatted text that can render itself into a {@link Component}.
  *
  * <p>Tokens are produced exclusively by {@link Compiler} and fall into two broad categories:
  * <ul>
- *   <li><b>Static</b> — result is computed once and cached on the first {@link #render} call.</li>
- *   <li><b>Dynamic</b> — result depends on placeholder values and is rebuilt on every call.</li>
+ *   <li><b>Static</b> — the Adventure component is materialized during compilation.</li>
+ *   <li><b>Dynamic</b> — the result depends on placeholder values and is rebuilt on render.</li>
  * </ul>
  *
- * <p>The render contract uses a single {@code Component[] compPh} array:
- * <ul>
- *   <li>Each placeholder becomes the <em>parent</em> of the immediately following static text
- *       segment, so the placeholder's color and decorations are inherited by that text unless
- *       overridden.</li>
- *   <li>For action strings (commands, URLs, hover text) the raw text content is extracted from
- *       the component recursively via {@link #extractText}.</li>
- * </ul>
- * The array is {@code null} when the token is known to be fully static.
+ * <p>The render contract receives one resolved component per compiled placeholder. Placeholder
+ * components are inserted unchanged. Following static segments keep the template's compiled style
+ * instead of inheriting style or events from the replacement component.
+ * Dynamic command and URL values extract visible text recursively from their components.
  */
 interface Token {
 
-    Component render(Component[] compPh);
+    Component render(Component[] placeholders);
 
-    // ── Static tokens — Component cached on first render() ──────────────────
+    // ── Static tokens — Adventure components built during compilation ─────────
 
     /**
      * Plain text with a style. Example: {@code &cHello world}
@@ -41,39 +37,17 @@ interface Token {
 
         final String text;
         final Style style;
-        private Component cached;
+        private final Component component;
 
         Plain(String text, Style style) {
             this.text = text;
             this.style = style;
+            this.component = textComponent(text, style);
         }
 
         @Override
-        public Component render(Component[] compPh) {
-            if (this.cached != null) return this.cached;
-            return this.cached = textComponent(this.text, this.style);
-        }
-    }
-
-    /**
-     * Plain text with static click/hover events pre-baked into the style.
-     * Example: {@code [Click](run:"/spawn", show:"Go!")}
-     */
-    final class Meta implements Token {
-
-        private final String text;
-        private final Style style;
-        private Component cached;
-
-        Meta(String text, Style style) {
-            this.text = text;
-            this.style = style;
-        }
-
-        @Override
-        public Component render(Component[] compPh) {
-            if (this.cached != null) return this.cached;
-            return this.cached = textComponent(this.text, this.style);
+        public Component render(Component[] placeholders) {
+            return this.component;
         }
     }
 
@@ -83,33 +57,61 @@ interface Token {
      */
     final class Children implements Token {
 
-        private final String text;
-        private final Style style;
-        private final Token[] children;
-        private final int childCnt;
-        final boolean hasDynChild;
-        private Component cached;
+        private final Component staticComponent;
 
-        Children(String text, Style style,
-                 Token[] children, int childCnt, boolean hasDynChild) {
-            this.text = text;
-            this.style = style;
-            this.children = children;
-            this.childCnt = childCnt;
-            this.hasDynChild = hasDynChild;
+        Children(
+                String text,
+                Style style,
+                Token[] children,
+                int childCount
+        ) {
+            this.staticComponent = this.renderChildren(text, style, children, childCount);
         }
 
         @Override
-        public Component render(Component[] compPh) {
-            if (!this.hasDynChild && this.cached != null) return this.cached;
+        public Component render(Component[] placeholders) {
+            return this.staticComponent;
+        }
 
-            final Component[] rendered = new Component[this.childCnt];
-            for (int i = 0; i < this.childCnt; i++)
-                rendered[i] = this.children[i].render(compPh);
+        private Component renderChildren(String text, Style style, Token[] children, int childCount) {
+            final Component[] rendered = new Component[childCount];
+            for (int index = 0; index < childCount; index++) {
+                rendered[index] = children[index].render(null);
+            }
+            return textComponent(text, style, rendered);
+        }
+    }
 
-            final Component result = textComponent(this.text, this.style, rendered);
-            if (!this.hasDynChild) this.cached = result;
-            return result;
+    final class DynChildren implements Token {
+
+        private final String text;
+        private final Style style;
+        private final Token[] children;
+        private final int childCount;
+
+        DynChildren(
+                String text,
+                Style style,
+                Token[] children,
+                int childCount
+        ) {
+            this.text = text;
+            this.style = style;
+            this.children = children;
+            this.childCount = childCount;
+        }
+
+        @Override
+        public Component render(Component[] placeholders) {
+            return this.renderChildren(placeholders);
+        }
+
+        private Component renderChildren(Component[] placeholders) {
+            final Component[] rendered = new Component[this.childCount];
+            for (int index = 0; index < this.childCount; index++) {
+                rendered[index] = this.children[index].render(placeholders);
+            }
+            return textComponent(this.text, this.style, rendered);
         }
     }
 
@@ -119,19 +121,10 @@ interface Token {
     /**
      * Text with placeholders and no events. Example: {@code &cHello, {player}!}
      *
-     * <p>Each placeholder component becomes the <em>parent</em> of the static text segment
-     * that follows it, so the placeholder's style (color, decorations) is inherited by that
-     * segment unless it overrides them.
-     *
-     * <p>Layout:
-     * <pre>
-     *   staticParts[0]            ← root text content of the styled wrapper
-     *   phIndices[0] → compPh[i]  ← placeholder component (parent)
-     *     └─ staticParts[1]       ← child of the placeholder (inherits its style)
-     *   phIndices[1] → compPh[j]
-     *     └─ staticParts[2]
-     *   …
-     * </pre>
+     * <p>The first static part is stored in the root component. Each placeholder and its
+     * immediately following static segment are emitted as siblings. Static segments remain
+     * unstyled children and therefore inherit the compiled template style from their parent,
+     * without inheriting replacement-component events or decorations.
      */
     final class PlainDyn implements Token {
 
@@ -150,40 +143,29 @@ interface Token {
             final String rootText = this.staticParts.length > 0 && this.staticParts[0] != null
                     ? this.staticParts[0] : "";
             final Component[] children = buildDynContent(this.staticParts, this.phIndices, compPh);
-            if (children.length == 0) return textComponent(rootText, this.style);
             return textComponent(rootText, this.style, children);
         }
     }
 
-    /**
-     * Text with placeholders and static (pre-built) click/hover events.
-     * Example: {@code [Hello {player}](run:"/spawn")}
-     */
-    final class MetaDynContent implements Token {
+    final class DynamicHover {
 
-        private final String[] staticParts;
-        private final int[] phIndices;
-        private final Style style;
+        private final TextImpl text;
+        private final int[] sourceIndices;
 
-        MetaDynContent(String[] staticParts, int[] phIndices, Style style) {
-            this.staticParts = staticParts;
-            this.phIndices = phIndices;
-            this.style = style;
+        DynamicHover(TextImpl text, int[] sourceIndices) {
+            this.text = text;
+            this.sourceIndices = sourceIndices;
         }
 
-        @Override
-        public Component render(Component[] compPh) {
-            final String rootText = this.staticParts.length > 0 && this.staticParts[0] != null
-                    ? this.staticParts[0] : "";
-            final Component[] children = buildDynContent(this.staticParts, this.phIndices, compPh);
-            if (children.length == 0) return textComponent(rootText, this.style);
-            return textComponent(rootText, this.style, children);
+        HoverEvent<?> render(Component[] source) {
+            return HoverEvent.showText(this.text.renderMapped(source, this.sourceIndices));
         }
     }
 
     /**
-     * Static text with one dynamic action (a placeholder inside a command, URL, etc.).
-     * Optionally has child tokens.
+     * One dynamic action applied directly to the root component produced by
+     * {@link #content}. The content already owns its visual style and any
+     * static metadata; rendering replaces only the dynamic event.
      */
     final class MetaDyn implements Token {
 
@@ -193,69 +175,43 @@ interface Token {
         static final byte COPY = 3;
         static final byte SHOW = 4;
 
-        private final String text;
-        private final short deco;
-        private final TextColor color;
-        private final ShadowColor shadow;
+        private final Token content;
         private final byte actionType;
         private final String[] metaStatic;
         private final int[] metaPh;
-        private final HoverEvent<?> staticHover;
-        private final ClickEvent staticClick;
-        private final Token[] children;
-        final int childCnt;
-        final boolean hasDynChild;
+        private final DynamicHover dynamicHover;
 
-        MetaDyn(String text, short deco, TextColor color, ShadowColor shadow,
-                byte actionType, String[] metaStatic, int[] metaPh,
-                HoverEvent<?> staticHover, ClickEvent staticClick) {
-            this(text, deco, color, shadow, actionType, metaStatic, metaPh,
-                    staticHover, staticClick, null, 0, false);
-        }
-
-        MetaDyn(String text, short deco, TextColor color, ShadowColor shadow,
-                byte actionType, String[] metaStatic, int[] metaPh,
-                HoverEvent<?> staticHover, ClickEvent staticClick,
-                Token[] children, int childCnt, boolean hasDynChild) {
-            this.text = text;
-            this.deco = deco;
-            this.color = color;
-            this.shadow = shadow;
+        MetaDyn(
+                Token content,
+                byte actionType,
+                String[] metaStatic,
+                int[] metaPh,
+                DynamicHover dynamicHover
+        ) {
+            this.content = content;
             this.actionType = actionType;
             this.metaStatic = metaStatic;
             this.metaPh = metaPh;
-            this.staticHover = staticHover;
-            this.staticClick = staticClick;
-            this.children = children;
-            this.childCnt = childCnt;
-            this.hasDynChild = hasDynChild;
+            this.dynamicHover = dynamicHover;
         }
 
         @Override
         public Component render(Component[] compPh) {
-            // Action values always require a plain string — extract text from the component
-            final String value = buildText(this.metaStatic, this.metaPh, compPh);
+            final Component component = this.content.render(compPh);
+            final Style baseStyle = component.style();
 
-            ClickEvent click = this.staticClick;
-            HoverEvent<?> hover = this.staticHover;
-            switch (this.actionType) {
-                case RUN -> click = ClickEvent.runCommand(value);
-                case SUGGEST -> click = ClickEvent.suggestCommand(value);
-                case URL -> click = ClickEvent.openUrl(value);
-                case COPY -> click = ClickEvent.copyToClipboard(value);
-                case SHOW -> hover = HoverEvent.showText(Text.of(value).render());
+            ClickEvent click = baseStyle.clickEvent();
+            HoverEvent<?> hover = baseStyle.hoverEvent();
+
+            if (this.actionType == MetaDyn.SHOW) {
+                hover = this.dynamicHover.render(compPh);
+            } else {
+                final String value = buildText(this.metaStatic, this.metaPh, compPh);
+                click = MetaFullDyn.buildClick(this.actionType, value);
             }
 
-            final Style style = StyleUtils.create(
-                    this.color, this.shadow, this.deco, click, hover, null, null);
-
-            if (this.childCnt > 0) {
-                final Component[] rendered = new Component[this.childCnt];
-                for (int i = 0; i < this.childCnt; i++)
-                    rendered[i] = this.children[i].render(compPh);
-                return textComponent(this.text, style, rendered);
-            }
-            return textComponent(this.text, style);
+            final Style style = withEvents(baseStyle, click, hover);
+            return style == baseStyle ? component : component.style(style);
         }
     }
 
@@ -264,77 +220,64 @@ interface Token {
      */
     final class MetaFullDyn implements Token {
 
-        private final String[] staticParts;
-        private final int[] phIndices;
-        private final short deco;
-        private final TextColor color;
-        private final ShadowColor shadow;
+        private final Token content;
         private final byte actionType;
         private final String[] metaStatic;
         private final int[] metaPh;
+        private final DynamicHover dynamicHover;
         private final byte action2Type;
         private final String[] meta2Static;
         private final int[] meta2Ph;
-        private final Token[] children;
-        private final int childCnt;
-        private final boolean hasDynChild;
+        private final DynamicHover dynamicHover2;
 
-        MetaFullDyn(String[] staticParts, int[] phIndices,
-                    short deco, TextColor color, ShadowColor shadow,
-                    byte actionType, String[] metaStatic, int[] metaPh,
-                    byte action2Type, String[] meta2Static, int[] meta2Ph,
-                    Token[] children, int childCnt, boolean hasDynChild) {
-            this.staticParts = staticParts;
-            this.phIndices = phIndices;
-            this.deco = deco;
-            this.color = color;
-            this.shadow = shadow;
+        MetaFullDyn(
+                Token content,
+                byte actionType,
+                String[] metaStatic,
+                int[] metaPh,
+                DynamicHover dynamicHover,
+                byte action2Type,
+                String[] meta2Static,
+                int[] meta2Ph,
+                DynamicHover dynamicHover2
+        ) {
+            this.content = content;
             this.actionType = actionType;
             this.metaStatic = metaStatic;
             this.metaPh = metaPh;
+            this.dynamicHover = dynamicHover;
             this.action2Type = action2Type;
             this.meta2Static = meta2Static;
             this.meta2Ph = meta2Ph;
-            this.children = children;
-            this.childCnt = childCnt;
-            this.hasDynChild = hasDynChild;
+            this.dynamicHover2 = dynamicHover2;
         }
 
         @Override
         public Component render(Component[] compPh) {
-            // buildText reuses TL_SB; each call returns a String copy, so sequential reuse is safe
-            final String val1 = buildText(this.metaStatic, this.metaPh, compPh);
+            final Component component = this.content.render(compPh);
+            final Style baseStyle = component.style();
 
-            ClickEvent click = buildClick(this.actionType, val1);
-            HoverEvent<?> hover = this.actionType == MetaDyn.SHOW
-                    ? HoverEvent.showText(Text.of(val1).render()) : null;
+            ClickEvent click = baseStyle.clickEvent();
+            HoverEvent<?> hover = baseStyle.hoverEvent();
 
-            if (this.meta2Static != null) {
-                final String val2 = buildText(this.meta2Static, this.meta2Ph, compPh);
-                if (this.action2Type == MetaDyn.SHOW)
-                    hover = HoverEvent.showText(Text.of(val2).render());
-                else
-                    click = buildClick(this.action2Type, val2);
+            if (this.actionType == MetaDyn.SHOW) {
+                hover = this.dynamicHover.render(compPh);
+            } else {
+                final String value = buildText(this.metaStatic, this.metaPh, compPh);
+                click = MetaFullDyn.buildClick(this.actionType, value);
             }
 
-            final Style style = StyleUtils.create(
-                    this.color, this.shadow, this.deco, click, hover, null, null);
-
-            // Build component children with placeholder-as-parent structure
-            final String rootText = staticParts.length > 0 && staticParts[0] != null
-                    ? staticParts[0] : "";
-            final Component[] dynChildren = buildDynContent(staticParts, phIndices, compPh);
-
-            if (dynChildren.length == 0 && this.childCnt == 0) {
-                return textComponent(rootText, style);
+            if (this.action2Type != -1) {
+                if (this.action2Type == MetaDyn.SHOW) {
+                    hover = this.dynamicHover2.render(compPh);
+                } else {
+                    final String value2 = buildText(this.meta2Static, this.meta2Ph, compPh);
+                    click = MetaFullDyn.buildClick(this.action2Type, value2);
+                }
             }
 
-            final Component[] allChildren = new Component[dynChildren.length + this.childCnt];
-            System.arraycopy(dynChildren, 0, allChildren, 0, dynChildren.length);
-            for (int i = 0; i < this.childCnt; i++)
-                allChildren[dynChildren.length + i] = this.children[i].render(compPh);
-
-            return textComponent(rootText, style, allChildren);
+            final Style style = withEvents(baseStyle, click, hover);
+            return style == baseStyle ? component : component.style(style);
         }
 
         static ClickEvent buildClick(byte type, String value) {
@@ -343,110 +286,106 @@ interface Token {
                 case MetaDyn.SUGGEST -> ClickEvent.suggestCommand(value);
                 case MetaDyn.URL -> ClickEvent.openUrl(value);
                 case MetaDyn.COPY -> ClickEvent.copyToClipboard(value);
-                default -> null;
+                default -> throw new IllegalStateException("Not a click action: " + type);
             };
         }
     }
 
     // ── Gradient tokens ─────────────────────────────────────────────────────
 
-    final class Gradient implements Token {
+    final class GradientContent implements Token {
 
-        private final String text;
+        private final Token content;
         private final int[] colors;
-        private final short deco;
-        private final ShadowColor shadow;
-        private final ClickEvent clickEvent;
-        private final HoverEvent<?> hoverEvent;
-        private Component cached;
+        private final Style baseStyle;
+        final boolean dynamic;
+        private final Component staticComponent;
+        private volatile GradientStyleCache styleCache;
 
-        Gradient(String text, int[] colors, short deco, ShadowColor shadow,
-                 ClickEvent clickEvent, HoverEvent<?> hoverEvent) {
-            this.text = text;
+        GradientContent(Token content, int[] colors, Style baseStyle, boolean dynamic) {
+            this.content = content;
             this.colors = colors;
-            this.deco = deco;
-            this.shadow = shadow;
-            this.clickEvent = clickEvent;
-            this.hoverEvent = hoverEvent;
+            this.baseStyle = baseStyle;
+            this.dynamic = dynamic;
+            this.staticComponent = dynamic ? null : this.renderGradient(null);
         }
 
         @Override
-        public Component render(Component[] compPh) {
-            if (this.cached != null) return this.cached;
-            return this.cached = buildGradient(
-                    this.text, this.colors, this.deco, this.shadow,
-                    this.clickEvent, this.hoverEvent);
+        public Component render(Component[] placeholders) {
+            return this.dynamic ? this.renderGradient(placeholders) : this.staticComponent;
+        }
+
+        private Component renderGradient(Component[] placeholders) {
+            final Component rendered = this.content.render(placeholders);
+            final int codePointCount = countCodePoints(rendered);
+
+            GradientStyleCache cache = this.styleCache;
+            if (cache == null || cache.length != codePointCount) {
+                cache = new GradientStyleCache(
+                        codePointCount,
+                        gradientStyles(codePointCount, this.colors)
+                );
+                this.styleCache = cache;
+            }
+
+            final Component colored;
+            if (codePointCount == 0) {
+                colored = rendered;
+            } else {
+                final int[] styleIndex = {0};
+                colored = applyGradient(rendered, cache.styles, styleIndex);
+            }
+            return textComponent("", this.baseStyle, new Component[]{colored});
         }
     }
 
-    final class GradientDyn implements Token {
+    final class GradientStyleCache {
 
-        private final String[] staticParts;
-        private final int[] phIndices;
-        private final int[] colors;
-        private final short deco;
-        private final ShadowColor shadow;
-        private final ClickEvent clickEvent;
-        private final HoverEvent<?> hoverEvent;
+        final int length;
+        final Style[] styles;
 
-        GradientDyn(String[] staticParts, int[] phIndices, int[] colors,
-                    short deco, ShadowColor shadow,
-                    ClickEvent clickEvent, HoverEvent<?> hoverEvent) {
-            this.staticParts = staticParts;
-            this.phIndices = phIndices;
-            this.colors = colors;
-            this.deco = deco;
-            this.shadow = shadow;
-            this.clickEvent = clickEvent;
-            this.hoverEvent = hoverEvent;
-        }
-
-        @Override
-        public Component render(Component[] compPh) {
-            // Gradient is applied per-character — needs an assembled plain string
-            return buildGradient(
-                    buildText(this.staticParts, this.phIndices, compPh),
-                    this.colors, this.deco, this.shadow,
-                    this.clickEvent, this.hoverEvent);
+        GradientStyleCache(int length, Style[] styles) {
+            this.length = length;
+            this.styles = styles;
         }
     }
 
-    // ── Object tokens (head / sprite, 1.21.9+) ──────────────────────────────
+    // ── Object tokens (head / sprite, Minecraft 1.21.9+) ───────────────────
 
     final class Obj implements Token {
 
-        private final ObjectContents contents;
-        private final Style style;
-        private Component cached;
+        private final Component component;
 
         Obj(ObjectContents contents, Style style) {
-            this.contents = contents;
-            this.style = style;
+            this.component = Component.object(contents).style(style);
         }
 
         @Override
-        public Component render(Component[] compPh) {
-            if (this.cached != null) return this.cached;
-            return this.cached = Component.object(this.contents).style(this.style);
+        public Component render(Component[] placeholders) {
+            return this.component;
         }
     }
 
     final class ObjDyn implements Token {
 
-        private final int phIndex;
+        private final String[] staticParts;
+        private final int[] placeholderIndices;
         private final Style style;
 
-        ObjDyn(int phIndex, Style style) {
-            this.phIndex = phIndex;
+        ObjDyn(String[] staticParts, int[] placeholderIndices, Style style) {
+            this.staticParts = staticParts;
+            this.placeholderIndices = placeholderIndices;
             this.style = style;
         }
 
         @Override
-        public Component render(Component[] compPh) {
-            // Player head name must be a resource-location string — extract plain text
-            return Component.object(
-                    ObjectContents.playerHead(extractText(compPh[this.phIndex]))
-            ).style(this.style);
+        public Component render(Component[] placeholders) {
+            final String profileName = buildText(
+                    this.staticParts,
+                    this.placeholderIndices,
+                    placeholders
+            );
+            return Component.object(ObjectContents.playerHead(profileName)).style(this.style);
         }
     }
 
@@ -456,6 +395,8 @@ interface Token {
      * Per-thread {@link StringBuilder} reused across all {@link #buildText} calls.
      */
     ThreadLocal<StringBuilder> TL_SB = ThreadLocal.withInitial(() -> new StringBuilder(128));
+    Component[] EMPTY_COMPONENTS = new Component[0];
+    Style[] EMPTY_STYLES = new Style[0];
 
     /**
      * Cached single-character strings for ASCII codepoints 0–127.
@@ -479,136 +420,193 @@ interface Token {
      * where a raw string is required. Style information in the component is intentionally
      * discarded — only the visible text content matters for action strings.
      *
-     * @param s      static parts ({@code s[i]} is the literal before placeholder {@code i})
-     * @param idx    placeholder indices into {@code compPh}
-     * @param compPh resolved placeholder components
+     * @param staticParts        static parts ({@code s[i]} is the literal before placeholder {@code i})
+     * @param placeholderIndices placeholder indices into {@code compPh}
+     * @param placeholders       resolved placeholder components
      */
-    private static String buildText(String[] s, int[] idx, Component[] compPh) {
-        final StringBuilder sb = TL_SB.get();
-        sb.setLength(0);
-        if (s.length > 0 && s[0] != null) sb.append(s[0]);
-        for (int i = 0; i < idx.length; i++) {
-            sb.append(extractText(compPh[idx[i]]));
-            final int j = i + 1;
-            if (j < s.length && s[j] != null) sb.append(s[j]);
+    private static String buildText(
+            String[] staticParts,
+            int[] placeholderIndices,
+            Component[] placeholders
+    ) {
+        final StringBuilder builder = TL_SB.get();
+        builder.setLength(0);
+
+        if (staticParts.length > 0 && staticParts[0] != null) {
+            builder.append(staticParts[0]);
         }
-        return sb.toString();
-    }
 
-    /**
-     * Recursively extracts the plain text content of a {@link Component}, depth-first,
-     * discarding all style information. Used to obtain a raw string from a placeholder
-     * component for use in action values (commands, URLs).
-     */
-    private static String extractText(Component component) {
-        if (component == null) return "";
-        final StringBuilder sb = TL_SB.get();
-        final int mark = sb.length();
-        appendText(sb, component);
-        final String result = sb.substring(mark);
-        sb.setLength(mark);
-        return result;
-    }
+        for (int index = 0; index < placeholderIndices.length; index++) {
+            appendText(builder, placeholders[placeholderIndices[index]]);
 
-    private static void appendText(StringBuilder sb, Component component) {
-        if (component instanceof TextComponent tc) sb.append(tc.content());
-        for (final Component child : component.children()) appendText(sb, child);
-    }
-
-    /**
-     * Builds the child {@link Component} array for a dynamic text node using the
-     * <em>placeholder-as-parent</em> model:
-     *
-     * <ul>
-     *   <li>Each placeholder component from {@code compPh[phIndices[i]]} is emitted as-is
-     *       when no static text follows it, or wrapped around the following static text
-     *       segment as a child — making that segment inherit the placeholder's color and
-     *       decorations.</li>
-     * </ul>
-     *
-     * <p>The first static segment ({@code staticParts[0]}) is the root text of the
-     * surrounding styled wrapper and is <strong>not</strong> included in the returned array.
-     *
-     * @param staticParts literal segments: {@code [0]} is the root text, {@code [i+1]}
-     *                    follows placeholder {@code i}
-     * @param phIndices   indices into {@code compPh}
-     * @param compPh      resolved placeholder components
-     * @return children array (never null; empty when {@code phIndices} is empty)
-     */
-    private static Component[] buildDynContent(
-            String[] staticParts, int[] phIndices, Component[] compPh) {
-        final int n = phIndices.length;
-        if (n == 0) return EMPTY_COMPONENTS;
-
-        final Component[] result = new Component[n];
-        for (int i = 0; i < n; i++) {
-            final Component ph = compPh[phIndices[i]];
-            final int j = i + 1;
-            if (j < staticParts.length && staticParts[j] != null && !staticParts[j].isEmpty()) {
-                // Attach the following static text as a child of the placeholder component,
-                // so it inherits the placeholder's color and decorations.
-                result[i] = appendStaticChild(ph, staticParts[j]);
-            } else {
-                result[i] = ph;
+            final int staticIndex = index + 1;
+            if (staticIndex < staticParts.length && staticParts[staticIndex] != null) {
+                builder.append(staticParts[staticIndex]);
             }
         }
-        return result;
+
+        return builder.toString();
     }
 
-    /**
-     * Returns a copy of {@code parent} with {@code text} appended as a plain child.
-     *
-     * <p>For {@link TextComponent}s whose children array is currently empty this avoids an
-     * intermediate list allocation by constructing the result directly.
-     */
-    private static Component appendStaticChild(Component parent, String text) {
-        final Component staticChild = Component.text(text);
-        return parent.children(
-                concatList(parent.children(), staticChild));
+    private static String extractText(Component component) {
+        if (component == null) return "";
+
+        final StringBuilder builder = TL_SB.get();
+        builder.setLength(0);
+        appendText(builder, component);
+        return builder.toString();
     }
 
-    Component[] EMPTY_COMPONENTS = new Component[0];
-
-    private static Component textComponent(String text, Style style) {
-        return Component.text(text, style);
-    }
-
-    private static Component textComponent(String text, Style style, Component[] children) {
-        final TextComponent component = Component.text(text, style);
-        return children.length == 0 ? component : component.children(java.util.Arrays.asList(children));
-    }
-
-    private static java.util.List<Component> concatList(
-            java.util.List<Component> existing, Component extra) {
-        final java.util.List<Component> list = new java.util.ArrayList<>(existing.size() + 1);
-        list.addAll(existing);
-        list.add(extra);
-        return list;
-    }
-
-    /**
-     * Builds a gradient {@link Component} by assigning an interpolated color to each character.
-     */
-    private static Component buildGradient(
-            String text, int[] colors, short deco, ShadowColor shadow,
-            ClickEvent clickEvent, HoverEvent<?> hoverEvent
-    ) {
-        final int len = text.length();
-        if (len == 0) return Component.empty();
-
-        final Component[] chars = new Component[len];
-        for (int i = 0; i < len; i++) {
-            final float t = len == 1 ? 0f : (float) i / (len - 1);
-            final int rgb = StyleUtils.interpolate(colors, t);
-            final Style style = StyleUtils.create(
-                    StyleUtils.textColorOf(rgb), shadow, deco,
-                    clickEvent, hoverEvent, null, null
-            );
-            final char ch = text.charAt(i);
-            final String charStr = ch < 128 ? CHAR_CACHE[ch] : String.valueOf(ch);
-            chars[i] = textComponent(charStr, style);
+    private static void appendText(StringBuilder builder, Component component) {
+        if (component == null) return;
+        if (component instanceof TextComponent textComponent) {
+            builder.append(textComponent.content());
         }
 
-        return textComponent("", Style.empty(), chars);
+        final List<Component> children = component.children();
+        for (int index = 0, size = children.size(); index < size; index++) {
+            appendText(builder, children.get(index));
+        }
+    }
+
+    /**
+     * Emits placeholders and following static segments as siblings. Static segments are left
+     * unstyled so they inherit only the enclosing template style, not the replacement component's
+     * style, events, or child list.
+     */
+    private static Component[] buildDynContent(
+            String[] staticParts,
+            int[] placeholderIndices,
+            Component[] placeholders
+    ) {
+        final int placeholderCount = placeholderIndices.length;
+        if (placeholderCount == 0) return EMPTY_COMPONENTS;
+
+        int childCount = placeholderCount;
+        for (int index = 0; index < placeholderCount; index++) {
+            final int staticIndex = index + 1;
+            if (staticIndex < staticParts.length
+                    && staticParts[staticIndex] != null
+                    && !staticParts[staticIndex].isEmpty()) {
+                childCount++;
+            }
+        }
+
+        final Component[] children = new Component[childCount];
+        int outputIndex = 0;
+        for (int index = 0; index < placeholderCount; index++) {
+            final Component placeholder = placeholders[placeholderIndices[index]];
+            children[outputIndex++] = placeholder;
+
+            final int staticIndex = index + 1;
+            if (staticIndex < staticParts.length) {
+                final String staticText = staticParts[staticIndex];
+                if (staticText != null && !staticText.isEmpty()) {
+                    children[outputIndex++] = Component.text(staticText);
+                }
+            }
+        }
+
+        return children;
+    }
+
+    private static Style withEvents(
+            Style baseStyle,
+            ClickEvent clickEvent,
+            HoverEvent<?> hoverEvent
+    ) {
+        Style style = baseStyle;
+        if (!Objects.equals(style.clickEvent(), clickEvent)) {
+            style = style.clickEvent(clickEvent);
+        }
+        if (!Objects.equals(style.hoverEvent(), hoverEvent)) {
+            style = style.hoverEvent(hoverEvent);
+        }
+        return style;
+    }
+
+    private static Component textComponent(String content, Style style) {
+        return Component.text(content, style);
+    }
+
+    private static Component textComponent(
+            String content,
+            Style style,
+            Component[] children
+    ) {
+        final TextComponent component = Component.text(content, style);
+        return children.length == 0
+                ? component
+                : component.children(java.util.Arrays.asList(children));
+    }
+
+    private static Style[] gradientStyles(int length, int[] colors) {
+        if (length == 0) return EMPTY_STYLES;
+
+        final Style[] styles = new Style[length];
+        for (int index = 0; index < length; index++) {
+            final float position = length == 1 ? 0f : (float) index / (length - 1);
+            final int rgb = StyleUtils.interpolate(colors, position);
+            styles[index] = StyleUtils.create(StyleUtils.textColorOf(rgb), null, (short) 0);
+        }
+        return styles;
+    }
+
+    private static int countCodePoints(Component component) {
+        int count = component instanceof TextComponent textComponent
+                ? textComponent.content().codePointCount(0, textComponent.content().length())
+                : 0;
+
+        final List<Component> children = component.children();
+        for (int index = 0, size = children.size(); index < size; index++) {
+            count += countCodePoints(children.get(index));
+        }
+        return count;
+    }
+
+    private static Component applyGradient(
+            Component component,
+            Style[] styles,
+            int[] styleIndex
+    ) {
+        final List<Component> originalChildren = component.children();
+        final int textLength;
+        final String text;
+        if (component instanceof TextComponent textComponent) {
+            text = textComponent.content();
+            textLength = text.codePointCount(0, text.length());
+        } else {
+            text = null;
+            textLength = 0;
+        }
+
+        if (textLength == 0 && originalChildren.isEmpty()) return component;
+
+        final Component[] children = new Component[textLength + originalChildren.size()];
+        int outputIndex = 0;
+        if (text != null) {
+            int offset = 0;
+            for (int index = 0; index < textLength; index++) {
+                final int codePoint = text.codePointAt(offset);
+                final String value = codePoint < CHAR_CACHE.length
+                        ? CHAR_CACHE[codePoint]
+                        : new String(Character.toChars(codePoint));
+                children[outputIndex++] = Component.text(value, styles[styleIndex[0]++]);
+                offset += Character.charCount(codePoint);
+            }
+        }
+
+        for (int index = 0, size = originalChildren.size(); index < size; index++) {
+            children[outputIndex++] = applyGradient(
+                    originalChildren.get(index),
+                    styles,
+                    styleIndex
+            );
+        }
+
+        if (text != null) {
+            return textComponent("", component.style(), children);
+        }
+        return component.children(java.util.Arrays.asList(children));
     }
 }

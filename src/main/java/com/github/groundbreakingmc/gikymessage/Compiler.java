@@ -702,7 +702,6 @@ final class Compiler {
                             && detectDynamic
                             && source[position] == '{') {
                         dynamic = true;
-                        break;
                     }
 
                     position++;

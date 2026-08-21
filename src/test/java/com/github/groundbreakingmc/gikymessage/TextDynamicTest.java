@@ -221,11 +221,11 @@ class TextDynamicTest extends TextTestBase {
         }
 
         @Test
-        @DisplayName("Placeholder in show — value contains color code")
+        @DisplayName("Placeholder in show keeps component text unchanged")
         void placeholderValueContainsColorCode() {
             assertRenders(
                     Component.text("Hover").hoverEvent(HoverEvent.showText(
-                            Component.text("Steve", NamedTextColor.RED))),
+                            Component.text("&cSteve"))),
                     "[Hover](show:{player})",
                     "player", "&cSteve"
             );

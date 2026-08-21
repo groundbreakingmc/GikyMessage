@@ -20,31 +20,45 @@ abstract class TextTestBase {
         );
     }
 
-    static void assertRenders(Component expected, String input, String... pairs) {
+    static void assertRenders(Component expected, String input,
+                              String k0, String v0) {
         assertEquals(
                 MM.serialize(expected),
-                MM.serialize(Text.of(input).render(pairsToResolver(pairs))),
+                MM.serialize(Text.of(input).render(k0, Component.text(v0))),
                 "format: " + input
         );
     }
 
-    static Resolver pairsToResolver(String[] pairs) {
-        return switch (pairs.length) {
-            case 2 -> new Resolver.Resolver1(
-                    pairs[0], Component.text(pairs[1]));
-            case 4 -> new Resolver.Resolver2(
-                    pairs[0], Component.text(pairs[1]),
-                    pairs[2], Component.text(pairs[3]));
-            case 6 -> new Resolver.Resolver3(
-                    pairs[0], Component.text(pairs[1]),
-                    pairs[2], Component.text(pairs[3]),
-                    pairs[4], Component.text(pairs[5]));
-            case 8 -> new Resolver.Resolver4(
-                    pairs[0], Component.text(pairs[1]),
-                    pairs[2], Component.text(pairs[3]),
-                    pairs[4], Component.text(pairs[5]),
-                    pairs[6], Component.text(pairs[7]));
-            default -> throw new IllegalArgumentException("Add a ResolverN for arity " + pairs.length / 2);
-        };
+    static void assertRenders(Component expected, String input,
+                              String k0, String v0,
+                              String k1, String v1) {
+        assertEquals(
+                MM.serialize(expected),
+                MM.serialize(Text.of(input).render(k0, Component.text(v0), k1, Component.text(v1))),
+                "format: " + input
+        );
+    }
+
+    static void assertRenders(Component expected, String input,
+                              String k0, String v0,
+                              String k1, String v1,
+                              String k2, String v2) {
+        assertEquals(
+                MM.serialize(expected),
+                MM.serialize(Text.of(input).render(k0, Component.text(v0), k1, Component.text(v1), k2, Component.text(v2))),
+                "format: " + input
+        );
+    }
+
+    static void assertRenders(Component expected, String input,
+                              String k0, String v0,
+                              String k1, String v1,
+                              String k2, String v2,
+                              String k3, String v3) {
+        assertEquals(
+                MM.serialize(expected),
+                MM.serialize(Text.of(input).render(k0, Component.text(v0), k1, Component.text(v1), k2, Component.text(v2), k3, Component.text(v3))),
+                "format: " + input
+        );
     }
 }

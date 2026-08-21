@@ -271,10 +271,10 @@ class TextCombinedTest extends TextTestBase {
         }
 
         @Test
-        @DisplayName("Dynamic hover — color code inside placeholder value")
+        @DisplayName("Dynamic hover keeps placeholder component text unchanged")
         void dynamicHoverColorInPlaceholder() {
             assertRenders(
-                    Component.text("@").hoverEvent(Component.text("Red hover", NamedTextColor.RED)),
+                    Component.text("@").hoverEvent(Component.text("&cRed hover")),
                     "[@](show:{text})",
                     "text", "&cRed hover"
             );

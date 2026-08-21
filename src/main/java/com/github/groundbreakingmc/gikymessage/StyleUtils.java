@@ -20,6 +20,8 @@ final class StyleUtils {
     static final int BIT_TRUE = 0b01;
     static final int BIT_FALSE = 0b10;
 
+    private static final int OPAQUE_ALPHA = 0xFF000000;
+
     private static final Int2ObjectMap<TextColor> COLOR_CACHE = new Int2ObjectOpenHashMap<>();
     private static final Int2ObjectMap<ShadowColor> SHADOW_COLOR_CACHE = new Int2ObjectOpenHashMap<>();
 
@@ -94,18 +96,20 @@ final class StyleUtils {
     }
 
     static TextColor textColorOf(int color) {
-        TextColor textColor = COLOR_CACHE.get(color);
+        final int rgb = color & 0x00FFFFFF;
+        TextColor textColor = COLOR_CACHE.get(rgb);
         if (textColor != null) return textColor;
-        textColor = TextColor.color(color);
-        COLOR_CACHE.put(color, textColor);
+        textColor = TextColor.color(rgb);
+        COLOR_CACHE.put(rgb, textColor);
         return textColor;
     }
 
     static ShadowColor shadowColorOf(int color) {
-        ShadowColor shadowColor = SHADOW_COLOR_CACHE.get(color);
+        final int argb = OPAQUE_ALPHA | (color & 0x00FFFFFF);
+        ShadowColor shadowColor = SHADOW_COLOR_CACHE.get(argb);
         if (shadowColor != null) return shadowColor;
-        shadowColor = ShadowColor.shadowColor(color);
-        SHADOW_COLOR_CACHE.put(color, shadowColor);
+        shadowColor = ShadowColor.shadowColor(argb);
+        SHADOW_COLOR_CACHE.put(argb, shadowColor);
         return shadowColor;
     }
 

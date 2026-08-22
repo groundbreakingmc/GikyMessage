@@ -18,10 +18,6 @@ dependencies {
     // Source: https://mvnrepository.com/artifact/net.kyori/adventure-text-minimessage
     testImplementation(libs.adventure.minimessage)
 
-    // Source: https://mvnrepository.com/artifact/it.unimi.dsi/fastutil
-    compileOnly(libs.fastutil)
-    testImplementation(libs.fastutil)
-
     // Source: https://mvnrepository.com/artifact/org.junit/junit-bom
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)

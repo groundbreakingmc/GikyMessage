@@ -1,7 +1,5 @@
 package com.github.groundbreakingmc.gikymessage;
 
-import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
-import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
@@ -10,6 +8,8 @@ import net.kyori.adventure.text.format.ShadowColor;
 import net.kyori.adventure.text.format.Style;
 import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.format.TextDecoration;
+
+import java.util.concurrent.atomic.AtomicReferenceArray;
 
 final class StyleUtils {
 
@@ -22,8 +22,13 @@ final class StyleUtils {
 
     private static final int OPAQUE_ALPHA = 0xFF000000;
 
-    private static final Int2ObjectMap<TextColor> COLOR_CACHE = new Int2ObjectOpenHashMap<>();
-    private static final Int2ObjectMap<ShadowColor> SHADOW_COLOR_CACHE = new Int2ObjectOpenHashMap<>();
+    private static final int COLOR_CACHE_SIZE = 1 << 13;
+    private static final int COLOR_CACHE_MASK = COLOR_CACHE_SIZE - 1;
+
+    private static final AtomicReferenceArray<ColorCacheEntry<TextColor>> COLOR_CACHE =
+            new AtomicReferenceArray<>(COLOR_CACHE_SIZE);
+    private static final AtomicReferenceArray<ColorCacheEntry<ShadowColor>> SHADOW_COLOR_CACHE =
+            new AtomicReferenceArray<>(COLOR_CACHE_SIZE);
 
     private StyleUtils() {
     }
@@ -97,20 +102,40 @@ final class StyleUtils {
 
     static TextColor textColorOf(int color) {
         final int rgb = color & 0x00FFFFFF;
-        TextColor textColor = COLOR_CACHE.get(rgb);
-        if (textColor != null) return textColor;
-        textColor = TextColor.color(rgb);
-        COLOR_CACHE.put(rgb, textColor);
+        final int slot = colorCacheSlot(rgb);
+        final ColorCacheEntry<TextColor> cached = COLOR_CACHE.get(slot);
+        if (cached != null && cached.key == rgb) return cached.value;
+
+        final TextColor textColor = TextColor.color(rgb);
+        COLOR_CACHE.lazySet(slot, new ColorCacheEntry<>(rgb, textColor));
         return textColor;
     }
 
     static ShadowColor shadowColorOf(int color) {
         final int argb = OPAQUE_ALPHA | (color & 0x00FFFFFF);
-        ShadowColor shadowColor = SHADOW_COLOR_CACHE.get(argb);
-        if (shadowColor != null) return shadowColor;
-        shadowColor = ShadowColor.shadowColor(argb);
-        SHADOW_COLOR_CACHE.put(argb, shadowColor);
+        final int slot = colorCacheSlot(argb);
+        final ColorCacheEntry<ShadowColor> cached = SHADOW_COLOR_CACHE.get(slot);
+        if (cached != null && cached.key == argb) return cached.value;
+
+        final ShadowColor shadowColor = ShadowColor.shadowColor(argb);
+        SHADOW_COLOR_CACHE.lazySet(slot, new ColorCacheEntry<>(argb, shadowColor));
         return shadowColor;
+    }
+
+    private static int colorCacheSlot(int color) {
+        final int mixed = color * 0x9E3779B9;
+        return (mixed ^ (mixed >>> 16)) & COLOR_CACHE_MASK;
+    }
+
+    private static final class ColorCacheEntry<T> {
+
+        private final int key;
+        private final T value;
+
+        private ColorCacheEntry(int key, T value) {
+            this.key = key;
+            this.value = value;
+        }
     }
 
     static int interpolate(int[] colors, float t) {

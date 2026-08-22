@@ -25,9 +25,9 @@ final class StyleUtils {
     private static final int COLOR_CACHE_SIZE = 1 << 13;
     private static final int COLOR_CACHE_MASK = COLOR_CACHE_SIZE - 1;
 
-    private static final AtomicReferenceArray<ColorCacheEntry<TextColor>> COLOR_CACHE =
+    private static final AtomicReferenceArray<TextColor> COLOR_CACHE =
             new AtomicReferenceArray<>(COLOR_CACHE_SIZE);
-    private static final AtomicReferenceArray<ColorCacheEntry<ShadowColor>> SHADOW_COLOR_CACHE =
+    private static final AtomicReferenceArray<ShadowColor> SHADOW_COLOR_CACHE =
             new AtomicReferenceArray<>(COLOR_CACHE_SIZE);
 
     private StyleUtils() {
@@ -68,7 +68,6 @@ final class StyleUtils {
         return builder.build();
     }
 
-
     static short withDecoration(short decorations, TextDecoration decoration, int state) {
         final int shift = decoration.ordinal() * BITS;
         final int mask = MASK << shift;
@@ -103,39 +102,28 @@ final class StyleUtils {
     static TextColor textColorOf(int color) {
         final int rgb = color & 0x00FFFFFF;
         final int slot = colorCacheSlot(rgb);
-        final ColorCacheEntry<TextColor> cached = COLOR_CACHE.get(slot);
-        if (cached != null && cached.key == rgb) return cached.value;
+        final TextColor cached = COLOR_CACHE.get(slot);
+        if (cached != null && cached.value() == rgb) return cached;
 
         final TextColor textColor = TextColor.color(rgb);
-        COLOR_CACHE.lazySet(slot, new ColorCacheEntry<>(rgb, textColor));
+        COLOR_CACHE.lazySet(slot, textColor);
         return textColor;
     }
 
     static ShadowColor shadowColorOf(int color) {
         final int argb = OPAQUE_ALPHA | (color & 0x00FFFFFF);
         final int slot = colorCacheSlot(argb);
-        final ColorCacheEntry<ShadowColor> cached = SHADOW_COLOR_CACHE.get(slot);
-        if (cached != null && cached.key == argb) return cached.value;
+        final ShadowColor cached = SHADOW_COLOR_CACHE.get(slot);
+        if (cached != null && cached.value() == argb) return cached;
 
         final ShadowColor shadowColor = ShadowColor.shadowColor(argb);
-        SHADOW_COLOR_CACHE.lazySet(slot, new ColorCacheEntry<>(argb, shadowColor));
+        SHADOW_COLOR_CACHE.lazySet(slot, shadowColor);
         return shadowColor;
     }
 
     private static int colorCacheSlot(int color) {
         final int mixed = color * 0x9E3779B9;
         return (mixed ^ (mixed >>> 16)) & COLOR_CACHE_MASK;
-    }
-
-    private static final class ColorCacheEntry<T> {
-
-        private final int key;
-        private final T value;
-
-        private ColorCacheEntry(int key, T value) {
-            this.key = key;
-            this.value = value;
-        }
     }
 
     static int interpolate(int[] colors, float t) {

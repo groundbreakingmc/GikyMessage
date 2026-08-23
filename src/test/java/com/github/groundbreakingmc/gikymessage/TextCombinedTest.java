@@ -12,6 +12,8 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
 /**
  * Integration / combined tests: nested blocks, escape sequences, and
  * complex format strings mixing colors, decorations, placeholders,
@@ -221,6 +223,15 @@ class TextCombinedTest extends TextTestBase {
     @Nested
     @DisplayName("Combined cases")
     class Combined {
+
+        @Test
+        @DisplayName("Invalid sprite key")
+        void invalidSpriteKey() {
+            assertThrows(
+                    TextFormatException.class,
+                    () -> Text.of("[X](sprite:INVALID KEY)")
+            );
+        }
 
         @Test
         @DisplayName("Styled text with dynamic click command")

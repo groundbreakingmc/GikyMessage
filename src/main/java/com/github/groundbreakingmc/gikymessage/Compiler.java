@@ -1035,7 +1035,7 @@ final class Compiler {
         } else if (selectedContentType == ACTION_SPRITE) {
             contentToken = new Token.Obj(
                     ObjectContents.sprite(
-                            Key.key(selectedContentValue)
+                            parseSpriteKey(selectedContentValue)
                     ),
                     contentStyle
             );
@@ -1628,6 +1628,14 @@ final class Compiler {
     }
 
     private record DynamicValue(String[] staticParts, int[] placeholderIndices) {
+    }
+
+    private static Key parseSpriteKey(String value) {
+        try {
+            return Key.key(value);
+        } catch (RuntimeException exception) {
+            throw new TextFormatException("Invalid sprite key: " + value, exception);
+        }
     }
 
     private static void releaseScratch(StringBuilder scratch) {

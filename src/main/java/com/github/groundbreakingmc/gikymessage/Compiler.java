@@ -7,6 +7,8 @@ import net.kyori.adventure.text.format.*;
 import net.kyori.adventure.text.object.ObjectContents;
 
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Compiles raw format strings into {@link Token} trees consumed by {@link TextImpl}.
@@ -27,6 +29,7 @@ import java.util.Arrays;
 final class Compiler {
 
     private static final int INITIAL_PLACEHOLDER_CAPACITY = 16;
+    private static final int PLACEHOLDER_HASH_THRESHOLD = 32;
     private static final int INITIAL_STACK_CAPACITY = 8;
 
     /**
@@ -1638,26 +1641,62 @@ final class Compiler {
     private static final class PlaceholderTable {
 
         private String[] keys = new String[INITIAL_PLACEHOLDER_CAPACITY];
+        private Map<String, Integer> indices;
         private int count;
 
         private int intern(char[] source, int offset, int length) {
-            for (int index = 0; index < this.count; index++) {
-                if (regionEquals(source, offset, length, this.keys[index])) return index;
+            if (this.indices == null) {
+                for (int index = 0; index < this.count; index++) {
+                    if (regionEquals(source, offset, length, this.keys[index])) return index;
+                }
+
+                final String key = new String(source, offset, length);
+                final int index = this.add(key);
+                if (this.count == PLACEHOLDER_HASH_THRESHOLD) this.promoteToHash();
+                return index;
             }
 
-            this.ensureCapacity();
-            this.keys[this.count] = new String(source, offset, length);
-            return this.count++;
+            final String key = new String(source, offset, length);
+            final Integer existing = this.indices.get(key);
+            if (existing != null) return existing;
+
+            final int index = this.add(key);
+            this.indices.put(key, index);
+            return index;
         }
 
         private int intern(String key) {
-            for (int index = 0; index < this.count; index++) {
-                if (this.keys[index].equals(key)) return index;
+            if (this.indices == null) {
+                for (int index = 0; index < this.count; index++) {
+                    if (this.keys[index].equals(key)) return index;
+                }
+
+                final int index = this.add(key);
+                if (this.count == PLACEHOLDER_HASH_THRESHOLD) this.promoteToHash();
+                return index;
             }
 
+            final Integer existing = this.indices.get(key);
+            if (existing != null) return existing;
+
+            final int index = this.add(key);
+            this.indices.put(key, index);
+            return index;
+        }
+
+        private int add(String key) {
             this.ensureCapacity();
-            this.keys[this.count] = key;
-            return this.count++;
+            final int index = this.count++;
+            this.keys[index] = key;
+            return index;
+        }
+
+        private void promoteToHash() {
+            final Map<String, Integer> map = new HashMap<>(this.count * 2);
+            for (int index = 0; index < this.count; index++) {
+                map.put(this.keys[index], index);
+            }
+            this.indices = map;
         }
 
         private String[] toArray() {

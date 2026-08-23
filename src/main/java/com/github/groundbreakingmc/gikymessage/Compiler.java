@@ -30,6 +30,7 @@ final class Compiler {
 
     private static final int INITIAL_PLACEHOLDER_CAPACITY = 16;
     private static final int PLACEHOLDER_HASH_THRESHOLD = 32;
+    private static final int MAX_RETAINED_SCRATCH_CAPACITY = 8 * 1024;
     private static final int INITIAL_STACK_CAPACITY = 8;
 
     /**
@@ -500,6 +501,34 @@ final class Compiler {
             TextColor inheritedColor,
             ShadowColor inheritedShadow
     ) {
+        final StringBuilder scratch = SCRATCH_BUFFER.get();
+        try {
+            return buildBracketToken0(
+                    innerText, decorations, color, shadow, children, childCount,
+                    source, actionStart, actionEnd, placeholders,
+                    inheritedDecorations, inheritedColor, inheritedShadow, scratch
+            );
+        } finally {
+            releaseScratch(scratch);
+        }
+    }
+
+    private static Token buildBracketToken0(
+            Token innerText,
+            short decorations,
+            TextColor color,
+            ShadowColor shadow,
+            Token[] children,
+            int childCount,
+            char[] source,
+            int actionStart,
+            int actionEnd,
+            PlaceholderTable placeholders,
+            short inheritedDecorations,
+            TextColor inheritedColor,
+            ShadowColor inheritedShadow,
+            StringBuilder scratch
+    ) {
         decorations = StyleUtils.decorationDelta(
                 decorations,
                 inheritedDecorations
@@ -564,7 +593,6 @@ final class Compiler {
         int insertionValueStart = -1;
         int insertionValueEnd = -1;
 
-        final StringBuilder scratch = SCRATCH_BUFFER.get();
         int position = actionStart;
 
         while (position < actionEnd) {
@@ -1600,6 +1628,14 @@ final class Compiler {
     }
 
     private record DynamicValue(String[] staticParts, int[] placeholderIndices) {
+    }
+
+    private static void releaseScratch(StringBuilder scratch) {
+        if (scratch.capacity() > MAX_RETAINED_SCRATCH_CAPACITY) {
+            SCRATCH_BUFFER.set(new StringBuilder(64));
+        } else {
+            scratch.setLength(0);
+        }
     }
 
     private record TokenSequence(Token[] tokens, int count) {

@@ -394,6 +394,7 @@ interface Token {
     /**
      * Per-thread {@link StringBuilder} reused across all {@link #buildText} calls.
      */
+    int MAX_RETAINED_BUILDER_CAPACITY = 8 * 1024;
     ThreadLocal<StringBuilder> TL_SB = ThreadLocal.withInitial(() -> new StringBuilder(128));
     Component[] EMPTY_COMPONENTS = new Component[0];
     Style[] EMPTY_STYLES = new Style[0];
@@ -431,21 +432,24 @@ interface Token {
     ) {
         final StringBuilder builder = TL_SB.get();
         builder.setLength(0);
-
-        if (staticParts.length > 0 && staticParts[0] != null) {
-            builder.append(staticParts[0]);
-        }
-
-        for (int index = 0; index < placeholderIndices.length; index++) {
-            appendText(builder, placeholders[placeholderIndices[index]]);
-
-            final int staticIndex = index + 1;
-            if (staticIndex < staticParts.length && staticParts[staticIndex] != null) {
-                builder.append(staticParts[staticIndex]);
+        try {
+            if (staticParts.length > 0 && staticParts[0] != null) {
+                builder.append(staticParts[0]);
             }
-        }
 
-        return builder.toString();
+            for (int index = 0; index < placeholderIndices.length; index++) {
+                appendText(builder, placeholders[placeholderIndices[index]]);
+
+                final int staticIndex = index + 1;
+                if (staticIndex < staticParts.length && staticParts[staticIndex] != null) {
+                    builder.append(staticParts[staticIndex]);
+                }
+            }
+
+            return builder.toString();
+        } finally {
+            releaseBuilder(builder);
+        }
     }
 
     private static String extractText(Component component) {
@@ -453,8 +457,20 @@ interface Token {
 
         final StringBuilder builder = TL_SB.get();
         builder.setLength(0);
-        appendText(builder, component);
-        return builder.toString();
+        try {
+            appendText(builder, component);
+            return builder.toString();
+        } finally {
+            releaseBuilder(builder);
+        }
+    }
+
+    private static void releaseBuilder(StringBuilder builder) {
+        if (builder.capacity() > MAX_RETAINED_BUILDER_CAPACITY) {
+            TL_SB.set(new StringBuilder(128));
+        } else {
+            builder.setLength(0);
+        }
     }
 
     private static void appendText(StringBuilder builder, Component component) {

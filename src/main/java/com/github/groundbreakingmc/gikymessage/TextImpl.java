@@ -337,23 +337,27 @@ final class TextImpl implements Text {
     }
 
     private Component renderBuffer(RenderContext context) {
-        if (!this.cacheable) return this.token.render(context.buffer);
+        try {
+            if (!this.cacheable) return this.token.render(context.buffer);
 
-        if (context.hasCachedResult && Arrays.equals(context.buffer, context.cachedValues)) {
-            return context.cachedResult;
+            if (context.hasCachedResult && Arrays.equals(context.buffer, context.cachedValues)) {
+                return context.cachedResult;
+            }
+
+            final Component rendered = this.token.render(context.buffer);
+            System.arraycopy(
+                    context.buffer,
+                    0,
+                    context.cachedValues,
+                    0,
+                    context.buffer.length
+            );
+            context.cachedResult = rendered;
+            context.hasCachedResult = true;
+            return rendered;
+        } finally {
+            Arrays.fill(context.buffer, null);
         }
-
-        final Component rendered = this.token.render(context.buffer);
-        System.arraycopy(
-                context.buffer,
-                0,
-                context.cachedValues,
-                0,
-                context.buffer.length
-        );
-        context.cachedResult = rendered;
-        context.hasCachedResult = true;
-        return rendered;
     }
 
     private static final class RenderContext {

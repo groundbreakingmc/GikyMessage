@@ -21,6 +21,7 @@ final class StyleUtils {
     static final int BIT_FALSE = 0b10;
 
     private static final int OPAQUE_ALPHA = 0xFF000000;
+    private static final TextDecoration[] DECORATIONS = TextDecoration.values();
 
     private static final int COLOR_CACHE_SIZE = 1 << 13;
     private static final int COLOR_CACHE_MASK = COLOR_CACHE_SIZE - 1;
@@ -76,7 +77,7 @@ final class StyleUtils {
 
     static short resetDecorations(short inheritedDecorations) {
         short result = 0;
-        for (final TextDecoration decoration : TextDecoration.values()) {
+        for (final TextDecoration decoration : DECORATIONS) {
             final int shift = decoration.ordinal() * BITS;
             final int inheritedState = (inheritedDecorations >>> shift) & MASK;
             if (inheritedState == BIT_TRUE) {
@@ -88,7 +89,7 @@ final class StyleUtils {
 
     static short decorationDelta(short current, short inherited) {
         short result = 0;
-        for (final TextDecoration decoration : TextDecoration.values()) {
+        for (final TextDecoration decoration : DECORATIONS) {
             final int shift = decoration.ordinal() * BITS;
             final int currentState = (current >>> shift) & MASK;
             final int inheritedState = (inherited >>> shift) & MASK;

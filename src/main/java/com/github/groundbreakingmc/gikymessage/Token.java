@@ -300,7 +300,10 @@ interface Token {
         private final Style baseStyle;
         final boolean dynamic;
         private final Component staticComponent;
-        private volatile GradientStyleCache styleCache;
+        private volatile Style[] styleCache0;
+        private volatile Style[] styleCache1;
+        private volatile Style[] styleCache2;
+        private volatile Style[] styleCache3;
 
         GradientContent(Token content, int[] colors, Style baseStyle, boolean dynamic) {
             this.content = content;
@@ -319,34 +322,37 @@ interface Token {
             final Component rendered = this.content.render(placeholders);
             final int codePointCount = countCodePoints(rendered);
 
-            GradientStyleCache cache = this.styleCache;
-            if (cache == null || cache.length != codePointCount) {
-                cache = new GradientStyleCache(
-                        codePointCount,
-                        gradientStyles(codePointCount, this.colors)
-                );
-                this.styleCache = cache;
-            }
+            final Style[] styles = this.styles(codePointCount);
 
             final Component colored;
             if (codePointCount == 0) {
                 colored = rendered;
             } else {
                 final int[] styleIndex = {0};
-                colored = applyGradient(rendered, cache.styles, styleIndex);
+                colored = applyGradient(rendered, styles, styleIndex);
             }
             return textComponent("", this.baseStyle, new Component[]{colored});
         }
-    }
 
-    final class GradientStyleCache {
+        private Style[] styles(int length) {
+            final int slot = (length ^ (length >>> 2)) & 3;
+            Style[] styles = switch (slot) {
+                case 0 -> this.styleCache0;
+                case 1 -> this.styleCache1;
+                case 2 -> this.styleCache2;
+                default -> this.styleCache3;
+            };
 
-        final int length;
-        final Style[] styles;
+            if (styles != null && styles.length == length) return styles;
 
-        GradientStyleCache(int length, Style[] styles) {
-            this.length = length;
-            this.styles = styles;
+            styles = gradientStyles(length, this.colors);
+            switch (slot) {
+                case 0 -> this.styleCache0 = styles;
+                case 1 -> this.styleCache1 = styles;
+                case 2 -> this.styleCache2 = styles;
+                default -> this.styleCache3 = styles;
+            }
+            return styles;
         }
     }
 

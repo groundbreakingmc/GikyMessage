@@ -400,13 +400,13 @@ interface Token {
     Style[] EMPTY_STYLES = new Style[0];
 
     /**
-     * Cached single-character strings for ASCII codepoints 0–127.
+     * Cached single-character strings for codepoints 0–255.
      */
     String[] CHAR_CACHE = buildCharCache();
 
     private static String[] buildCharCache() {
-        final String[] cache = new String[128];
-        for (int i = 0; i < 128; i++) cache[i] = String.valueOf((char) i);
+        final String[] cache = new String[256];
+        for (int i = 0; i < 256; i++) cache[i] = String.valueOf((char) i);
         return cache;
     }
 
@@ -606,7 +606,7 @@ interface Token {
                 final int codePoint = text.codePointAt(offset);
                 final String value = codePoint < CHAR_CACHE.length
                         ? CHAR_CACHE[codePoint]
-                        : new String(Character.toChars(codePoint));
+                        : Character.toString(codePoint);
                 children[outputIndex++] = Component.text(value, styles[styleIndex[0]++]);
                 offset += Character.charCount(codePoint);
             }

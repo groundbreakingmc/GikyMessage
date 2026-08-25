@@ -563,7 +563,7 @@ interface Token {
         for (int index = 0; index < length; index++) {
             final float position = length == 1 ? 0f : (float) index / (length - 1);
             final int rgb = StyleUtils.interpolate(colors, position);
-            styles[index] = StyleUtils.create(StyleUtils.textColorOf(rgb), null, (short) 0);
+            styles[index] = Style.style(StyleUtils.textColorOf(rgb));
         }
         return styles;
     }

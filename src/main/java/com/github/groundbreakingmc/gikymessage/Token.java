@@ -438,6 +438,13 @@ interface Token {
             int[] placeholderIndices,
             Component[] placeholders
     ) {
+        if (staticParts.length == 0 && placeholderIndices.length == 1) {
+            final Component component = placeholders[placeholderIndices[0]];
+            if (component instanceof TextComponent textComponent && component.children().isEmpty()) {
+                return textComponent.content();
+            }
+        }
+
         final StringBuilder builder = TL_SB.get();
         builder.setLength(0);
         try {

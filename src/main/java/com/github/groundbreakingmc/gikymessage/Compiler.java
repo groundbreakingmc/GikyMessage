@@ -70,7 +70,7 @@ final class Compiler {
         TextColor curColor = null;
         ShadowColor curShadow = null;
 
-        Frame[] stack = new Frame[INITIAL_STACK_CAPACITY];
+        Frame[] stack = null;
         int depth = 0;
 
         short inhDeco = 0;
@@ -87,8 +87,8 @@ final class Compiler {
         // root style. Decide lazily when the first styled root token is flushed.
         boolean canHoistRootStyle = true;
 
-        String[] dynStatic = new String[INITIAL_PLACEHOLDER_CAPACITY + 1];
-        int[] dynPh = new int[INITIAL_PLACEHOLDER_CAPACITY];
+        String[] dynStatic = null;
+        int[] dynPh = null;
         int dynPhCnt = 0;
         boolean hasDyn = false;
 
@@ -282,7 +282,10 @@ final class Compiler {
                     final int keyOff = pos + 1;
                     final int keyLen = braceEnd - keyOff;
                     final int phIdx = placeholders.intern(src, keyOff, keyLen);
-                    if (dynPhCnt == dynPh.length) {
+                    if (dynPh == null) {
+                        dynPh = new int[INITIAL_PLACEHOLDER_CAPACITY];
+                        dynStatic = new String[INITIAL_PLACEHOLDER_CAPACITY + 1];
+                    } else if (dynPhCnt == dynPh.length) {
                         dynPh = Arrays.copyOf(dynPh, dynPh.length << 1);
                         dynStatic = Arrays.copyOf(dynStatic, dynStatic.length << 1);
                     }
@@ -329,7 +332,9 @@ final class Compiler {
                 dynPhCnt = 0;
                 hasDyn = false;
 
-                if (depth == stack.length) {
+                if (stack == null) {
+                    stack = new Frame[INITIAL_STACK_CAPACITY];
+                } else if (depth == stack.length) {
                     stack = Arrays.copyOf(stack, stack.length << 1);
                 }
                 Frame frame = stack[depth];
@@ -1686,7 +1691,9 @@ final class Compiler {
 
     private static final class PlaceholderTable {
 
-        private String[] keys = new String[INITIAL_PLACEHOLDER_CAPACITY];
+        private static final String[] EMPTY_KEYS = new String[0];
+
+        private String[] keys;
         private Map<String, Integer> indices;
         private int count;
 
@@ -1770,11 +1777,13 @@ final class Compiler {
         }
 
         private String[] toArray() {
-            return Arrays.copyOf(this.keys, this.count);
+            return this.count == 0 ? EMPTY_KEYS : Arrays.copyOf(this.keys, this.count);
         }
 
         private void ensureCapacity() {
-            if (this.count == this.keys.length) {
+            if (this.keys == null) {
+                this.keys = new String[INITIAL_PLACEHOLDER_CAPACITY];
+            } else if (this.count == this.keys.length) {
                 this.keys = Arrays.copyOf(this.keys, this.keys.length << 1);
             }
         }

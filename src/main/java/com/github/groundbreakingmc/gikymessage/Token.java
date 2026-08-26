@@ -363,7 +363,8 @@ interface Token {
         private final Component component;
 
         Obj(ObjectContents contents, Style style) {
-            this.component = Component.object(contents).style(style);
+            final Component component = Component.object(contents);
+            this.component = style.isEmpty() ? component : component.style(style);
         }
 
         @Override
@@ -391,7 +392,8 @@ interface Token {
                     this.placeholderIndices,
                     placeholders
             );
-            return Component.object(ObjectContents.playerHead(profileName)).style(this.style);
+            final Component component = Component.object(ObjectContents.playerHead(profileName));
+            return this.style.isEmpty() ? component : component.style(this.style);
         }
     }
 

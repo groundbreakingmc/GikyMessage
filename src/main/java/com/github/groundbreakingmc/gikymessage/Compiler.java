@@ -1163,7 +1163,9 @@ final class Compiler {
                     staticParts[count] = scratch.isEmpty() ? null : scratch.toString();
                     scratch.setLength(0);
                     placeholderIndices[count] = placeholders.intern(
-                            value.substring(index + 1, end)
+                            value,
+                            index + 1,
+                            end - index - 1
                     );
                     count++;
                     index = end;
@@ -1701,6 +1703,30 @@ final class Compiler {
             }
 
             final String key = new String(source, offset, length);
+            final Integer existing = this.indices.get(key);
+            if (existing != null) return existing;
+
+            final int index = this.add(key);
+            this.indices.put(key, index);
+            return index;
+        }
+
+        private int intern(String source, int offset, int length) {
+            if (this.indices == null) {
+                for (int index = 0; index < this.count; index++) {
+                    final String key = this.keys[index];
+                    if (key.length() == length && source.regionMatches(offset, key, 0, length)) {
+                        return index;
+                    }
+                }
+
+                final String key = source.substring(offset, offset + length);
+                final int index = this.add(key);
+                if (this.count == PLACEHOLDER_HASH_THRESHOLD) this.promoteToHash();
+                return index;
+            }
+
+            final String key = source.substring(offset, offset + length);
             final Integer existing = this.indices.get(key);
             if (existing != null) return existing;
 

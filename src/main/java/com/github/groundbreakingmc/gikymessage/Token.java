@@ -130,20 +130,48 @@ interface Token {
 
         final String[] staticParts;
         final int[] phIndices;
-        private final Style style;
+        private final TextComponent base;
+        private final Component[] staticTails;
+        private final int childCount;
 
         PlainDyn(String[] staticParts, int[] phIndices, Style style) {
             this.staticParts = staticParts;
             this.phIndices = phIndices;
-            this.style = style;
+
+            final String rootText = staticParts.length > 0 && staticParts[0] != null
+                    ? staticParts[0] : "";
+            this.base = Component.text(rootText, style);
+
+            Component[] tails = null;
+            int count = phIndices.length;
+            for (int index = 0; index < phIndices.length; index++) {
+                final int staticIndex = index + 1;
+                if (staticIndex >= staticParts.length) continue;
+
+                final String staticText = staticParts[staticIndex];
+                if (staticText == null || staticText.isEmpty()) continue;
+
+                if (tails == null) tails = new Component[phIndices.length];
+                tails[index] = Component.text(staticText);
+                count++;
+            }
+            this.staticTails = tails;
+            this.childCount = count;
         }
 
         @Override
         public Component render(Component[] compPh) {
-            final String rootText = this.staticParts.length > 0 && this.staticParts[0] != null
-                    ? this.staticParts[0] : "";
-            final Component[] children = buildDynContent(this.staticParts, this.phIndices, compPh);
-            return textComponent(rootText, this.style, children);
+            final Component[] children = new Component[this.childCount];
+            int outputIndex = 0;
+            for (int index = 0; index < this.phIndices.length; index++) {
+                children[outputIndex++] = compPh[this.phIndices[index]];
+
+                if (this.staticTails != null) {
+                    final Component tail = this.staticTails[index];
+                    if (tail != null) children[outputIndex++] = tail;
+                }
+            }
+            return this.base.children(java.util.Arrays.asList(children));
         }
     }
 
@@ -498,47 +526,6 @@ interface Token {
         for (int index = 0, size = children.size(); index < size; index++) {
             appendText(builder, children.get(index));
         }
-    }
-
-    /**
-     * Emits placeholders and following static segments as siblings. Static segments are left
-     * unstyled so they inherit only the enclosing template style, not the replacement component's
-     * style, events, or child list.
-     */
-    private static Component[] buildDynContent(
-            String[] staticParts,
-            int[] placeholderIndices,
-            Component[] placeholders
-    ) {
-        final int placeholderCount = placeholderIndices.length;
-        if (placeholderCount == 0) return EMPTY_COMPONENTS;
-
-        int childCount = placeholderCount;
-        for (int index = 0; index < placeholderCount; index++) {
-            final int staticIndex = index + 1;
-            if (staticIndex < staticParts.length
-                    && staticParts[staticIndex] != null
-                    && !staticParts[staticIndex].isEmpty()) {
-                childCount++;
-            }
-        }
-
-        final Component[] children = new Component[childCount];
-        int outputIndex = 0;
-        for (int index = 0; index < placeholderCount; index++) {
-            final Component placeholder = placeholders[placeholderIndices[index]];
-            children[outputIndex++] = placeholder;
-
-            final int staticIndex = index + 1;
-            if (staticIndex < staticParts.length) {
-                final String staticText = staticParts[staticIndex];
-                if (staticText != null && !staticText.isEmpty()) {
-                    children[outputIndex++] = Component.text(staticText);
-                }
-            }
-        }
-
-        return children;
     }
 
     private static Style withEvents(

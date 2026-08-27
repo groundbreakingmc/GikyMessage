@@ -11,7 +11,7 @@ final class TextImpl implements Text {
 
     private final Token token;
     private final String[] placeholderKeys;
-    private final Component[] fallbacks;
+    private volatile Component[] fallbacks;
     private final ThreadLocal<RenderContext> renderContext;
     private final boolean cacheable;
 
@@ -21,11 +21,6 @@ final class TextImpl implements Text {
         this.cacheable = cacheable;
 
         final int placeholderCount = this.placeholderKeys.length;
-        this.fallbacks = new Component[placeholderCount];
-        for (int index = 0; index < placeholderCount; index++) {
-            this.fallbacks[index] = Component.text("{" + this.placeholderKeys[index] + "}");
-        }
-
         this.renderContext = placeholderCount == 0
                 ? null
                 : ThreadLocal.withInitial(() -> new RenderContext(placeholderCount, cacheable));
@@ -333,7 +328,19 @@ final class TextImpl implements Text {
     }
 
     private void fillSlot(Component[] buffer, int index, Component value) {
-        buffer[index] = value == null ? this.fallbacks[index] : value;
+        buffer[index] = value == null ? this.fallback(index) : value;
+    }
+
+    private Component fallback(int index) {
+        Component[] fallbacks = this.fallbacks;
+        if (fallbacks == null) {
+            fallbacks = new Component[this.placeholderKeys.length];
+            for (int current = 0; current < fallbacks.length; current++) {
+                fallbacks[current] = Component.text("{" + this.placeholderKeys[current] + "}");
+            }
+            this.fallbacks = fallbacks;
+        }
+        return fallbacks[index];
     }
 
     private Component renderBuffer(RenderContext context) {

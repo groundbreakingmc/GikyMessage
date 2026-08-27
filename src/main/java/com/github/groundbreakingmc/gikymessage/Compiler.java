@@ -554,17 +554,7 @@ final class Compiler {
         );
 
         if (actionStart == -1) {
-            final TokenSequence sequence = orderedContent(
-                    innerText,
-                    children,
-                    childCount
-            );
-
-            return wrapContent(
-                    sequence.tokens,
-                    sequence.count,
-                    visualStyle
-            );
+            return wrapContent(innerText, children, childCount, visualStyle);
         }
 
         byte selectedClickType = -1;
@@ -1045,20 +1035,15 @@ final class Compiler {
                     contentStyle
             );
         } else {
-            final TokenSequence sequence = orderedContent(
-                    innerText,
-                    children,
-                    childCount
-            );
-
             if (selectedContentType == ACTION_GRADIENT) {
                 final int[] gradientColors =
                         parseGradientColors(selectedContentValue);
 
                 if (gradientColors != null) {
                     final Token rawContent = wrapContent(
-                            sequence.tokens,
-                            sequence.count,
+                            innerText,
+                            children,
+                            childCount,
                             Style.empty()
                     );
 
@@ -1070,15 +1055,17 @@ final class Compiler {
                     );
                 } else {
                     contentToken = wrapContent(
-                            sequence.tokens,
-                            sequence.count,
+                            innerText,
+                            children,
+                            childCount,
                             contentStyle
                     );
                 }
             } else {
                 contentToken = wrapContent(
-                        sequence.tokens,
-                        sequence.count,
+                        innerText,
+                        children,
+                        childCount,
                         contentStyle
                 );
             }
@@ -1228,33 +1215,38 @@ final class Compiler {
         return true;
     }
 
-    private static TokenSequence orderedContent(
+    private static Token wrapContent(
             Token innerText,
             Token[] children,
-            int childCount
+            int childCount,
+            Style style
     ) {
         final int count = childCount + (innerText == null ? 0 : 1);
-        if (count == 0) return new TokenSequence(new Token[0], 0);
-
-        final Token[] ordered = Arrays.copyOf(children, count);
-        if (innerText != null) ordered[childCount] = innerText;
-        return new TokenSequence(ordered, count);
-    }
-
-    private static Token wrapContent(Token[] tokens, int count, Style style) {
         if (count == 0) return new Token.Plain("", style);
 
-        if (count == 1 && tokens[0] instanceof Token.Plain plain) {
-            final Style merged = plain.style.merge(
-                    style,
-                    Style.Merge.Strategy.IF_ABSENT_ON_TARGET
-            );
-            return new Token.Plain(plain.text, merged);
+        if (count == 1) {
+            final Token token = childCount == 1 ? children[0] : innerText;
+            if (token instanceof Token.Plain plain) {
+                final Style merged = plain.style.merge(
+                        style,
+                        Style.Merge.Strategy.IF_ABSENT_ON_TARGET
+                );
+                return new Token.Plain(plain.text, merged);
+            }
+
+            final Token[] content = {token};
+            return isDynamic(token)
+                    ? new Token.DynChildren("", style, content, 1)
+                    : new Token.Children("", style, content, 1);
         }
 
-        final Token[] content = tokens.length == count
-                ? tokens
-                : Arrays.copyOf(tokens, count);
+        final Token[] content;
+        if (innerText == null && children.length == childCount) {
+            content = children;
+        } else {
+            content = Arrays.copyOf(children, count);
+            if (innerText != null) content[childCount] = innerText;
+        }
 
         return hasDynamicChildren(content, count)
                 ? new Token.DynChildren("", style, content, count)
@@ -1651,9 +1643,6 @@ final class Compiler {
         } else {
             scratch.setLength(0);
         }
-    }
-
-    private record TokenSequence(Token[] tokens, int count) {
     }
 
     private static final class Frame {

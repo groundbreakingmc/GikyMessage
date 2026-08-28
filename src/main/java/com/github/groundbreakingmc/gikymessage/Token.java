@@ -161,6 +161,9 @@ interface Token {
 
         @Override
         public Component render(Component[] compPh) {
+            final Component flattened = this.flatten(compPh);
+            if (flattened != null) return flattened;
+
             final Component[] children = new Component[this.childCount];
             int outputIndex = 0;
             for (int index = 0; index < this.phIndices.length; index++) {
@@ -172,6 +175,42 @@ interface Token {
                 }
             }
             return this.base.children(java.util.Arrays.asList(children));
+        }
+
+        private Component flatten(Component[] placeholders) {
+            for (final int placeholderIndex : this.phIndices) {
+                final Component component = placeholders[placeholderIndex];
+                if (!(component instanceof TextComponent textComponent)
+                        || !textComponent.style().isEmpty()
+                        || !textComponent.children().isEmpty()) {
+                    return null;
+                }
+            }
+
+            if (this.phIndices.length == 1 && this.staticParts.length == 0 && this.base.style().isEmpty()) {
+                return placeholders[this.phIndices[0]];
+            }
+
+            final StringBuilder builder = TL_SB.get();
+            builder.setLength(0);
+            try {
+                if (this.staticParts.length > 0 && this.staticParts[0] != null) {
+                    builder.append(this.staticParts[0]);
+                }
+
+                for (int index = 0; index < this.phIndices.length; index++) {
+                    builder.append(((TextComponent) placeholders[this.phIndices[index]]).content());
+
+                    final int staticIndex = index + 1;
+                    if (staticIndex < this.staticParts.length && this.staticParts[staticIndex] != null) {
+                        builder.append(this.staticParts[staticIndex]);
+                    }
+                }
+
+                return Component.text(builder.toString(), this.base.style());
+            } finally {
+                releaseBuilder(builder);
+            }
         }
     }
 

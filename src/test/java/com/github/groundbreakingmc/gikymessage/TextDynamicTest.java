@@ -109,6 +109,18 @@ class TextDynamicTest extends TextTestBase {
                     "player", "Steve"
             );
         }
+
+        @Test
+        @DisplayName("Styled placeholder keeps its component structure")
+        void styledPlaceholderKeepsStructure() {
+            final Component player = Component.text("Steve", NamedTextColor.RED)
+                    .append(Component.text("!", NamedTextColor.YELLOW));
+
+            org.junit.jupiter.api.Assertions.assertEquals(
+                    MM.serialize(Component.text("Hello, ").append(player)),
+                    MM.serialize(Text.of("Hello, {player}").render("player", player))
+            );
+        }
     }
 
     // ════════════════════════════════════════════════════════════════════════

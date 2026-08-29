@@ -7,8 +7,11 @@ import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.Style;
 import net.kyori.adventure.text.object.ObjectContents;
 
+import java.util.AbstractList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import java.util.RandomAccess;
 
 /**
  * An immutable, compiled unit of formatted text that can render itself into a {@link Component}.
@@ -74,11 +77,15 @@ interface Token {
         }
 
         private Component renderChildren(String text, Style style, Token[] children, int childCount) {
-            final Component[] rendered = new Component[childCount];
-            for (int index = 0; index < childCount; index++) {
-                rendered[index] = children[index].render(null);
+            final ChildBuffer rendered = acquireChildren(childCount);
+            try {
+                for (int index = 0; index < childCount; index++) {
+                    rendered.setComponent(index, children[index].render(null));
+                }
+                return textComponent(text, style, rendered);
+            } finally {
+                releaseChildren(rendered);
             }
-            return textComponent(text, style, rendered);
         }
     }
 
@@ -107,11 +114,15 @@ interface Token {
         }
 
         private Component renderChildren(Component[] placeholders) {
-            final Component[] rendered = new Component[this.childCount];
-            for (int index = 0; index < this.childCount; index++) {
-                rendered[index] = this.children[index].render(placeholders);
+            final ChildBuffer rendered = acquireChildren(this.childCount);
+            try {
+                for (int index = 0; index < this.childCount; index++) {
+                    rendered.setComponent(index, this.children[index].render(placeholders));
+                }
+                return textComponent(this.text, this.style, rendered);
+            } finally {
+                releaseChildren(rendered);
             }
-            return textComponent(this.text, this.style, rendered);
         }
     }
 
@@ -164,17 +175,21 @@ interface Token {
             final Component flattened = this.flatten(compPh);
             if (flattened != null) return flattened;
 
-            final Component[] children = new Component[this.childCount];
-            int outputIndex = 0;
-            for (int index = 0; index < this.phIndices.length; index++) {
-                children[outputIndex++] = compPh[this.phIndices[index]];
+            final ChildBuffer children = acquireChildren(this.childCount);
+            try {
+                int outputIndex = 0;
+                for (int index = 0; index < this.phIndices.length; index++) {
+                    children.setComponent(outputIndex++, compPh[this.phIndices[index]]);
 
-                if (this.staticTails != null) {
-                    final Component tail = this.staticTails[index];
-                    if (tail != null) children[outputIndex++] = tail;
+                    if (this.staticTails != null) {
+                        final Component tail = this.staticTails[index];
+                        if (tail != null) children.setComponent(outputIndex++, tail);
+                    }
                 }
+                return this.base.children(children);
+            } finally {
+                releaseChildren(children);
             }
-            return this.base.children(java.util.Arrays.asList(children));
         }
 
         private Component flatten(Component[] placeholders) {
@@ -398,7 +413,13 @@ interface Token {
                 final int[] styleIndex = {0};
                 colored = applyGradient(rendered, styles, styleIndex);
             }
-            return textComponent("", this.baseStyle, new Component[]{colored});
+            final ChildBuffer children = acquireChildren(1);
+            try {
+                children.setComponent(0, colored);
+                return textComponent("", this.baseStyle, children);
+            } finally {
+                releaseChildren(children);
+            }
         }
 
         private Style[] styles(int length) {
@@ -471,6 +492,7 @@ interface Token {
      */
     int MAX_RETAINED_BUILDER_CAPACITY = 8 * 1024;
     ThreadLocal<StringBuilder> TL_SB = ThreadLocal.withInitial(() -> new StringBuilder(128));
+    ThreadLocal<ChildScratch> CHILD_SCRATCH = ThreadLocal.withInitial(ChildScratch::new);
     Component[] EMPTY_COMPONENTS = new Component[0];
     Style[] EMPTY_STYLES = new Style[0];
 
@@ -589,12 +611,10 @@ interface Token {
     private static Component textComponent(
             String content,
             Style style,
-            Component[] children
+            List<? extends Component> children
     ) {
         final TextComponent component = Component.text(content, style);
-        return children.length == 0
-                ? component
-                : component.children(java.util.Arrays.asList(children));
+        return children.isEmpty() ? component : component.children(children);
     }
 
     private static Style[] gradientStyles(int length, int[] colors) {
@@ -639,31 +659,116 @@ interface Token {
 
         if (textLength == 0 && originalChildren.isEmpty()) return component;
 
-        final Component[] children = new Component[textLength + originalChildren.size()];
-        int outputIndex = 0;
-        if (text != null) {
-            int offset = 0;
-            for (int index = 0; index < textLength; index++) {
-                final int codePoint = text.codePointAt(offset);
-                final String value = codePoint < CHAR_CACHE.length
-                        ? CHAR_CACHE[codePoint]
-                        : Character.toString(codePoint);
-                children[outputIndex++] = Component.text(value, styles[styleIndex[0]++]);
-                offset += Character.charCount(codePoint);
+        final ChildBuffer children = acquireChildren(textLength + originalChildren.size());
+        try {
+            int outputIndex = 0;
+            if (text != null) {
+                int offset = 0;
+                for (int index = 0; index < textLength; index++) {
+                    final int codePoint = text.codePointAt(offset);
+                    final String value = codePoint < CHAR_CACHE.length
+                            ? CHAR_CACHE[codePoint]
+                            : Character.toString(codePoint);
+                    children.setComponent(
+                            outputIndex++,
+                            Component.text(value, styles[styleIndex[0]++])
+                    );
+                    offset += Character.charCount(codePoint);
+                }
             }
-        }
 
-        for (int index = 0, size = originalChildren.size(); index < size; index++) {
-            children[outputIndex++] = applyGradient(
-                    originalChildren.get(index),
-                    styles,
-                    styleIndex
-            );
-        }
+            for (int index = 0, size = originalChildren.size(); index < size; index++) {
+                children.setComponent(
+                        outputIndex++,
+                        applyGradient(originalChildren.get(index), styles, styleIndex)
+                );
+            }
 
-        if (text != null) {
-            return textComponent("", component.style(), children);
+            if (text != null) {
+                return textComponent("", component.style(), children);
+            }
+            return component.children(children);
+        } finally {
+            releaseChildren(children);
         }
-        return component.children(java.util.Arrays.asList(children));
     }
+    private static ChildBuffer acquireChildren(int size) {
+        return CHILD_SCRATCH.get().acquire(size);
+    }
+
+    private static void releaseChildren(ChildBuffer buffer) {
+        buffer.owner.release(buffer);
+    }
+
+    final class ChildScratch {
+
+        private static final int MAX_RETAINED_CAPACITY = 1024;
+
+        private ChildBuffer[] buffers = new ChildBuffer[4];
+        private int depth;
+
+        private ChildBuffer acquire(int size) {
+            if (this.depth == this.buffers.length) {
+                this.buffers = Arrays.copyOf(this.buffers, this.buffers.length << 1);
+            }
+
+            ChildBuffer buffer = this.buffers[this.depth];
+            if (buffer == null) {
+                buffer = new ChildBuffer(this);
+                this.buffers[this.depth] = buffer;
+            }
+            this.depth++;
+            buffer.prepare(size);
+            return buffer;
+        }
+
+        private void release(ChildBuffer buffer) {
+            buffer.release();
+            this.depth--;
+        }
+    }
+
+    final class ChildBuffer extends AbstractList<Component> implements RandomAccess {
+
+        private final ChildScratch owner;
+        private Component[] components = EMPTY_COMPONENTS;
+        private int size;
+
+        private ChildBuffer(ChildScratch owner) {
+            this.owner = owner;
+        }
+
+        private void prepare(int size) {
+            if (this.components.length < size) {
+                int capacity = 8;
+                while (capacity < size) capacity <<= 1;
+                this.components = new Component[capacity];
+            }
+            this.size = size;
+        }
+
+        private void setComponent(int index, Component component) {
+            this.components[index] = component;
+        }
+
+        private void release() {
+            Arrays.fill(this.components, 0, this.size, null);
+            if (this.components.length > ChildScratch.MAX_RETAINED_CAPACITY) {
+                this.components = EMPTY_COMPONENTS;
+            }
+            this.size = 0;
+        }
+
+        @Override
+        public Component get(int index) {
+            if (index < 0 || index >= this.size) throw new IndexOutOfBoundsException(index);
+            return this.components[index];
+        }
+
+        @Override
+        public int size() {
+            return this.size;
+        }
+    }
+
 }

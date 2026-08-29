@@ -121,6 +121,24 @@ class TextDynamicTest extends TextTestBase {
                     MM.serialize(Text.of("Hello, {player}").render("player", player))
             );
         }
+
+        @Test
+        @DisplayName("Resolver may render another text")
+        void resolverMayRenderNestedText() {
+            final Text nested = Text.of("Inner {value}");
+            final Text outer = Text.of("Outer {nested}");
+
+            final Component rendered = outer.render(key ->
+                    key.equals("nested")
+                            ? nested.render("value", Component.text("ok"))
+                            : null
+            );
+
+            org.junit.jupiter.api.Assertions.assertEquals(
+                    MM.serialize(Component.text("Outer Inner ok")),
+                    MM.serialize(rendered)
+            );
+        }
     }
 
     // ════════════════════════════════════════════════════════════════════════

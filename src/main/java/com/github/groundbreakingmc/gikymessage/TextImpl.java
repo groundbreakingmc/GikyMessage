@@ -9,10 +9,14 @@ import java.util.Objects;
 
 final class TextImpl implements Text {
 
+    private static final Component[] EMPTY_COMPONENTS = new Component[0];
+    private static final ThreadLocal<RenderScratch> RENDER_SCRATCH =
+            ThreadLocal.withInitial(RenderScratch::new);
+
     private final Token token;
     private final String[] placeholderKeys;
     private volatile Component[] fallbacks;
-    private final ThreadLocal<RenderContext> renderContext;
+    private final ThreadLocal<RenderCache> renderCache;
     private final boolean cacheable;
 
     TextImpl(Token token, String[] placeholderKeys, boolean cacheable) {
@@ -21,61 +25,77 @@ final class TextImpl implements Text {
         this.cacheable = cacheable;
 
         final int placeholderCount = this.placeholderKeys.length;
-        this.renderContext = placeholderCount == 0
+        this.renderCache = placeholderCount == 0 || !cacheable
                 ? null
-                : ThreadLocal.withInitial(() -> new RenderContext(placeholderCount, cacheable));
+                : ThreadLocal.withInitial(() -> new RenderCache(placeholderCount));
     }
 
     @Override
     public @NotNull Component render() {
         if (this.placeholderKeys.length == 0) return this.token.render(null);
 
-        final RenderContext context = this.renderContext.get();
-        final Component[] buffer = context.buffer;
-        for (int index = 0; index < this.placeholderKeys.length; index++) {
-            this.fillSlot(buffer, index, null);
+        final RenderBuffer renderBuffer = RENDER_SCRATCH.get().acquire(this.placeholderKeys.length);
+        final Component[] buffer = renderBuffer.components;
+        try {
+            for (int index = 0; index < this.placeholderKeys.length; index++) {
+                this.fillSlot(buffer, index, null);
+            }
+            return this.renderResolved(buffer);
+        } finally {
+            renderBuffer.release();
         }
-        return this.renderBuffer(context);
     }
 
     @Override
     public @NotNull Component render(@NotNull Resolver resolver) {
         if (this.placeholderKeys.length == 0) return this.token.render(null);
 
-        final RenderContext context = this.renderContext.get();
-        final Component[] buffer = context.buffer;
-        for (int index = 0; index < this.placeholderKeys.length; index++) {
-            this.fillSlot(buffer, index, resolver.resolve(this.placeholderKeys[index]));
+        final RenderBuffer renderBuffer = RENDER_SCRATCH.get().acquire(this.placeholderKeys.length);
+        final Component[] buffer = renderBuffer.components;
+        try {
+            for (int index = 0; index < this.placeholderKeys.length; index++) {
+                this.fillSlot(buffer, index, resolver.resolve(this.placeholderKeys[index]));
+            }
+            return this.renderResolved(buffer);
+        } finally {
+            renderBuffer.release();
         }
-        return this.renderBuffer(context);
     }
 
     @Override
     public @NotNull Component render(@NotNull Map<String, Component> replacements) {
         if (this.placeholderKeys.length == 0) return this.token.render(null);
 
-        final RenderContext context = this.renderContext.get();
-        final Component[] buffer = context.buffer;
-        for (int index = 0; index < this.placeholderKeys.length; index++) {
-            this.fillSlot(buffer, index, replacements.get(this.placeholderKeys[index]));
+        final RenderBuffer renderBuffer = RENDER_SCRATCH.get().acquire(this.placeholderKeys.length);
+        final Component[] buffer = renderBuffer.components;
+        try {
+            for (int index = 0; index < this.placeholderKeys.length; index++) {
+                this.fillSlot(buffer, index, replacements.get(this.placeholderKeys[index]));
+            }
+            return this.renderResolved(buffer);
+        } finally {
+            renderBuffer.release();
         }
-        return this.renderBuffer(context);
     }
 
     @Override
     public @NotNull Component render(@NotNull String k0, @NotNull Component v0) {
         if (this.placeholderKeys.length == 0) return this.token.render(null);
 
-        final RenderContext context = this.renderContext.get();
-        final Component[] buffer = context.buffer;
-        for (int index = 0; index < this.placeholderKeys.length; index++) {
-            final String key = this.placeholderKeys[index];
-            final Component value =
-                    key.equals(k0) ? v0 :
-                            null;
-            this.fillSlot(buffer, index, value);
+        final RenderBuffer renderBuffer = RENDER_SCRATCH.get().acquire(this.placeholderKeys.length);
+        final Component[] buffer = renderBuffer.components;
+        try {
+            for (int index = 0; index < this.placeholderKeys.length; index++) {
+                final String key = this.placeholderKeys[index];
+                final Component value =
+                        key.equals(k0) ? v0 :
+                                null;
+                this.fillSlot(buffer, index, value);
+            }
+            return this.renderResolved(buffer);
+        } finally {
+            renderBuffer.release();
         }
-        return this.renderBuffer(context);
     }
 
     @Override
@@ -83,17 +103,21 @@ final class TextImpl implements Text {
                                      @NotNull String k1, @NotNull Component v1) {
         if (this.placeholderKeys.length == 0) return this.token.render(null);
 
-        final RenderContext context = this.renderContext.get();
-        final Component[] buffer = context.buffer;
-        for (int index = 0; index < this.placeholderKeys.length; index++) {
-            final String key = this.placeholderKeys[index];
-            final Component value =
-                    key.equals(k0) ? v0 :
-                            key.equals(k1) ? v1 :
-                                    null;
-            this.fillSlot(buffer, index, value);
+        final RenderBuffer renderBuffer = RENDER_SCRATCH.get().acquire(this.placeholderKeys.length);
+        final Component[] buffer = renderBuffer.components;
+        try {
+            for (int index = 0; index < this.placeholderKeys.length; index++) {
+                final String key = this.placeholderKeys[index];
+                final Component value =
+                        key.equals(k0) ? v0 :
+                                key.equals(k1) ? v1 :
+                                        null;
+                this.fillSlot(buffer, index, value);
+            }
+            return this.renderResolved(buffer);
+        } finally {
+            renderBuffer.release();
         }
-        return this.renderBuffer(context);
     }
 
     @Override
@@ -102,18 +126,22 @@ final class TextImpl implements Text {
                                      @NotNull String k2, @NotNull Component v2) {
         if (this.placeholderKeys.length == 0) return this.token.render(null);
 
-        final RenderContext context = this.renderContext.get();
-        final Component[] buffer = context.buffer;
-        for (int index = 0; index < this.placeholderKeys.length; index++) {
-            final String key = this.placeholderKeys[index];
-            final Component value =
-                    key.equals(k0) ? v0 :
-                            key.equals(k1) ? v1 :
-                                    key.equals(k2) ? v2 :
-                                            null;
-            this.fillSlot(buffer, index, value);
+        final RenderBuffer renderBuffer = RENDER_SCRATCH.get().acquire(this.placeholderKeys.length);
+        final Component[] buffer = renderBuffer.components;
+        try {
+            for (int index = 0; index < this.placeholderKeys.length; index++) {
+                final String key = this.placeholderKeys[index];
+                final Component value =
+                        key.equals(k0) ? v0 :
+                                key.equals(k1) ? v1 :
+                                        key.equals(k2) ? v2 :
+                                                null;
+                this.fillSlot(buffer, index, value);
+            }
+            return this.renderResolved(buffer);
+        } finally {
+            renderBuffer.release();
         }
-        return this.renderBuffer(context);
     }
 
     @Override
@@ -123,19 +151,23 @@ final class TextImpl implements Text {
                                      @NotNull String k3, @NotNull Component v3) {
         if (this.placeholderKeys.length == 0) return this.token.render(null);
 
-        final RenderContext context = this.renderContext.get();
-        final Component[] buffer = context.buffer;
-        for (int index = 0; index < this.placeholderKeys.length; index++) {
-            final String key = this.placeholderKeys[index];
-            final Component value =
-                    key.equals(k0) ? v0 :
-                            key.equals(k1) ? v1 :
-                                    key.equals(k2) ? v2 :
-                                            key.equals(k3) ? v3 :
-                                                    null;
-            this.fillSlot(buffer, index, value);
+        final RenderBuffer renderBuffer = RENDER_SCRATCH.get().acquire(this.placeholderKeys.length);
+        final Component[] buffer = renderBuffer.components;
+        try {
+            for (int index = 0; index < this.placeholderKeys.length; index++) {
+                final String key = this.placeholderKeys[index];
+                final Component value =
+                        key.equals(k0) ? v0 :
+                                key.equals(k1) ? v1 :
+                                        key.equals(k2) ? v2 :
+                                                key.equals(k3) ? v3 :
+                                                        null;
+                this.fillSlot(buffer, index, value);
+            }
+            return this.renderResolved(buffer);
+        } finally {
+            renderBuffer.release();
         }
-        return this.renderBuffer(context);
     }
 
     @Override
@@ -146,20 +178,24 @@ final class TextImpl implements Text {
                                      @NotNull String k4, @NotNull Component v4) {
         if (this.placeholderKeys.length == 0) return this.token.render(null);
 
-        final RenderContext context = this.renderContext.get();
-        final Component[] buffer = context.buffer;
-        for (int index = 0; index < this.placeholderKeys.length; index++) {
-            final String key = this.placeholderKeys[index];
-            final Component value =
-                    key.equals(k0) ? v0 :
-                            key.equals(k1) ? v1 :
-                                    key.equals(k2) ? v2 :
-                                            key.equals(k3) ? v3 :
-                                                    key.equals(k4) ? v4 :
-                                                            null;
-            this.fillSlot(buffer, index, value);
+        final RenderBuffer renderBuffer = RENDER_SCRATCH.get().acquire(this.placeholderKeys.length);
+        final Component[] buffer = renderBuffer.components;
+        try {
+            for (int index = 0; index < this.placeholderKeys.length; index++) {
+                final String key = this.placeholderKeys[index];
+                final Component value =
+                        key.equals(k0) ? v0 :
+                                key.equals(k1) ? v1 :
+                                        key.equals(k2) ? v2 :
+                                                key.equals(k3) ? v3 :
+                                                        key.equals(k4) ? v4 :
+                                                                null;
+                this.fillSlot(buffer, index, value);
+            }
+            return this.renderResolved(buffer);
+        } finally {
+            renderBuffer.release();
         }
-        return this.renderBuffer(context);
     }
 
     @Override
@@ -171,21 +207,25 @@ final class TextImpl implements Text {
                                      @NotNull String k5, @NotNull Component v5) {
         if (this.placeholderKeys.length == 0) return this.token.render(null);
 
-        final RenderContext context = this.renderContext.get();
-        final Component[] buffer = context.buffer;
-        for (int index = 0; index < this.placeholderKeys.length; index++) {
-            final String key = this.placeholderKeys[index];
-            final Component value =
-                    key.equals(k0) ? v0 :
-                            key.equals(k1) ? v1 :
-                                    key.equals(k2) ? v2 :
-                                            key.equals(k3) ? v3 :
-                                                    key.equals(k4) ? v4 :
-                                                            key.equals(k5) ? v5 :
-                                                                    null;
-            this.fillSlot(buffer, index, value);
+        final RenderBuffer renderBuffer = RENDER_SCRATCH.get().acquire(this.placeholderKeys.length);
+        final Component[] buffer = renderBuffer.components;
+        try {
+            for (int index = 0; index < this.placeholderKeys.length; index++) {
+                final String key = this.placeholderKeys[index];
+                final Component value =
+                        key.equals(k0) ? v0 :
+                                key.equals(k1) ? v1 :
+                                        key.equals(k2) ? v2 :
+                                                key.equals(k3) ? v3 :
+                                                        key.equals(k4) ? v4 :
+                                                                key.equals(k5) ? v5 :
+                                                                        null;
+                this.fillSlot(buffer, index, value);
+            }
+            return this.renderResolved(buffer);
+        } finally {
+            renderBuffer.release();
         }
-        return this.renderBuffer(context);
     }
 
     @Override
@@ -198,22 +238,26 @@ final class TextImpl implements Text {
                                      @NotNull String k6, @NotNull Component v6) {
         if (this.placeholderKeys.length == 0) return this.token.render(null);
 
-        final RenderContext context = this.renderContext.get();
-        final Component[] buffer = context.buffer;
-        for (int index = 0; index < this.placeholderKeys.length; index++) {
-            final String key = this.placeholderKeys[index];
-            final Component value =
-                    key.equals(k0) ? v0 :
-                            key.equals(k1) ? v1 :
-                                    key.equals(k2) ? v2 :
-                                            key.equals(k3) ? v3 :
-                                                    key.equals(k4) ? v4 :
-                                                            key.equals(k5) ? v5 :
-                                                                    key.equals(k6) ? v6 :
-                                                                            null;
-            this.fillSlot(buffer, index, value);
+        final RenderBuffer renderBuffer = RENDER_SCRATCH.get().acquire(this.placeholderKeys.length);
+        final Component[] buffer = renderBuffer.components;
+        try {
+            for (int index = 0; index < this.placeholderKeys.length; index++) {
+                final String key = this.placeholderKeys[index];
+                final Component value =
+                        key.equals(k0) ? v0 :
+                                key.equals(k1) ? v1 :
+                                        key.equals(k2) ? v2 :
+                                                key.equals(k3) ? v3 :
+                                                        key.equals(k4) ? v4 :
+                                                                key.equals(k5) ? v5 :
+                                                                        key.equals(k6) ? v6 :
+                                                                                null;
+                this.fillSlot(buffer, index, value);
+            }
+            return this.renderResolved(buffer);
+        } finally {
+            renderBuffer.release();
         }
-        return this.renderBuffer(context);
     }
 
     @Override
@@ -227,23 +271,27 @@ final class TextImpl implements Text {
                                      @NotNull String k7, @NotNull Component v7) {
         if (this.placeholderKeys.length == 0) return this.token.render(null);
 
-        final RenderContext context = this.renderContext.get();
-        final Component[] buffer = context.buffer;
-        for (int index = 0; index < this.placeholderKeys.length; index++) {
-            final String key = this.placeholderKeys[index];
-            final Component value =
-                    key.equals(k0) ? v0 :
-                            key.equals(k1) ? v1 :
-                                    key.equals(k2) ? v2 :
-                                            key.equals(k3) ? v3 :
-                                                    key.equals(k4) ? v4 :
-                                                            key.equals(k5) ? v5 :
-                                                                    key.equals(k6) ? v6 :
-                                                                            key.equals(k7) ? v7 :
-                                                                                    null;
-            this.fillSlot(buffer, index, value);
+        final RenderBuffer renderBuffer = RENDER_SCRATCH.get().acquire(this.placeholderKeys.length);
+        final Component[] buffer = renderBuffer.components;
+        try {
+            for (int index = 0; index < this.placeholderKeys.length; index++) {
+                final String key = this.placeholderKeys[index];
+                final Component value =
+                        key.equals(k0) ? v0 :
+                                key.equals(k1) ? v1 :
+                                        key.equals(k2) ? v2 :
+                                                key.equals(k3) ? v3 :
+                                                        key.equals(k4) ? v4 :
+                                                                key.equals(k5) ? v5 :
+                                                                        key.equals(k6) ? v6 :
+                                                                                key.equals(k7) ? v7 :
+                                                                                        null;
+                this.fillSlot(buffer, index, value);
+            }
+            return this.renderResolved(buffer);
+        } finally {
+            renderBuffer.release();
         }
-        return this.renderBuffer(context);
     }
 
     @Override
@@ -258,24 +306,28 @@ final class TextImpl implements Text {
                                      @NotNull String k8, @NotNull Component v8) {
         if (this.placeholderKeys.length == 0) return this.token.render(null);
 
-        final RenderContext context = this.renderContext.get();
-        final Component[] buffer = context.buffer;
-        for (int index = 0; index < this.placeholderKeys.length; index++) {
-            final String key = this.placeholderKeys[index];
-            final Component value =
-                    key.equals(k0) ? v0 :
-                            key.equals(k1) ? v1 :
-                                    key.equals(k2) ? v2 :
-                                            key.equals(k3) ? v3 :
-                                                    key.equals(k4) ? v4 :
-                                                            key.equals(k5) ? v5 :
-                                                                    key.equals(k6) ? v6 :
-                                                                            key.equals(k7) ? v7 :
-                                                                                    key.equals(k8) ? v8 :
-                                                                                            null;
-            this.fillSlot(buffer, index, value);
+        final RenderBuffer renderBuffer = RENDER_SCRATCH.get().acquire(this.placeholderKeys.length);
+        final Component[] buffer = renderBuffer.components;
+        try {
+            for (int index = 0; index < this.placeholderKeys.length; index++) {
+                final String key = this.placeholderKeys[index];
+                final Component value =
+                        key.equals(k0) ? v0 :
+                                key.equals(k1) ? v1 :
+                                        key.equals(k2) ? v2 :
+                                                key.equals(k3) ? v3 :
+                                                        key.equals(k4) ? v4 :
+                                                                key.equals(k5) ? v5 :
+                                                                        key.equals(k6) ? v6 :
+                                                                                key.equals(k7) ? v7 :
+                                                                                        key.equals(k8) ? v8 :
+                                                                                                null;
+                this.fillSlot(buffer, index, value);
+            }
+            return this.renderResolved(buffer);
+        } finally {
+            renderBuffer.release();
         }
-        return this.renderBuffer(context);
     }
 
     @Override
@@ -291,25 +343,29 @@ final class TextImpl implements Text {
                                      @NotNull String k9, @NotNull Component v9) {
         if (this.placeholderKeys.length == 0) return this.token.render(null);
 
-        final RenderContext context = this.renderContext.get();
-        final Component[] buffer = context.buffer;
-        for (int index = 0; index < this.placeholderKeys.length; index++) {
-            final String key = this.placeholderKeys[index];
-            final Component value =
-                    key.equals(k0) ? v0 :
-                            key.equals(k1) ? v1 :
-                                    key.equals(k2) ? v2 :
-                                            key.equals(k3) ? v3 :
-                                                    key.equals(k4) ? v4 :
-                                                            key.equals(k5) ? v5 :
-                                                                    key.equals(k6) ? v6 :
-                                                                            key.equals(k7) ? v7 :
-                                                                                    key.equals(k8) ? v8 :
-                                                                                            key.equals(k9) ? v9 :
-                                                                                                    null;
-            this.fillSlot(buffer, index, value);
+        final RenderBuffer renderBuffer = RENDER_SCRATCH.get().acquire(this.placeholderKeys.length);
+        final Component[] buffer = renderBuffer.components;
+        try {
+            for (int index = 0; index < this.placeholderKeys.length; index++) {
+                final String key = this.placeholderKeys[index];
+                final Component value =
+                        key.equals(k0) ? v0 :
+                                key.equals(k1) ? v1 :
+                                        key.equals(k2) ? v2 :
+                                                key.equals(k3) ? v3 :
+                                                        key.equals(k4) ? v4 :
+                                                                key.equals(k5) ? v5 :
+                                                                        key.equals(k6) ? v6 :
+                                                                                key.equals(k7) ? v7 :
+                                                                                        key.equals(k8) ? v8 :
+                                                                                                key.equals(k9) ? v9 :
+                                                                                                        null;
+                this.fillSlot(buffer, index, value);
+            }
+            return this.renderResolved(buffer);
+        } finally {
+            renderBuffer.release();
         }
-        return this.renderBuffer(context);
     }
 
     String[] placeholderKeys() {
@@ -319,12 +375,16 @@ final class TextImpl implements Text {
     Component renderMapped(Component[] source, int[] sourceIndices) {
         if (this.placeholderKeys.length == 0) return this.token.render(null);
 
-        final RenderContext context = this.renderContext.get();
-        final Component[] buffer = context.buffer;
-        for (int index = 0; index < sourceIndices.length; index++) {
-            this.fillSlot(buffer, index, source[sourceIndices[index]]);
+        final RenderBuffer renderBuffer = RENDER_SCRATCH.get().acquire(this.placeholderKeys.length);
+        final Component[] buffer = renderBuffer.components;
+        try {
+            for (int index = 0; index < sourceIndices.length; index++) {
+                this.fillSlot(buffer, index, source[sourceIndices[index]]);
+            }
+            return this.renderResolved(buffer);
+        } finally {
+            renderBuffer.release();
         }
-        return this.renderBuffer(context);
     }
 
     private void fillSlot(Component[] buffer, int index, Component value) {
@@ -343,40 +403,96 @@ final class TextImpl implements Text {
         return fallbacks[index];
     }
 
-    private Component renderBuffer(RenderContext context) {
-        try {
-            if (!this.cacheable) return this.token.render(context.buffer);
+    private Component renderResolved(Component[] buffer) {
+        if (!this.cacheable) return this.token.render(buffer);
 
-            if (context.hasCachedResult && Arrays.equals(context.buffer, context.cachedValues)) {
-                return context.cachedResult;
-            }
-
-            final Component rendered = this.token.render(context.buffer);
-            System.arraycopy(
-                    context.buffer,
-                    0,
-                    context.cachedValues,
-                    0,
-                    context.buffer.length
-            );
-            context.cachedResult = rendered;
-            context.hasCachedResult = true;
-            return rendered;
-        } finally {
-            Arrays.fill(context.buffer, null);
+        final RenderCache cache = this.renderCache.get();
+        if (cache.hasCachedResult && matches(buffer, cache.cachedValues)) {
+            return cache.cachedResult;
         }
+
+        final Component rendered = this.token.render(buffer);
+        System.arraycopy(buffer, 0, cache.cachedValues, 0, cache.cachedValues.length);
+        cache.cachedResult = rendered;
+        cache.hasCachedResult = true;
+        return rendered;
     }
 
-    private static final class RenderContext {
+    private static boolean matches(Component[] buffer, Component[] cachedValues) {
+        for (int index = 0; index < cachedValues.length; index++) {
+            if (!Objects.equals(buffer[index], cachedValues[index])) return false;
+        }
+        return true;
+    }
 
-        private final Component[] buffer;
+    private static final class RenderCache {
+
         private final Component[] cachedValues;
         private Component cachedResult;
         private boolean hasCachedResult;
 
-        private RenderContext(int placeholderCount, boolean cacheable) {
-            this.buffer = new Component[placeholderCount];
-            this.cachedValues = cacheable ? new Component[placeholderCount] : null;
+        private RenderCache(int placeholderCount) {
+            this.cachedValues = new Component[placeholderCount];
+        }
+    }
+
+    private static final class RenderScratch {
+
+        private RenderBuffer[] buffers = new RenderBuffer[4];
+        private int depth;
+
+        private RenderBuffer acquire(int size) {
+            if (this.depth == this.buffers.length) {
+                this.buffers = Arrays.copyOf(this.buffers, this.buffers.length << 1);
+            }
+
+            RenderBuffer buffer = this.buffers[this.depth];
+            if (buffer == null) {
+                buffer = new RenderBuffer(this);
+                this.buffers[this.depth] = buffer;
+            }
+            this.depth++;
+            buffer.prepare(size);
+            return buffer;
+        }
+
+        private void release(RenderBuffer buffer) {
+            buffer.clear();
+            this.depth--;
+        }
+    }
+
+    private static final class RenderBuffer {
+
+        private static final int MAX_RETAINED_CAPACITY = 256;
+
+        private final RenderScratch owner;
+        private Component[] components = EMPTY_COMPONENTS;
+        private int size;
+
+        private RenderBuffer(RenderScratch owner) {
+            this.owner = owner;
+        }
+
+        private void prepare(int size) {
+            if (this.components.length < size) {
+                int capacity = 8;
+                while (capacity < size) capacity <<= 1;
+                this.components = new Component[capacity];
+            }
+            this.size = size;
+        }
+
+        private void release() {
+            this.owner.release(this);
+        }
+
+        private void clear() {
+            Arrays.fill(this.components, 0, this.size, null);
+            if (this.components.length > MAX_RETAINED_CAPACITY) {
+                this.components = EMPTY_COMPONENTS;
+            }
+            this.size = 0;
         }
     }
 

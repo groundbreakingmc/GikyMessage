@@ -368,25 +368,6 @@ final class TextImpl implements Text {
         }
     }
 
-    String[] placeholderKeys() {
-        return this.placeholderKeys;
-    }
-
-    Component renderMapped(Component[] source, int[] sourceIndices) {
-        if (this.placeholderKeys.length == 0) return this.token.render(null);
-
-        final RenderBuffer renderBuffer = RENDER_SCRATCH.get().acquire(this.placeholderKeys.length);
-        final Component[] buffer = renderBuffer.components;
-        try {
-            for (int index = 0; index < sourceIndices.length; index++) {
-                this.fillSlot(buffer, index, source[sourceIndices[index]]);
-            }
-            return this.renderResolved(buffer);
-        } finally {
-            renderBuffer.release();
-        }
-    }
-
     private void fillSlot(Component[] buffer, int index, Component value) {
         buffer[index] = value == null ? this.fallback(index) : value;
     }

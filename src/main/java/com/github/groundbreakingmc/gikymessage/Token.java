@@ -231,16 +231,14 @@ interface Token {
 
     final class DynamicHover {
 
-        private final TextImpl text;
-        private final int[] sourceIndices;
+        private final Token content;
 
-        DynamicHover(TextImpl text, int[] sourceIndices) {
-            this.text = text;
-            this.sourceIndices = sourceIndices;
+        DynamicHover(Token content) {
+            this.content = content;
         }
 
-        HoverEvent<?> render(Component[] source) {
-            return HoverEvent.showText(this.text.renderMapped(source, this.sourceIndices));
+        HoverEvent<?> render(Component[] placeholders) {
+            return HoverEvent.showText(this.content.render(placeholders));
         }
     }
 

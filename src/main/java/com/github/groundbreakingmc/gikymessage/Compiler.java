@@ -61,10 +61,16 @@ final class Compiler {
     static Text compile(String raw, boolean cacheable) {
         if (raw == null || raw.isEmpty()) return Text.EMPTY;
 
+        final PlaceholderTable placeholders = new PlaceholderTable();
+        final Token root = compileToken(raw, placeholders);
+        return new TextImpl(root, placeholders.toArray(), cacheable);
+    }
+
+    private static Token compileToken(String raw, PlaceholderTable placeholders) {
+        if (raw.isEmpty()) return new Token.Plain("", Style.empty());
+
         final char[] src = raw.toCharArray();
         final int len = src.length;
-
-        final PlaceholderTable placeholders = new PlaceholderTable();
 
         short curDeco = 0;
         TextColor curColor = null;
@@ -438,7 +444,7 @@ final class Compiler {
                 ? rootTokens[0]
                 : buildRootToken(rootTokens, rootTokenCnt, canHoistRootStyle);
 
-        return new TextImpl(root, placeholders.toArray(), cacheable);
+        return root;
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -1188,17 +1194,7 @@ final class Compiler {
             String value,
             PlaceholderTable outerPlaceholders
     ) {
-        final TextImpl text = (TextImpl) compile(value, false);
-        final String[] hoverKeys = text.placeholderKeys();
-        if (hoverKeys.length == 0) {
-            return new Token.DynamicHover(text, Token.NO_PH);
-        }
-
-        final int[] sourceIndices = new int[hoverKeys.length];
-        for (int index = 0; index < hoverKeys.length; index++) {
-            sourceIndices[index] = outerPlaceholders.intern(hoverKeys[index]);
-        }
-        return new Token.DynamicHover(text, sourceIndices);
+        return new Token.DynamicHover(compileToken(value, outerPlaceholders));
     }
 
     // ════════════════════════════════════════════════════════════════════════

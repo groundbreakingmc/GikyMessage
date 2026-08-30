@@ -404,14 +404,15 @@ interface Token {
 
             final Style[] styles = this.styles(codePointCount);
 
+            final ChildScratch scratch = CHILD_SCRATCH.get();
             final Component colored;
             if (codePointCount == 0) {
                 colored = rendered;
             } else {
-                final int[] styleIndex = {0};
-                colored = applyGradient(rendered, styles, styleIndex);
+                scratch.gradientIndex = 0;
+                colored = applyGradient(rendered, styles, scratch);
             }
-            final ChildBuffer children = acquireChildren(1);
+            final ChildBuffer children = scratch.acquire(1);
             try {
                 children.setComponent(0, colored);
                 return textComponent("", this.baseStyle, children);
@@ -642,7 +643,7 @@ interface Token {
     private static Component applyGradient(
             Component component,
             Style[] styles,
-            int[] styleIndex
+            ChildScratch scratch
     ) {
         final List<Component> originalChildren = component.children();
         final int textLength;
@@ -657,7 +658,7 @@ interface Token {
 
         if (textLength == 0 && originalChildren.isEmpty()) return component;
 
-        final ChildBuffer children = acquireChildren(textLength + originalChildren.size());
+        final ChildBuffer children = scratch.acquire(textLength + originalChildren.size());
         try {
             int outputIndex = 0;
             if (text != null) {
@@ -669,7 +670,7 @@ interface Token {
                             : Character.toString(codePoint);
                     children.setComponent(
                             outputIndex++,
-                            Component.text(value, styles[styleIndex[0]++])
+                            Component.text(value, styles[scratch.gradientIndex++])
                     );
                     offset += Character.charCount(codePoint);
                 }
@@ -678,7 +679,7 @@ interface Token {
             for (int index = 0, size = originalChildren.size(); index < size; index++) {
                 children.setComponent(
                         outputIndex++,
-                        applyGradient(originalChildren.get(index), styles, styleIndex)
+                        applyGradient(originalChildren.get(index), styles, scratch)
                 );
             }
 
@@ -704,6 +705,7 @@ interface Token {
 
         private ChildBuffer[] buffers = new ChildBuffer[4];
         private int depth;
+        private int gradientIndex;
 
         private ChildBuffer acquire(int size) {
             if (this.depth == this.buffers.length) {

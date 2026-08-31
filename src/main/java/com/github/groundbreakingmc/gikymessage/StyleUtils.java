@@ -181,25 +181,21 @@ final class StyleUtils {
     static long parseHexPacked(char[] src, int start) {
         if (start >= src.length || src[start] != '#') return -1L;
         int count = 0;
-        while (start + 1 + count < src.length && count < 6
-                && isHexChar(src[start + 1 + count])) count++;
+        int rgb = 0;
+        while (count < 6 && start + 1 + count < src.length) {
+            final int digit = hexVal(src[start + 1 + count]);
+            if (digit == -1) break;
+            rgb = (rgb << 4) | digit;
+            count++;
+        }
         if (count == 3) {
-            final int r = hexVal(src[start + 1]);
-            final int g = hexVal(src[start + 2]);
-            final int b = hexVal(src[start + 3]);
-            if (r == -1 || g == -1 || b == -1) return -1L;
-            final int rgb = ((r * 17) << 16) | ((g * 17) << 8) | (b * 17);
+            final int r = (rgb >>> 8) & 0xF;
+            final int g = (rgb >>> 4) & 0xF;
+            final int b = rgb & 0xF;
+            rgb = ((r * 17) << 16) | ((g * 17) << 8) | (b * 17);
             return ((long) 4 << 32) | (rgb & 0xFFFFFFFFL);
         }
         if (count == 6) {
-            final int r1 = hexVal(src[start + 1]);
-            final int r2 = hexVal(src[start + 2]);
-            final int g1 = hexVal(src[start + 3]);
-            final int g2 = hexVal(src[start + 4]);
-            final int b1 = hexVal(src[start + 5]);
-            final int b2 = hexVal(src[start + 6]);
-            if (r1 == -1 || r2 == -1 || g1 == -1 || g2 == -1 || b1 == -1 || b2 == -1) return -1L;
-            final int rgb = ((r1 << 4 | r2) << 16) | ((g1 << 4 | g2) << 8) | (b1 << 4 | b2);
             return ((long) 7 << 32) | (rgb & 0xFFFFFFFFL);
         }
         return -1L;

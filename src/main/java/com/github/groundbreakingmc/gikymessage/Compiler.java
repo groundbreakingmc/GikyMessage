@@ -99,6 +99,7 @@ final class Compiler {
         boolean hasDyn = false;
 
         int pos = 0;
+        boolean noMorePlaceholders = false;
 
         // ════════════════════════════════════════════════════════════════════
         //  Main loop
@@ -280,7 +281,7 @@ final class Compiler {
             }
 
             // ── Placeholder: {key} ───────────────────────────────────────────
-            if (c == '{') {
+            if (c == '{' && !noMorePlaceholders) {
                 int braceEnd = pos + 1;
                 while (braceEnd < len && src[braceEnd] != '}') braceEnd++;
 
@@ -306,6 +307,7 @@ final class Compiler {
                     continue;
                 }
 
+                noMorePlaceholders = true;
                 textBuf.append(c);
                 pos++;
                 continue;
@@ -1169,6 +1171,8 @@ final class Compiler {
                     index = end;
                     continue;
                 }
+                scratch.append(value, index, value.length());
+                break;
             }
             scratch.append(character);
         }

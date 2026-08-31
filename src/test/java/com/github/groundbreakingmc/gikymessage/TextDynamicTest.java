@@ -16,6 +16,22 @@ import org.junit.jupiter.api.Test;
 @DisplayName("Dynamic / placeholder rendering")
 class TextDynamicTest extends TextTestBase {
 
+    @Test
+    void unmatchedBracesKeepFollowingFormatting() {
+        final String braces = "{".repeat(4096);
+        assertRenders(Component.text(braces).append(Component.text("red", NamedTextColor.RED)),
+                braces + "&cred");
+    }
+
+    @Test
+    void dynamicActionKeepsUnmatchedBraceTail() {
+        final String tail = "{".repeat(4096);
+        final Component rendered = Text.of("[copy](copy:'{value}" + tail + "')")
+                .render("value", Component.text("resolved"));
+        org.junit.jupiter.api.Assertions.assertEquals(
+                ClickEvent.copyToClipboard("resolved" + tail), rendered.clickEvent());
+    }
+
     // ════════════════════════════════════════════════════════════════════════
     //  Dynamic text placeholders
     // ════════════════════════════════════════════════════════════════════════

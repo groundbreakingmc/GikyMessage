@@ -1286,7 +1286,7 @@ final class Compiler {
         final boolean dynChild = hasDynamicChildren(tokens, count);
         return dynChild
                 ? new Token.DynChildren("", Style.empty(), Arrays.copyOf(tokens, count), count)
-                : new Token.Children("", Style.empty(), Arrays.copyOf(tokens, count), count);
+                : new Token.Children("", Style.empty(), tokens, count);
     }
 
     /**

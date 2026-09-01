@@ -469,9 +469,10 @@ final class TextImpl implements Text {
         }
 
         private void clear() {
-            Arrays.fill(this.components, 0, this.size, null);
             if (this.components.length > MAX_RETAINED_CAPACITY) {
                 this.components = EMPTY_COMPONENTS;
+            } else {
+                Arrays.fill(this.components, 0, this.size, null);
             }
             this.size = 0;
         }

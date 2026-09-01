@@ -752,9 +752,10 @@ interface Token {
         }
 
         private void release() {
-            Arrays.fill(this.components, 0, this.size, null);
             if (this.components.length > ChildScratch.MAX_RETAINED_CAPACITY) {
                 this.components = EMPTY_COMPONENTS;
+            } else {
+                Arrays.fill(this.components, 0, this.size, null);
             }
             this.size = 0;
         }

@@ -17,6 +17,15 @@ import org.junit.jupiter.api.Test;
 class TextDynamicTest extends TextTestBase {
 
     @Test
+    void dynamicActionPreservesAdjacentKeysAndUnicode() {
+        final String prefix = "текст😀".repeat(64);
+        final Component rendered = Text.of("[copy](copy:'" + prefix + "{a}{b}尾{a}')")
+                .render("a", Component.text("A"), "b", Component.text("B"));
+        org.junit.jupiter.api.Assertions.assertEquals(
+                ClickEvent.copyToClipboard(prefix + "AB尾A"), rendered.clickEvent());
+    }
+
+    @Test
     void unmatchedBracesKeepFollowingFormatting() {
         final String braces = "{".repeat(4096);
         assertRenders(Component.text(braces).append(Component.text("red", NamedTextColor.RED)),

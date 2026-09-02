@@ -1020,8 +1020,7 @@ final class Compiler {
             if (selectedContentDynamic) {
                 final DynamicValue dynamicHead = parseDynamicValue(
                         selectedContentValue,
-                        placeholders,
-                        scratch
+                        placeholders
                 );
 
                 contentToken = new Token.ObjDyn(
@@ -1086,8 +1085,7 @@ final class Compiler {
         if (clickDynamic && showDynamic) {
             final DynamicValue dynamicClick = parseDynamicValue(
                     clickValue,
-                    placeholders,
-                    scratch
+                    placeholders
             );
 
             final Token.DynamicHover dynamicHover =
@@ -1112,8 +1110,7 @@ final class Compiler {
         if (clickDynamic) {
             final DynamicValue dynamicClick = parseDynamicValue(
                     clickValue,
-                    placeholders,
-                    scratch
+                    placeholders
             );
 
             return new Token.MetaDyn(
@@ -1137,47 +1134,28 @@ final class Compiler {
         );
     }
 
-    private static DynamicValue parseDynamicValue(
-            String value,
-            PlaceholderTable placeholders,
-            StringBuilder scratch
-    ) {
+    private static DynamicValue parseDynamicValue(String value, PlaceholderTable placeholders) {
         String[] staticParts = new String[INITIAL_PLACEHOLDER_CAPACITY + 1];
         int[] placeholderIndices = new int[INITIAL_PLACEHOLDER_CAPACITY];
         int count = 0;
-        scratch.setLength(0);
+        int offset = 0;
 
-        for (int index = 0; index < value.length(); index++) {
-            final char character = value.charAt(index);
-            if (character == '{') {
-                int end = index + 1;
-                while (end < value.length() && value.charAt(end) != '}') end++;
-                if (end < value.length()) {
-                    if (count == placeholderIndices.length) {
-                        placeholderIndices = Arrays.copyOf(
-                                placeholderIndices,
-                                placeholderIndices.length << 1
-                        );
-                        staticParts = Arrays.copyOf(staticParts, staticParts.length << 1);
-                    }
-                    staticParts[count] = scratch.isEmpty() ? null : scratch.toString();
-                    scratch.setLength(0);
-                    placeholderIndices[count] = placeholders.intern(
-                            value,
-                            index + 1,
-                            end - index - 1
-                    );
-                    count++;
-                    index = end;
-                    continue;
-                }
-                scratch.append(value, index, value.length());
-                break;
+        while (offset < value.length()) {
+            final int start = value.indexOf('{', offset);
+            if (start == -1) break;
+            final int end = value.indexOf('}', start + 1);
+            if (end == -1) break;
+
+            if (count == placeholderIndices.length) {
+                placeholderIndices = Arrays.copyOf(placeholderIndices, placeholderIndices.length << 1);
+                staticParts = Arrays.copyOf(staticParts, staticParts.length << 1);
             }
-            scratch.append(character);
+            staticParts[count] = start == offset ? null : value.substring(offset, start);
+            placeholderIndices[count++] = placeholders.intern(value, start + 1, end - start - 1);
+            offset = end + 1;
         }
 
-        final String tail = scratch.isEmpty() ? null : scratch.toString();
+        final String tail = offset == value.length() ? null : value.substring(offset);
         int staticCount = tail == null ? count : count + 1;
         while (staticCount > 0 && tail == null && staticParts[staticCount - 1] == null) {
             staticCount--;

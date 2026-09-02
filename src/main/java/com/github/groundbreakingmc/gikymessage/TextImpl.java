@@ -34,16 +34,7 @@ final class TextImpl implements Text {
     public @NotNull Component render() {
         if (this.placeholderKeys.length == 0) return this.token.render(null);
 
-        final RenderBuffer renderBuffer = RENDER_SCRATCH.get().acquire(this.placeholderKeys.length);
-        final Component[] buffer = renderBuffer.components;
-        try {
-            for (int index = 0; index < this.placeholderKeys.length; index++) {
-                this.fillSlot(buffer, index, null);
-            }
-            return this.renderResolved(buffer);
-        } finally {
-            renderBuffer.release();
-        }
+        return this.renderResolved(this.fallbacks());
     }
 
     @Override
@@ -369,10 +360,10 @@ final class TextImpl implements Text {
     }
 
     private void fillSlot(Component[] buffer, int index, Component value) {
-        buffer[index] = value == null ? this.fallback(index) : value;
+        buffer[index] = value == null ? this.fallbacks()[index] : value;
     }
 
-    private Component fallback(int index) {
+    private Component[] fallbacks() {
         Component[] fallbacks = this.fallbacks;
         if (fallbacks == null) {
             fallbacks = new Component[this.placeholderKeys.length];
@@ -381,7 +372,7 @@ final class TextImpl implements Text {
             }
             this.fallbacks = fallbacks;
         }
-        return fallbacks[index];
+        return fallbacks;
     }
 
     private Component renderResolved(Component[] buffer) {

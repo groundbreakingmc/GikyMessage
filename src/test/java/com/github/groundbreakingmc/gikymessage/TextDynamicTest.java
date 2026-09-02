@@ -26,6 +26,18 @@ class TextDynamicTest extends TextTestBase {
     }
 
     @Test
+    void unresolvedRenderSurvivesReplacementRenders() {
+        for (Text text : new Text[]{Text.of("{a}:{b}"), Text.cacheableOf("{a}:{b}")}) {
+            final Component unresolved = text.render();
+            text.render("a", Component.text("changed"));
+            org.junit.jupiter.api.Assertions.assertEquals(unresolved, text.render());
+            org.junit.jupiter.api.Assertions.assertEquals(
+                    MM.serialize(Component.text("A:{b}")),
+                    MM.serialize(text.render("a", Component.text("A"))));
+        }
+    }
+
+    @Test
     void unmatchedBracesKeepFollowingFormatting() {
         final String braces = "{".repeat(4096);
         assertRenders(Component.text(braces).append(Component.text("red", NamedTextColor.RED)),

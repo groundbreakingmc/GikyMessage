@@ -60,10 +60,22 @@ final class Compiler {
 
     static Text compile(String raw, boolean cacheable) {
         if (raw == null || raw.isEmpty()) return Text.EMPTY;
+        if (isPlainText(raw)) {
+            return new TextImpl(new Token.Plain(raw, Style.empty()), Token.NO_PARTS, cacheable);
+        }
 
         final PlaceholderTable placeholders = new PlaceholderTable();
         final Token root = compileToken(raw, placeholders);
         return new TextImpl(root, placeholders.toArray(), cacheable);
+    }
+
+    private static boolean isPlainText(String raw) {
+        for (int index = 0; index < raw.length(); index++) {
+            switch (raw.charAt(index)) {
+                case '&', '$', '[', '{', '\\' -> { return false; }
+            }
+        }
+        return true;
     }
 
     private static Token compileToken(String raw, PlaceholderTable placeholders) {

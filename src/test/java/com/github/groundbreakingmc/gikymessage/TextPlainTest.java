@@ -16,6 +16,21 @@ import org.junit.jupiter.api.Test;
 @DisplayName("Plain text & colors")
 class TextPlainTest extends TextTestBase {
 
+    @Test
+    void plainTextPreservesUnicodeAndLiteralClosingDelimiters() {
+        final String value = "Привет 😀 世界 ] } )\n".repeat(64);
+        assertRenders(Component.text(value), value);
+    }
+
+    @Test
+    void plainPrefixStillAllowsFormattingAndEscapes() {
+        final String prefix = "plain ".repeat(64);
+        assertRenders(Component.text(prefix)
+                .append(Component.text("red",
+                        NamedTextColor.RED)), prefix + "&cred");
+        assertRenders(Component.text(prefix + "{key}"), prefix + "\\{key}");
+    }
+
     // ════════════════════════════════════════════════════════════════════════
     //  Plain text
     // ════════════════════════════════════════════════════════════════════════

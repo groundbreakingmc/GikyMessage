@@ -38,6 +38,20 @@ class TextDynamicTest extends TextTestBase {
     }
 
     @Test
+    void singlePlaceholderPreservesUnicodeAndStyledReplacements() {
+        final Text text = Text.of("&e前{value}後");
+        org.junit.jupiter.api.Assertions.assertEquals(
+                MM.serialize(Component.text("前😀後", NamedTextColor.YELLOW)),
+                MM.serialize(text.render("value", Component.text("😀"))));
+        final Component replacement = Component.text("red", NamedTextColor.RED)
+                .append(Component.text("child"));
+        org.junit.jupiter.api.Assertions.assertEquals(
+                MM.serialize(Component.text("前", NamedTextColor.YELLOW)
+                        .append(replacement).append(Component.text("後"))),
+                MM.serialize(text.render("value", replacement)));
+    }
+
+    @Test
     void unmatchedBracesKeepFollowingFormatting() {
         final String braces = "{".repeat(4096);
         assertRenders(Component.text(braces).append(Component.text("red", NamedTextColor.RED)),

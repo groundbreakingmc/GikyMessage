@@ -206,6 +206,13 @@ interface Token {
                 return placeholders[this.phIndices[0]];
             }
 
+            if (this.phIndices.length == 1) {
+                final String replacement = ((TextComponent) placeholders[this.phIndices[0]]).content();
+                final String tail = this.staticParts.length > 1 && this.staticParts[1] != null
+                        ? this.staticParts[1] : "";
+                return Component.text(this.base.content() + replacement + tail, this.base.style());
+            }
+
             final StringBuilder builder = TL_SB.get();
             builder.setLength(0);
             try {

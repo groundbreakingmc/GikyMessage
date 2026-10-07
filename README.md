@@ -128,6 +128,7 @@ Values containing spaces must be quoted with `"` or `'`. Placeholders (`{key}`) 
 | `show` | `HoverEvent.showText(...)` | Show hover tooltip (supports full format syntax) |
 | `insert` | `Style.insertion(...)` | Shift+click inserts text into chat |
 | `page` | `ClickEvent.changePage(n)` | Turn to page `n` in a book/dialog |
+| `color` | static or dynamic color | Uniform color across the text |
 | `gradient` | per-character color interpolation | Color gradient across the text |
 | `head` | `ObjectContents.playerHead(...)` | Insert a player head object (1.21.5+) |
 | `sprite` | `ObjectContents.sprite(Key)` | Insert a texture sprite (1.21.5+) |
@@ -252,3 +253,24 @@ Component c = msg.render(r);
 - Maximum placeholder count per format string: 16 (configurable in `Compiler.PH_CAP`).
 - `head` with a dynamic player name requires the value to be wrapped in `{…}`: `[icon](head:{player})`.
 - `sprite`, `head`, and `page` / `dialog` require a compatible Adventure + server version.
+
+### Uniform color
+
+```text
+[Text](color:#55ff55)
+[{faction}](color:{relation_color})
+```
+
+`color` accepts Minecraft color names (`red`, `dark_red`, case-insensitive),
+legacy colors (`a`, `&a`, `§a`), hex colors (`#RGB`, `#RRGGBB`, `&#RGB`,
+`&#RRGGBB`, and their `§` variants), and expanded hex (`&x&f&f&5&5&5&5`
+or `§x§f§f§5§5§5§5`). A value must contain exactly one color.
+Color placeholders are resolved at render time. Return the literal color code as the
+placeholder component's text, for example `Component.text("&a")`.
+The color overrides colors throughout the enclosed content, including placeholder
+children, while preserving decorations and events. It does not split text into
+individual characters. An invalid or unresolved color leaves the content unchanged.
+`color` is applied after content actions, including `gradient`, `head`, and `sprite`.
+The first `color` in an action list wins. Placeholder values are literal text,
+not recursively parsed templates. The existing `cacheableOf` render cache also
+covers color placeholders.

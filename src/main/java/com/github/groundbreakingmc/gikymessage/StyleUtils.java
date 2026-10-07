@@ -139,6 +139,49 @@ final class StyleUtils {
         return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
     }
 
+    /** Parses one complete color value; malformed values are ignored. */
+    static TextColor parseColor(String value) {
+        return parseColor(value, 0, value.length());
+    }
+
+    private static TextColor parseColor(String value, int start, int end) {
+        final int length = end - start;
+        if (length == 0) return null;
+        if (length == 1) return fromLegacyCode(value.charAt(start));
+        final char first = value.charAt(start);
+        final boolean legacy = first == '&' || first == '§';
+        if (length == 2 && legacy) return fromLegacyCode(value.charAt(start + 1));
+
+        if (length == 14 && legacy && Character.toLowerCase(value.charAt(start + 1)) == 'x') {
+            int rgb = 0;
+            for (int index = start + 2; index < end; index += 2) {
+                if (value.charAt(index) != first) return null;
+                final int digit = hexVal(value.charAt(index + 1));
+                if (digit == -1) return null;
+                rgb = (rgb << 4) | digit;
+            }
+            return textColorOf(rgb);
+        }
+
+        final int hexStart = legacy ? start + 1 : start;
+        if (value.charAt(hexStart) == '#') {
+            final int digits = end - hexStart - 1;
+            if (digits != 3 && digits != 6) return null;
+            int rgb = 0;
+            for (int index = hexStart + 1; index < end; index++) {
+                final int digit = hexVal(value.charAt(index));
+                if (digit == -1) return null;
+                rgb = (rgb << 4) | digit;
+            }
+            if (digits == 3) {
+                rgb = (((rgb >>> 8) & 15) * 17 << 16)
+                        | (((rgb >>> 4) & 15) * 17 << 8) | ((rgb & 15) * 17);
+            }
+            return textColorOf(rgb);
+        }
+        return NamedTextColor.NAMES.value(value.substring(start, end).toLowerCase(java.util.Locale.ROOT));
+    }
+
     static TextColor fromLegacyCode(char code) {
         return switch (Character.toLowerCase(code)) {
             case '0' -> NamedTextColor.BLACK;

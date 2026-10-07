@@ -22,7 +22,7 @@ import java.util.Map;
  *   <li>{@code {key}} — placeholder</li>
  *   <li>{@code [text](action:value, …)} — bracketed segment with optional actions
  *       ({@code run}, {@code suggest}, {@code url}, {@code copy}, {@code show},
- *        {@code page}, {@code insert}, {@code gradient}, {@code head}, {@code sprite})</li>
+ *        {@code page}, {@code insert}, {@code gradient}, {@code color}, {@code head}, {@code sprite})</li>
  *   <li>{@code \n}, {@code \[}, {@code \]}, {@code \{}, {@code \}}, {@code \\} — escapes</li>
  * </ul>
  */
@@ -50,6 +50,7 @@ final class Compiler {
     private static final byte ACTION_SPRITE = 8;
     private static final byte ACTION_PAGE = 9;
     private static final byte ACTION_GRADIENT = 10;
+    private static final byte ACTION_COLOR = 11;
 
     private Compiler() {
     }
@@ -72,7 +73,9 @@ final class Compiler {
     private static boolean isPlainText(String raw) {
         for (int index = 0; index < raw.length(); index++) {
             switch (raw.charAt(index)) {
-                case '&', '$', '[', '{', '\\' -> { return false; }
+                case '&', '$', '[', '{', '\\' -> {
+                    return false;
+                }
             }
         }
         return true;
@@ -595,6 +598,9 @@ final class Compiler {
         int selectedContentValueStart = -1;
         int selectedContentValueEnd = -1;
 
+        String colorValue = null;
+        boolean colorDynamic = false;
+
         boolean hasShow = false;
         boolean showDynamic = false;
 
@@ -665,6 +671,8 @@ final class Compiler {
             final boolean captureValue = switch (action) {
                 case ACTION_RUN, ACTION_HEAD, ACTION_SHOW, ACTION_INSERT -> true;
 
+                case ACTION_COLOR -> colorValue == null;
+
                 case ACTION_SUGGEST -> selectedClickPriority >= 1;
 
                 case ACTION_URL -> selectedClickPriority >= 2;
@@ -686,7 +694,7 @@ final class Compiler {
                         ACTION_URL,
                         ACTION_COPY,
                         ACTION_SHOW,
-                        ACTION_HEAD -> true;
+                        ACTION_HEAD, ACTION_COLOR -> true;
 
                 default -> false;
             };
@@ -931,6 +939,11 @@ final class Compiler {
                     }
                 }
 
+                case ACTION_COLOR -> {
+                    colorValue = quoted ? quotedValue : new String(source, valueStart, valueEnd - valueStart);
+                    colorDynamic = dynamic;
+                }
+
                 case ACTION_GRADIENT -> {
                     selectedContentPriority = 2;
                     selectedContentType = ACTION_GRADIENT;
@@ -1026,7 +1039,7 @@ final class Compiler {
                 null
         );
 
-        final Token contentToken;
+        Token contentToken;
 
         if (selectedContentType == ACTION_HEAD) {
             if (selectedContentDynamic) {
@@ -1087,6 +1100,20 @@ final class Compiler {
                         childCount,
                         contentStyle
                 );
+            }
+        }
+
+        if (colorValue != null) {
+            if (colorDynamic) {
+                final DynamicValue value = parseDynamicValue(colorValue, placeholders);
+                contentToken = new Token.ColorContent(contentToken, value.staticParts,
+                        value.placeholderIndices, null, true);
+            } else {
+                final TextColor value = StyleUtils.parseColor(colorValue);
+                if (value != null) {
+                    contentToken = new Token.ColorContent(contentToken, Token.NO_PARTS,
+                            Token.NO_PH, value, isDynamic(contentToken));
+                }
             }
         }
 
@@ -1256,7 +1283,8 @@ final class Compiler {
                 || token instanceof Token.MetaFullDyn
                 || token instanceof Token.ObjDyn
                 || token instanceof Token.DynChildren
-                || token instanceof Token.GradientContent gradientContent && gradientContent.dynamic;
+                || token instanceof Token.GradientContent gradientContent && gradientContent.dynamic
+                || token instanceof Token.ColorContent colorContent && colorContent.dynamic;
     }
 
     private static HoverEvent<?> buildStaticHover(String show) {
@@ -1460,6 +1488,13 @@ final class Compiler {
 
                 yield ACTION_UNKNOWN;
             }
+
+            case 5 -> source[offset] == 'c'
+                    && source[offset + 1] == 'o'
+                    && source[offset + 2] == 'l'
+                    && source[offset + 3] == 'o'
+                    && source[offset + 4] == 'r'
+                    ? ACTION_COLOR : ACTION_UNKNOWN;
 
             case 6 -> {
                 final char first = source[offset];

@@ -5,13 +5,10 @@ import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.Style;
+import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.object.ObjectContents;
 
-import java.util.AbstractList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Objects;
-import java.util.RandomAccess;
+import java.util.*;
 
 /**
  * An immutable, compiled unit of formatted text that can render itself into a {@link Component}.
@@ -378,6 +375,53 @@ interface Token {
         }
     }
 
+    /**
+     * Applies a uniform color without splitting text into individual characters.
+     */
+    final class ColorContent implements Token {
+
+        private final Token content;
+        private final String[] staticParts;
+        private final int[] placeholderIndices;
+        private final TextColor color;
+        final boolean dynamic;
+        private final Component staticComponent;
+
+        ColorContent(Token content, String[] staticParts, int[] placeholderIndices,
+                     TextColor color, boolean dynamic) {
+            this.content = content;
+            this.staticParts = staticParts;
+            this.placeholderIndices = placeholderIndices;
+            this.color = color;
+            this.dynamic = dynamic;
+            this.staticComponent = dynamic ? null : applyColor(content.render(null), color);
+        }
+
+        @Override
+        public Component render(Component[] placeholders) {
+            if (!this.dynamic) return this.staticComponent;
+            final Component rendered = this.content.render(placeholders);
+            final TextColor resolved = this.placeholderIndices.length == 0 ? this.color
+                    : StyleUtils.parseColor(buildText(this.staticParts, this.placeholderIndices, placeholders));
+            return resolved == null ? rendered : applyColor(rendered, resolved);
+        }
+    }
+
+    private static Component applyColor(Component component, TextColor color) {
+        final List<Component> children = component.children();
+        final Component colored = component.color(color);
+        if (children.isEmpty()) return colored;
+        final ChildBuffer buffer = acquireChildren(children.size());
+        try {
+            for (int index = 0; index < children.size(); index++) {
+                buffer.setComponent(index, applyColor(children.get(index), color));
+            }
+            return colored.children(buffer);
+        } finally {
+            releaseChildren(buffer);
+        }
+    }
+
     // ── Gradient tokens ─────────────────────────────────────────────────────
 
     final class GradientContent implements Token {
@@ -698,6 +742,7 @@ interface Token {
             releaseChildren(children);
         }
     }
+
     private static ChildBuffer acquireChildren(int size) {
         return CHILD_SCRATCH.get().acquire(size);
     }

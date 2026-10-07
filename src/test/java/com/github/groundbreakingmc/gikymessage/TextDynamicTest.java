@@ -27,7 +27,7 @@ class TextDynamicTest extends TextTestBase {
 
     @Test
     void unresolvedRenderSurvivesReplacementRenders() {
-        for (Text text : new Text[]{Text.of("{a}:{b}"), Text.cacheableOf("{a}:{b}")}) {
+        for (final Text text : new Text[]{Text.of("{a}:{b}"), Text.cacheableOf("{a}:{b}")}) {
             final Component unresolved = text.render();
             text.render("a", Component.text("changed"));
             org.junit.jupiter.api.Assertions.assertEquals(unresolved, text.render());

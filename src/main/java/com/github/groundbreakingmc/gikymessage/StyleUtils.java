@@ -3,11 +3,7 @@ package com.github.groundbreakingmc.gikymessage;
 import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
-import net.kyori.adventure.text.format.NamedTextColor;
-import net.kyori.adventure.text.format.ShadowColor;
-import net.kyori.adventure.text.format.Style;
-import net.kyori.adventure.text.format.TextColor;
-import net.kyori.adventure.text.format.TextDecoration;
+import net.kyori.adventure.text.format.*;
 
 import java.util.concurrent.atomic.AtomicReferenceArray;
 
@@ -139,7 +135,9 @@ final class StyleUtils {
         return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
     }
 
-    /** Parses one complete color value; malformed values are ignored. */
+    /**
+     * Parses one complete color value; malformed values are ignored.
+     */
     static TextColor parseColor(String value) {
         return parseColor(value, 0, value.length());
     }
@@ -180,6 +178,72 @@ final class StyleUtils {
             return textColorOf(rgb);
         }
         return NamedTextColor.NAMES.value(value.substring(start, end).toLowerCase(java.util.Locale.ROOT));
+    }
+
+    /**
+     * Parses color and decoration values without interpreting them as message text.
+     */
+    static Style parseStyle(String value) {
+        TextColor color = null;
+        short decorations = 0;
+        int index = 0;
+        while (index < value.length()) {
+            if (Character.isWhitespace(value.charAt(index))) {
+                index++;
+                continue;
+            }
+            final int start = index;
+            final char first = value.charAt(index);
+            TextDecoration decoration = null;
+            boolean reset = false;
+            if (first == '&' || first == '§') {
+                if (++index == value.length()) return null;
+                final char code = Character.toLowerCase(value.charAt(index++));
+                if (code == 'x') {
+                    index = start + 14;
+                    if (index > value.length()) return null;
+                } else if (code == '#') {
+                    while (index < value.length() && isHexChar(value.charAt(index))) index++;
+                } else {
+                    decoration = switch (code) {
+                        case 'k' -> TextDecoration.OBFUSCATED;
+                        case 'l' -> TextDecoration.BOLD;
+                        case 'm' -> TextDecoration.STRIKETHROUGH;
+                        case 'n' -> TextDecoration.UNDERLINED;
+                        case 'o' -> TextDecoration.ITALIC;
+                        default -> null;
+                    };
+                    reset = code == 'r';
+                }
+            } else {
+                while (index < value.length() && !Character.isWhitespace(value.charAt(index))
+                        && value.charAt(index) != '&' && value.charAt(index) != '§') index++;
+                final String name = value.substring(start, index).toLowerCase(java.util.Locale.ROOT);
+                decoration = switch (name) {
+                    case "bold" -> TextDecoration.BOLD;
+                    case "italic" -> TextDecoration.ITALIC;
+                    case "underlined", "underline" -> TextDecoration.UNDERLINED;
+                    case "strikethrough" -> TextDecoration.STRIKETHROUGH;
+                    case "obfuscated" -> TextDecoration.OBFUSCATED;
+                    default -> null;
+                };
+                reset = name.equals("reset");
+            }
+
+            if (reset) {
+                color = NamedTextColor.WHITE;
+                for (final TextDecoration entry : DECORATIONS) {
+                    decorations = withDecoration(decorations, entry, BIT_FALSE);
+                }
+            } else if (decoration != null) {
+                decorations = withDecoration(decorations, decoration, BIT_TRUE);
+            } else {
+                final TextColor parsed = parseColor(value, start, index);
+                if (parsed == null) return null;
+                color = parsed;
+            }
+        }
+        return create(color, null, decorations);
     }
 
     static TextColor fromLegacyCode(char code) {

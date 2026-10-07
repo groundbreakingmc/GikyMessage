@@ -20,7 +20,7 @@ class StyleUtilsTest {
     void preservesHexBoundariesAndOffsets() {
         assertEquals((7L << 32) | 0xABCDEF, StyleUtils.parseHexPacked("x#AbCdEf0".toCharArray(), 1));
         assertEquals((4L << 32) | 0xAABBCC, StyleUtils.parseHexPacked("#aBc!".toCharArray(), 0));
-        for (String invalid : new String[]{"", "#", "#a", "#ab", "#abcd", "#abcde", "#xyz", "abcdef"}) {
+        for (final String invalid : new String[]{"", "#", "#a", "#ab", "#abcd", "#abcde", "#xyz", "abcdef"}) {
             assertEquals(-1L, StyleUtils.parseHexPacked(invalid.toCharArray(), 0), invalid);
         }
     }

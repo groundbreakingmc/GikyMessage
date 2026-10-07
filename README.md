@@ -128,6 +128,7 @@ Values containing spaces must be quoted with `"` or `'`. Placeholders (`{key}`) 
 | `show` | `HoverEvent.showText(...)` | Show hover tooltip (supports full format syntax) |
 | `insert` | `Style.insertion(...)` | Shift+click inserts text into chat |
 | `page` | `ClickEvent.changePage(n)` | Turn to page `n` in a book/dialog |
+| `style` | static or dynamic formatting | Color and decorations across the text |
 | `color` | static or dynamic color | Uniform color across the text |
 | `gradient` | per-character color interpolation | Color gradient across the text |
 | `head` | `ObjectContents.playerHead(...)` | Insert a player head object (1.21.5+) |
@@ -274,3 +275,31 @@ individual characters. An invalid or unresolved color leaves the content unchang
 The first `color` in an action list wins. Placeholder values are literal text,
 not recursively parsed templates. The existing `cacheableOf` render cache also
 covers color placeholders.
+
+### Dynamic style
+
+```text
+[Text](style:&c&l)
+[Text](style:"red bold italic")
+[{name}](style:{format})
+[Text](style:bold,color:{team_color})
+```
+
+`style` accepts every `color` notation, legacy decorations (`&k`, `&l`, `&m`,
+`&n`, `&o`, also with `§`), and the words `obfuscated`, `bold`, `strikethrough`,
+`underlined` (or `underline`), and `italic`. Words are case-insensitive and
+separated by whitespace. Legacy codes can be adjacent. Values from placeholders
+are parsed at render time as literal formatting values, not message templates.
+
+Only specified properties override the enclosed content, including nested and
+placeholder components. Other properties, including clicks, hover, insertion,
+font and shadow, are retained. Colors keep previously specified decorations,
+as in the regular GikyMessage text syntax. `&r`, `§r`, or `reset` sets white and
+explicitly disables all decorations; subsequent properties can override this.
+Invalid or unresolved values leave the content unchanged; empty styles do nothing.
+
+`style` is applied after content actions and before `color`, regardless of their
+order in the action list. Thus an explicit `color` overrides the color in `style`.
+The first occurrence of each action wins. An outer formatting action overrides
+specified properties in nested blocks. Static values are parsed during compilation;
+`cacheableOf` reuses its result while all placeholder values remain equal.

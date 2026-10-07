@@ -422,6 +422,53 @@ interface Token {
         }
     }
 
+    /**
+     * Applies only the supplied visual properties, retaining events and other styles.
+     */
+    final class StyleContent implements Token {
+
+        private final Token content;
+        private final String[] staticParts;
+        private final int[] placeholderIndices;
+        private final Style style;
+        final boolean dynamic;
+        private final Component staticComponent;
+
+        StyleContent(Token content, String[] staticParts, int[] placeholderIndices,
+                     Style style, boolean dynamic) {
+            this.content = content;
+            this.staticParts = staticParts;
+            this.placeholderIndices = placeholderIndices;
+            this.style = style;
+            this.dynamic = dynamic;
+            this.staticComponent = dynamic ? null : applyStyle(content.render(null), style);
+        }
+
+        @Override
+        public Component render(Component[] placeholders) {
+            if (!this.dynamic) return this.staticComponent;
+            final Component rendered = this.content.render(placeholders);
+            final Style resolved = this.placeholderIndices.length == 0 ? this.style
+                    : StyleUtils.parseStyle(buildText(this.staticParts, this.placeholderIndices, placeholders));
+            return resolved == null || resolved.isEmpty() ? rendered : applyStyle(rendered, resolved);
+        }
+    }
+
+    private static Component applyStyle(Component component, Style style) {
+        final List<Component> children = component.children();
+        final Component styled = component.style(component.style().merge(style));
+        if (children.isEmpty()) return styled;
+        final ChildBuffer buffer = acquireChildren(children.size());
+        try {
+            for (int index = 0; index < children.size(); index++) {
+                buffer.setComponent(index, applyStyle(children.get(index), style));
+            }
+            return styled.children(buffer);
+        } finally {
+            releaseChildren(buffer);
+        }
+    }
+
     // ── Gradient tokens ─────────────────────────────────────────────────────
 
     final class GradientContent implements Token {

@@ -22,7 +22,7 @@ import java.util.Map;
  *   <li>{@code {key}} — placeholder</li>
  *   <li>{@code [text](action:value, …)} — bracketed segment with optional actions
  *       ({@code run}, {@code suggest}, {@code url}, {@code copy}, {@code show},
- *        {@code page}, {@code insert}, {@code gradient}, {@code color}, {@code head}, {@code sprite})</li>
+ *        {@code page}, {@code insert}, {@code gradient}, {@code color}, {@code style}, {@code head}, {@code sprite})</li>
  *   <li>{@code \n}, {@code \[}, {@code \]}, {@code \{}, {@code \}}, {@code \\} — escapes</li>
  * </ul>
  */
@@ -51,6 +51,7 @@ final class Compiler {
     private static final byte ACTION_PAGE = 9;
     private static final byte ACTION_GRADIENT = 10;
     private static final byte ACTION_COLOR = 11;
+    private static final byte ACTION_STYLE = 12;
 
     private Compiler() {
     }
@@ -598,6 +599,9 @@ final class Compiler {
         int selectedContentValueStart = -1;
         int selectedContentValueEnd = -1;
 
+        String styleValue = null;
+        boolean styleDynamic = false;
+
         String colorValue = null;
         boolean colorDynamic = false;
 
@@ -673,6 +677,8 @@ final class Compiler {
 
                 case ACTION_COLOR -> colorValue == null;
 
+                case ACTION_STYLE -> styleValue == null;
+
                 case ACTION_SUGGEST -> selectedClickPriority >= 1;
 
                 case ACTION_URL -> selectedClickPriority >= 2;
@@ -694,7 +700,7 @@ final class Compiler {
                         ACTION_URL,
                         ACTION_COPY,
                         ACTION_SHOW,
-                        ACTION_HEAD, ACTION_COLOR -> true;
+                        ACTION_HEAD, ACTION_COLOR, ACTION_STYLE -> true;
 
                 default -> false;
             };
@@ -939,6 +945,11 @@ final class Compiler {
                     }
                 }
 
+                case ACTION_STYLE -> {
+                    styleValue = quoted ? quotedValue : new String(source, valueStart, valueEnd - valueStart);
+                    styleDynamic = dynamic;
+                }
+
                 case ACTION_COLOR -> {
                     colorValue = quoted ? quotedValue : new String(source, valueStart, valueEnd - valueStart);
                     colorDynamic = dynamic;
@@ -1100,6 +1111,20 @@ final class Compiler {
                         childCount,
                         contentStyle
                 );
+            }
+        }
+
+        if (styleValue != null) {
+            if (styleDynamic) {
+                final DynamicValue value = parseDynamicValue(styleValue, placeholders);
+                contentToken = new Token.StyleContent(contentToken, value.staticParts,
+                        value.placeholderIndices, null, true);
+            } else {
+                final Style value = StyleUtils.parseStyle(styleValue);
+                if (value != null && !value.isEmpty()) {
+                    contentToken = new Token.StyleContent(contentToken, Token.NO_PARTS,
+                            Token.NO_PH, value, isDynamic(contentToken));
+                }
             }
         }
 
@@ -1284,7 +1309,8 @@ final class Compiler {
                 || token instanceof Token.ObjDyn
                 || token instanceof Token.DynChildren
                 || token instanceof Token.GradientContent gradientContent && gradientContent.dynamic
-                || token instanceof Token.ColorContent colorContent && colorContent.dynamic;
+                || token instanceof Token.ColorContent colorContent && colorContent.dynamic
+                || token instanceof Token.StyleContent styleContent && styleContent.dynamic;
     }
 
     private static HoverEvent<?> buildStaticHover(String show) {
@@ -1489,12 +1515,23 @@ final class Compiler {
                 yield ACTION_UNKNOWN;
             }
 
-            case 5 -> source[offset] == 'c'
-                    && source[offset + 1] == 'o'
-                    && source[offset + 2] == 'l'
-                    && source[offset + 3] == 'o'
-                    && source[offset + 4] == 'r'
-                    ? ACTION_COLOR : ACTION_UNKNOWN;
+            case 5 -> {
+                if (source[offset] == 'c'
+                        && source[offset + 1] == 'o'
+                        && source[offset + 2] == 'l'
+                        && source[offset + 3] == 'o'
+                        && source[offset + 4] == 'r') {
+                    yield ACTION_COLOR;
+                }
+                if (source[offset] == 's'
+                        && source[offset + 1] == 't'
+                        && source[offset + 2] == 'y'
+                        && source[offset + 3] == 'l'
+                        && source[offset + 4] == 'e') {
+                    yield ACTION_STYLE;
+                }
+                yield ACTION_UNKNOWN;
+            }
 
             case 6 -> {
                 final char first = source[offset];

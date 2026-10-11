@@ -10,22 +10,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * Compiles raw format strings into {@link Token} trees consumed by {@link TextImpl}.
- * <p>
- * <h3>Format syntax</h3>
- * <ul>
- *   <li>{@code &c}, {@code &l}, … — legacy Minecraft color/decoration codes</li>
- *   <li>{@code &#RRGGBB} or {@code &#RGB} — hex color</li>
- *   <li>{@code $#RRGGBB} — shadow color</li>
- *   <li>{@code &r} — reset all styles</li>
- *   <li>{@code {key}} — placeholder</li>
- *   <li>{@code [text](action:value, …)} — bracketed segment with optional actions
- *       ({@code run}, {@code suggest}, {@code url}, {@code copy}, {@code show},
- *        {@code page}, {@code insert}, {@code gradient}, {@code color}, {@code style}, {@code head}, {@code sprite})</li>
- *   <li>{@code \n}, {@code \[}, {@code \]}, {@code \{}, {@code \}}, {@code \\} — escapes</li>
- * </ul>
- */
+// Compiles templates into tokens and a shared table of placeholder indices.
 final class Compiler {
 
     private static final int INITIAL_PLACEHOLDER_CAPACITY = 16;
@@ -33,9 +18,7 @@ final class Compiler {
     private static final int MAX_RETAINED_SCRATCH_CAPACITY = 8 * 1024;
     private static final int INITIAL_STACK_CAPACITY = 8;
 
-    /**
-     * Per-thread scratch buffer for quoted value and action parsing.
-     */
+    // Per-thread buffer for quoted action values.
     private static final ThreadLocal<StringBuilder> SCRATCH_BUFFER =
             ThreadLocal.withInitial(() -> new StringBuilder(64));
 
@@ -55,10 +38,6 @@ final class Compiler {
 
     private Compiler() {
     }
-
-    // ════════════════════════════════════════════════════════════════════════
-    //  Entry point
-    // ════════════════════════════════════════════════════════════════════════
 
     static Text compile(String raw, boolean cacheable) {
         if (raw == null || raw.isEmpty()) return Text.EMPTY;
@@ -103,10 +82,7 @@ final class Compiler {
         Token[] rootTokens = new Token[8];
         int rootTokenCnt = 0;
 
-        // The first plain token can normally be stored directly in the root
-        // component. A later root-level &r makes that unsafe: Adventure would
-        // have to emit explicit negative decorations / white to cancel the
-        // root style. Decide lazily when the first styled root token is flushed.
+        // Hoisting the first style to the root is unsafe if a later root-level &r must cancel it.
         boolean canHoistRootStyle = true;
 
         String[] dynStatic = null;
@@ -117,13 +93,10 @@ final class Compiler {
         int pos = 0;
         boolean noMorePlaceholders = false;
 
-        // ════════════════════════════════════════════════════════════════════
-        //  Main loop
-        // ════════════════════════════════════════════════════════════════════
         while (pos < len) {
             final char c = src[pos];
 
-            // ── Escape sequences ─────────────────────────────────────────────
+            // Escape sequences
             if (c == '\\' && pos + 1 < len) {
                 switch (src[pos + 1]) {
                     case 'n' -> {
@@ -162,7 +135,7 @@ final class Compiler {
                 continue;
             }
 
-            // ── Color / decoration codes: & ──────────────────────────────────
+            // Color / decoration codes: &
             if (c == '&' && pos + 1 < len) {
                 final char next = src[pos + 1];
                 final char code = Character.toLowerCase(next);
@@ -171,9 +144,7 @@ final class Compiler {
                         ? StyleUtils.parseHexPacked(src, pos + 1)
                         : -1L;
 
-                // Determine whether this is a valid style-changing code before
-                // touching any state. If it is, flush any accumulated text first
-                // so it gets the OLD style, not the incoming one.
+                // Flush only for valid codes, preserving the accumulated text's previous style.
                 final boolean willChangeColor = legacyColor != null || packedColor != -1L;
                 final boolean willChangeDeco = code == 'l' || code == 'o' || code == 'n'
                         || code == 'm' || code == 'k' || code == 'r';
@@ -255,7 +226,7 @@ final class Compiler {
                 continue;
             }
 
-            // ── Shadow color: $ ──────────────────────────────────────────────
+            // Shadow color: $
             if (c == '$' && pos + 1 < len) {
                 final char next = src[pos + 1];
 
@@ -296,7 +267,7 @@ final class Compiler {
                 continue;
             }
 
-            // ── Placeholder: {key} ───────────────────────────────────────────
+            // Placeholder: {key}
             if (c == '{' && !noMorePlaceholders) {
                 int braceEnd = pos + 1;
                 while (braceEnd < len && src[braceEnd] != '}') braceEnd++;
@@ -329,7 +300,7 @@ final class Compiler {
                 continue;
             }
 
-            // ── Open nested block: [ ─────────────────────────────────────────
+            // Open nested block: [
             if (c == '[') {
                 final Token accumulated = flushText(
                         textBuf, dynStatic, dynPh, dynPhCnt, hasDyn,
@@ -375,7 +346,7 @@ final class Compiler {
                 continue;
             }
 
-            // ── Close block: ] ───────────────────────────────────────────────
+            // Close block: ]
             if (c == ']') {
                 if (depth == 0) {
                     textBuf.append(c);
@@ -424,18 +395,15 @@ final class Compiler {
                 continue;
             }
 
-            // ── Plain character ──────────────────────────────────────────────
             textBuf.append(c);
             pos++;
         }
 
-        // ── End of input ─────────────────────────────────────────────────────
         Token pending = flushText(textBuf, dynStatic, dynPh, dynPhCnt, hasDyn,
                 curDeco, curColor, curShadow,
                 inhDeco, inhColor, inhShadow);
 
-        // Be lenient with missing closing brackets: close every open frame at EOF
-        // instead of dropping the already compiled content.
+        // Close unfinished groups at EOF so their content is preserved.
         while (depth > 0) {
             final Frame frame = stack[--depth];
             curDeco = frame.outerDecorations;
@@ -464,10 +432,6 @@ final class Compiler {
 
         return root;
     }
-
-    // ════════════════════════════════════════════════════════════════════════
-    //  Flush accumulated text into a token
-    // ════════════════════════════════════════════════════════════════════════
 
     private static Token flushText(
             StringBuilder textBuf,
@@ -509,11 +473,6 @@ final class Compiler {
             return new Token.PlainDyn(staticParts, phIndices, style);
         }
     }
-
-    // ════════════════════════════════════════════════════════════════════════
-    //  Build bracket token
-    //  Receives src + actStart/actEnd offsets to avoid substring allocation.
-    // ════════════════════════════════════════════════════════════════════════
 
     private static Token buildBracketToken(
             Token innerText,
@@ -1037,9 +996,7 @@ final class Compiler {
                         ? buildStaticHover(showText)
                         : null;
 
-        // Visual properties and all static metadata belong to the same root
-        // component. Dynamic actions later replace only their corresponding
-        // event on that component instead of introducing a wrapper component.
+        // Keep metadata on the content root; dynamic actions replace only their own events.
         final Style contentStyle = StyleUtils.create(
                 color,
                 shadow,
@@ -1243,13 +1200,7 @@ final class Compiler {
         return new Token.DynamicHover(compileToken(value, outerPlaceholders));
     }
 
-    // ════════════════════════════════════════════════════════════════════════
-    //  Utilities
-    // ════════════════════════════════════════════════════════════════════════
-
-    /**
-     * Compares a {@code char[]} region to a {@link String} without allocating an intermediate string.
-     */
+    // Compares a character range with a string without allocating a substring.
     static boolean regionEquals(char[] src, int off, int len, String s) {
         if (s.length() != len) return false;
         for (int i = 0; i < len; i++)
@@ -1333,14 +1284,7 @@ final class Compiler {
                 : new Token.Children("", Style.empty(), tokens, count);
     }
 
-    /**
-     * Checks whether the remaining source contains an effective root-level
-     * legacy reset. Escaped characters, placeholders, nested bracket content,
-     * and action payloads are skipped because they do not reset the root style.
-     *
-     * <p>This is allocation-free and is invoked at most once per compilation,
-     * only when the first root token actually carries a visual style.</p>
-     */
+    // Finds a root-level reset, ignoring escapes, placeholders, nested groups, and actions.
     private static boolean hasRootResetAhead(char[] src, int start) {
         int bracketDepth = 0;
 
@@ -1411,12 +1355,7 @@ final class Compiler {
         return -1;
     }
 
-    /**
-     * Parses a dash-separated list of hex colors ({@code #RGB} or {@code #RRGGBB})
-     * directly from a {@code char[]} without intermediate string allocation or regex.
-     *
-     * @return an array of 24-bit RGB values, or {@code null} if fewer than two colors are found
-     */
+    // Reads dash-separated hex or legacy color stops; returns null if parsing fails or fewer than two stops are found.
     private static int[] parseGradientColors(String value) {
         final char[] src = value.toCharArray();
         final int len = src.length;
@@ -1740,6 +1679,7 @@ final class Compiler {
         }
     }
 
+    // Indices preserve registration order, including keys from later-discarded content.
     private static final class PlaceholderTable {
 
         private static final String[] EMPTY_KEYS = new String[0];

@@ -135,9 +135,7 @@ final class StyleUtils {
         return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
     }
 
-    /**
-     * Parses one complete color value; malformed values are ignored.
-     */
+    // Returns null unless the entire value denotes one color.
     static TextColor parseColor(String value) {
         return parseColor(value, 0, value.length());
     }
@@ -180,9 +178,7 @@ final class StyleUtils {
         return NamedTextColor.NAMES.value(value.substring(start, end).toLowerCase(java.util.Locale.ROOT));
     }
 
-    /**
-     * Parses color and decoration values without interpreting them as message text.
-     */
+    // Returns null for invalid formatting; empty input produces an empty style.
     static Style parseStyle(String value) {
         TextColor color = null;
         short decorations = 0;
@@ -285,6 +281,7 @@ final class StyleUtils {
         return -1;
     }
 
+    // Packs consumed length in the high 32 bits and RGB in the low 24; -1 means invalid hex.
     static long parseHexPacked(char[] src, int start) {
         if (start >= src.length || src[start] != '#') return -1L;
         int count = 0;

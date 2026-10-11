@@ -408,6 +408,7 @@ final class TextImpl implements Text {
         }
     }
 
+    // Nested resolver renders need distinct buffers, released in LIFO order.
     private static final class RenderScratch {
 
         private RenderBuffer[] buffers = new RenderBuffer[4];

@@ -10,29 +10,11 @@ import net.kyori.adventure.text.object.ObjectContents;
 
 import java.util.*;
 
-/**
- * An immutable, compiled unit of formatted text that can render itself into a {@link Component}.
- *
- * <p>Tokens are produced exclusively by {@link Compiler} and fall into two broad categories:
- * <ul>
- *   <li><b>Static</b> — the Adventure component is materialized during compilation.</li>
- *   <li><b>Dynamic</b> — the result depends on placeholder values and is rebuilt on render.</li>
- * </ul>
- *
- * <p>The render contract receives one resolved component per compiled placeholder. Placeholder
- * components are inserted unchanged. Following static segments keep the template's compiled style
- * instead of inheriting style or events from the replacement component.
- * Dynamic command and URL values extract visible text recursively from their components.
- */
+// Compiled tokens render from indexed values; static results are built during compilation.
 interface Token {
 
     Component render(Component[] placeholders);
 
-    // ── Static tokens — Adventure components built during compilation ─────────
-
-    /**
-     * Plain text with a style. Example: {@code &cHello world}
-     */
     final class Plain implements Token {
 
         final String text;
@@ -51,10 +33,7 @@ interface Token {
         }
     }
 
-    /**
-     * Text node with child tokens.
-     * Cached only when all children are themselves static.
-     */
+    // Precomputes the result of a group whose children are all static.
     final class Children implements Token {
 
         private final Component staticComponent;
@@ -123,17 +102,9 @@ interface Token {
         }
     }
 
-    // ── Dynamic tokens — rebuilt on every render() ──────────────────────────
-    // Invariant: staticParts.length == phIndices.length + 1  (at most)
+    // staticParts may omit trailing empty entries: length <= phIndices.length + 1.
 
-    /**
-     * Text with placeholders and no events. Example: {@code &cHello, {player}!}
-     *
-     * <p>The first static part is stored in the root component. Each placeholder and its
-     * immediately following static segment are emitted as siblings. Static segments remain
-     * unstyled children and therefore inherit the compiled template style from their parent,
-     * without inheriting replacement-component events or decorations.
-     */
+    // Keeps replacements and static tails as siblings, preventing replacement styles from leaking into tails.
     final class PlainDyn implements Token {
 
         final String[] staticParts;
@@ -246,11 +217,7 @@ interface Token {
         }
     }
 
-    /**
-     * One dynamic action applied directly to the root component produced by
-     * {@link #content}. The content already owns its visual style and any
-     * static metadata; rendering replaces only the dynamic event.
-     */
+    // Replaces one event on the content root, preserving its other styles and metadata.
     final class MetaDyn implements Token {
 
         static final byte RUN = 0;
@@ -299,9 +266,7 @@ interface Token {
         }
     }
 
-    /**
-     * Dynamic text content combined with dynamic action(s).
-     */
+    // Replaces up to two events on the content root.
     final class MetaFullDyn implements Token {
 
         private final Token content;
@@ -375,9 +340,7 @@ interface Token {
         }
     }
 
-    /**
-     * Applies a uniform color without splitting text into individual characters.
-     */
+    // Overrides colors throughout the component tree without splitting text.
     final class ColorContent implements Token {
 
         private final Token content;
@@ -422,9 +385,7 @@ interface Token {
         }
     }
 
-    /**
-     * Applies only the supplied visual properties, retaining events and other styles.
-     */
+    // Overrides specified visual properties, retaining events and other styles.
     final class StyleContent implements Token {
 
         private final Token content;
@@ -468,8 +429,6 @@ interface Token {
             releaseChildren(buffer);
         }
     }
-
-    // ── Gradient tokens ─────────────────────────────────────────────────────
 
     final class GradientContent implements Token {
 
@@ -541,8 +500,6 @@ interface Token {
         }
     }
 
-    // ── Object tokens (head / sprite, Minecraft 1.21.9+) ───────────────────
-
     final class Obj implements Token {
 
         private final Component component;
@@ -582,20 +539,14 @@ interface Token {
         }
     }
 
-    // ── Shared utilities ────────────────────────────────────────────────────
-
-    /**
-     * Per-thread {@link StringBuilder} reused across all {@link #buildText} calls.
-     */
     int MAX_RETAINED_BUILDER_CAPACITY = 8 * 1024;
+    // Finish using the builder before another operation on this thread reuses it.
     ThreadLocal<StringBuilder> TL_SB = ThreadLocal.withInitial(() -> new StringBuilder(128));
     ThreadLocal<ChildScratch> CHILD_SCRATCH = ThreadLocal.withInitial(ChildScratch::new);
     Component[] EMPTY_COMPONENTS = new Component[0];
     Style[] EMPTY_STYLES = new Style[0];
 
-    /**
-     * Cached single-character strings for codepoints 0–255.
-     */
+    // Single-code-point strings reused by gradients.
     String[] CHAR_CACHE = buildCharCache();
 
     private static String[] buildCharCache() {
@@ -607,18 +558,7 @@ interface Token {
     String[] NO_PARTS = {};
     int[] NO_PH = {};
 
-    /**
-     * Interleaves static string parts with the plain-text content extracted from placeholder
-     * components, and returns the assembled string.
-     *
-     * <p>Used exclusively for action-value building (commands, URLs, hover text templates)
-     * where a raw string is required. Style information in the component is intentionally
-     * discarded — only the visible text content matters for action strings.
-     *
-     * @param staticParts        static parts ({@code s[i]} is the literal before placeholder {@code i})
-     * @param placeholderIndices placeholder indices into {@code compPh}
-     * @param placeholders       resolved placeholder components
-     */
+    // Builds action strings from literal parts and replacement text; non-text nodes contribute only their children.
     private static String buildText(
             String[] staticParts,
             int[] placeholderIndices,
@@ -798,6 +738,7 @@ interface Token {
         buffer.owner.release(buffer);
     }
 
+    // LIFO buffers isolate recursive renders; every acquire must be paired with release.
     final class ChildScratch {
 
         private static final int MAX_RETAINED_CAPACITY = 1024;

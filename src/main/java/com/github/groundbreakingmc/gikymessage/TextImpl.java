@@ -2,27 +2,29 @@ package com.github.groundbreakingmc.gikymessage;
 
 import net.kyori.adventure.text.Component;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.Arrays;
-import java.util.Map;
 import java.util.Objects;
 
-final class TextImpl implements Text {
+final class TextImpl<C> implements Text<C> {
 
-    private static final Component[] EMPTY_COMPONENTS = new Component[0];
+    private static final Object[] EMPTY_VALUES = new Object[0];
     private static final ThreadLocal<RenderScratch> RENDER_SCRATCH =
             ThreadLocal.withInitial(RenderScratch::new);
 
     private final Token token;
     private final String[] placeholderKeys;
+    private final ValueResolver<C>[] resolvers;
     private volatile Component[] fallbacks;
     private final ThreadLocal<RenderCache> renderCache;
     private final boolean cacheable;
 
-    TextImpl(Token token, String[] placeholderKeys, boolean cacheable) {
+    TextImpl(Token token, String[] placeholderKeys, boolean cacheable, ResolverFactory<C> factory) {
         this.token = Objects.requireNonNull(token, "token");
         this.placeholderKeys = Objects.requireNonNull(placeholderKeys, "placeholderKeys");
         this.cacheable = cacheable;
+        this.resolvers = bind(this.placeholderKeys, factory);
 
         final int placeholderCount = this.placeholderKeys.length;
         this.renderCache = placeholderCount == 0 || !cacheable
@@ -30,337 +32,43 @@ final class TextImpl implements Text {
                 : ThreadLocal.withInitial(() -> new RenderCache(placeholderCount));
     }
 
+    private static <C> ValueResolver<C>[] bind(String[] keys, ResolverFactory<C> factory) {
+        if (keys.length == 0 || factory == null) return null;
+        @SuppressWarnings("unchecked") final ValueResolver<C>[] resolvers =
+                (ValueResolver<C>[]) new ValueResolver<?>[keys.length];
+        for (int index = 0; index < keys.length; index++) {
+            resolvers[index] = factory.resolve(keys[index]);
+        }
+        return resolvers;
+    }
+
     @Override
     public @NotNull Component render() {
-        if (this.placeholderKeys.length == 0) return this.token.render(null);
+        if (this.placeholderKeys.length == 0) return this.token.render(null, null);
 
-        return this.renderResolved(this.fallbacks());
+        return this.renderResolved(this.fallbacks(), null);
     }
 
     @Override
-    public @NotNull Component render(@NotNull Resolver resolver) {
-        if (this.placeholderKeys.length == 0) return this.token.render(null);
+    public @NotNull Component render(@Nullable C context) {
+        if (this.resolvers == null) return this.render();
 
         final RenderBuffer renderBuffer = RENDER_SCRATCH.get().acquire(this.placeholderKeys.length);
-        final Component[] buffer = renderBuffer.components;
+        final Object[] buffer = renderBuffer.values;
         try {
+            final ValueResolver.Value output = this.cacheable ? renderBuffer.componentValue() : renderBuffer;
             for (int index = 0; index < this.placeholderKeys.length; index++) {
-                this.fillSlot(buffer, index, resolver.resolve(this.placeholderKeys[index]));
+                renderBuffer.resolved = null;
+                final ValueResolver<C> resolver = this.resolvers[index];
+                if (resolver != null) resolver.resolve(context, output);
+                final Object value = renderBuffer.resolved;
+                buffer[index] = value == null ? this.fallbacks()[index] : value;
+                if (value == Token.NUMBER_VALUE) renderBuffer.storeNumber(index);
             }
-            return this.renderResolved(buffer);
+            return this.renderResolved(buffer, renderBuffer.numbers);
         } finally {
             renderBuffer.release();
         }
-    }
-
-    @Override
-    public @NotNull Component render(@NotNull Map<String, Component> replacements) {
-        if (this.placeholderKeys.length == 0) return this.token.render(null);
-
-        final RenderBuffer renderBuffer = RENDER_SCRATCH.get().acquire(this.placeholderKeys.length);
-        final Component[] buffer = renderBuffer.components;
-        try {
-            for (int index = 0; index < this.placeholderKeys.length; index++) {
-                this.fillSlot(buffer, index, replacements.get(this.placeholderKeys[index]));
-            }
-            return this.renderResolved(buffer);
-        } finally {
-            renderBuffer.release();
-        }
-    }
-
-    @Override
-    public @NotNull Component render(@NotNull String k0, @NotNull Component v0) {
-        if (this.placeholderKeys.length == 0) return this.token.render(null);
-
-        final RenderBuffer renderBuffer = RENDER_SCRATCH.get().acquire(this.placeholderKeys.length);
-        final Component[] buffer = renderBuffer.components;
-        try {
-            for (int index = 0; index < this.placeholderKeys.length; index++) {
-                final String key = this.placeholderKeys[index];
-                final Component value =
-                        key.equals(k0) ? v0 :
-                                null;
-                this.fillSlot(buffer, index, value);
-            }
-            return this.renderResolved(buffer);
-        } finally {
-            renderBuffer.release();
-        }
-    }
-
-    @Override
-    public @NotNull Component render(@NotNull String k0, @NotNull Component v0,
-                                     @NotNull String k1, @NotNull Component v1) {
-        if (this.placeholderKeys.length == 0) return this.token.render(null);
-
-        final RenderBuffer renderBuffer = RENDER_SCRATCH.get().acquire(this.placeholderKeys.length);
-        final Component[] buffer = renderBuffer.components;
-        try {
-            for (int index = 0; index < this.placeholderKeys.length; index++) {
-                final String key = this.placeholderKeys[index];
-                final Component value =
-                        key.equals(k0) ? v0 :
-                                key.equals(k1) ? v1 :
-                                        null;
-                this.fillSlot(buffer, index, value);
-            }
-            return this.renderResolved(buffer);
-        } finally {
-            renderBuffer.release();
-        }
-    }
-
-    @Override
-    public @NotNull Component render(@NotNull String k0, @NotNull Component v0,
-                                     @NotNull String k1, @NotNull Component v1,
-                                     @NotNull String k2, @NotNull Component v2) {
-        if (this.placeholderKeys.length == 0) return this.token.render(null);
-
-        final RenderBuffer renderBuffer = RENDER_SCRATCH.get().acquire(this.placeholderKeys.length);
-        final Component[] buffer = renderBuffer.components;
-        try {
-            for (int index = 0; index < this.placeholderKeys.length; index++) {
-                final String key = this.placeholderKeys[index];
-                final Component value =
-                        key.equals(k0) ? v0 :
-                                key.equals(k1) ? v1 :
-                                        key.equals(k2) ? v2 :
-                                                null;
-                this.fillSlot(buffer, index, value);
-            }
-            return this.renderResolved(buffer);
-        } finally {
-            renderBuffer.release();
-        }
-    }
-
-    @Override
-    public @NotNull Component render(@NotNull String k0, @NotNull Component v0,
-                                     @NotNull String k1, @NotNull Component v1,
-                                     @NotNull String k2, @NotNull Component v2,
-                                     @NotNull String k3, @NotNull Component v3) {
-        if (this.placeholderKeys.length == 0) return this.token.render(null);
-
-        final RenderBuffer renderBuffer = RENDER_SCRATCH.get().acquire(this.placeholderKeys.length);
-        final Component[] buffer = renderBuffer.components;
-        try {
-            for (int index = 0; index < this.placeholderKeys.length; index++) {
-                final String key = this.placeholderKeys[index];
-                final Component value =
-                        key.equals(k0) ? v0 :
-                                key.equals(k1) ? v1 :
-                                        key.equals(k2) ? v2 :
-                                                key.equals(k3) ? v3 :
-                                                        null;
-                this.fillSlot(buffer, index, value);
-            }
-            return this.renderResolved(buffer);
-        } finally {
-            renderBuffer.release();
-        }
-    }
-
-    @Override
-    public @NotNull Component render(@NotNull String k0, @NotNull Component v0,
-                                     @NotNull String k1, @NotNull Component v1,
-                                     @NotNull String k2, @NotNull Component v2,
-                                     @NotNull String k3, @NotNull Component v3,
-                                     @NotNull String k4, @NotNull Component v4) {
-        if (this.placeholderKeys.length == 0) return this.token.render(null);
-
-        final RenderBuffer renderBuffer = RENDER_SCRATCH.get().acquire(this.placeholderKeys.length);
-        final Component[] buffer = renderBuffer.components;
-        try {
-            for (int index = 0; index < this.placeholderKeys.length; index++) {
-                final String key = this.placeholderKeys[index];
-                final Component value =
-                        key.equals(k0) ? v0 :
-                                key.equals(k1) ? v1 :
-                                        key.equals(k2) ? v2 :
-                                                key.equals(k3) ? v3 :
-                                                        key.equals(k4) ? v4 :
-                                                                null;
-                this.fillSlot(buffer, index, value);
-            }
-            return this.renderResolved(buffer);
-        } finally {
-            renderBuffer.release();
-        }
-    }
-
-    @Override
-    public @NotNull Component render(@NotNull String k0, @NotNull Component v0,
-                                     @NotNull String k1, @NotNull Component v1,
-                                     @NotNull String k2, @NotNull Component v2,
-                                     @NotNull String k3, @NotNull Component v3,
-                                     @NotNull String k4, @NotNull Component v4,
-                                     @NotNull String k5, @NotNull Component v5) {
-        if (this.placeholderKeys.length == 0) return this.token.render(null);
-
-        final RenderBuffer renderBuffer = RENDER_SCRATCH.get().acquire(this.placeholderKeys.length);
-        final Component[] buffer = renderBuffer.components;
-        try {
-            for (int index = 0; index < this.placeholderKeys.length; index++) {
-                final String key = this.placeholderKeys[index];
-                final Component value =
-                        key.equals(k0) ? v0 :
-                                key.equals(k1) ? v1 :
-                                        key.equals(k2) ? v2 :
-                                                key.equals(k3) ? v3 :
-                                                        key.equals(k4) ? v4 :
-                                                                key.equals(k5) ? v5 :
-                                                                        null;
-                this.fillSlot(buffer, index, value);
-            }
-            return this.renderResolved(buffer);
-        } finally {
-            renderBuffer.release();
-        }
-    }
-
-    @Override
-    public @NotNull Component render(@NotNull String k0, @NotNull Component v0,
-                                     @NotNull String k1, @NotNull Component v1,
-                                     @NotNull String k2, @NotNull Component v2,
-                                     @NotNull String k3, @NotNull Component v3,
-                                     @NotNull String k4, @NotNull Component v4,
-                                     @NotNull String k5, @NotNull Component v5,
-                                     @NotNull String k6, @NotNull Component v6) {
-        if (this.placeholderKeys.length == 0) return this.token.render(null);
-
-        final RenderBuffer renderBuffer = RENDER_SCRATCH.get().acquire(this.placeholderKeys.length);
-        final Component[] buffer = renderBuffer.components;
-        try {
-            for (int index = 0; index < this.placeholderKeys.length; index++) {
-                final String key = this.placeholderKeys[index];
-                final Component value =
-                        key.equals(k0) ? v0 :
-                                key.equals(k1) ? v1 :
-                                        key.equals(k2) ? v2 :
-                                                key.equals(k3) ? v3 :
-                                                        key.equals(k4) ? v4 :
-                                                                key.equals(k5) ? v5 :
-                                                                        key.equals(k6) ? v6 :
-                                                                                null;
-                this.fillSlot(buffer, index, value);
-            }
-            return this.renderResolved(buffer);
-        } finally {
-            renderBuffer.release();
-        }
-    }
-
-    @Override
-    public @NotNull Component render(@NotNull String k0, @NotNull Component v0,
-                                     @NotNull String k1, @NotNull Component v1,
-                                     @NotNull String k2, @NotNull Component v2,
-                                     @NotNull String k3, @NotNull Component v3,
-                                     @NotNull String k4, @NotNull Component v4,
-                                     @NotNull String k5, @NotNull Component v5,
-                                     @NotNull String k6, @NotNull Component v6,
-                                     @NotNull String k7, @NotNull Component v7) {
-        if (this.placeholderKeys.length == 0) return this.token.render(null);
-
-        final RenderBuffer renderBuffer = RENDER_SCRATCH.get().acquire(this.placeholderKeys.length);
-        final Component[] buffer = renderBuffer.components;
-        try {
-            for (int index = 0; index < this.placeholderKeys.length; index++) {
-                final String key = this.placeholderKeys[index];
-                final Component value =
-                        key.equals(k0) ? v0 :
-                                key.equals(k1) ? v1 :
-                                        key.equals(k2) ? v2 :
-                                                key.equals(k3) ? v3 :
-                                                        key.equals(k4) ? v4 :
-                                                                key.equals(k5) ? v5 :
-                                                                        key.equals(k6) ? v6 :
-                                                                                key.equals(k7) ? v7 :
-                                                                                        null;
-                this.fillSlot(buffer, index, value);
-            }
-            return this.renderResolved(buffer);
-        } finally {
-            renderBuffer.release();
-        }
-    }
-
-    @Override
-    public @NotNull Component render(@NotNull String k0, @NotNull Component v0,
-                                     @NotNull String k1, @NotNull Component v1,
-                                     @NotNull String k2, @NotNull Component v2,
-                                     @NotNull String k3, @NotNull Component v3,
-                                     @NotNull String k4, @NotNull Component v4,
-                                     @NotNull String k5, @NotNull Component v5,
-                                     @NotNull String k6, @NotNull Component v6,
-                                     @NotNull String k7, @NotNull Component v7,
-                                     @NotNull String k8, @NotNull Component v8) {
-        if (this.placeholderKeys.length == 0) return this.token.render(null);
-
-        final RenderBuffer renderBuffer = RENDER_SCRATCH.get().acquire(this.placeholderKeys.length);
-        final Component[] buffer = renderBuffer.components;
-        try {
-            for (int index = 0; index < this.placeholderKeys.length; index++) {
-                final String key = this.placeholderKeys[index];
-                final Component value =
-                        key.equals(k0) ? v0 :
-                                key.equals(k1) ? v1 :
-                                        key.equals(k2) ? v2 :
-                                                key.equals(k3) ? v3 :
-                                                        key.equals(k4) ? v4 :
-                                                                key.equals(k5) ? v5 :
-                                                                        key.equals(k6) ? v6 :
-                                                                                key.equals(k7) ? v7 :
-                                                                                        key.equals(k8) ? v8 :
-                                                                                                null;
-                this.fillSlot(buffer, index, value);
-            }
-            return this.renderResolved(buffer);
-        } finally {
-            renderBuffer.release();
-        }
-    }
-
-    @Override
-    public @NotNull Component render(@NotNull String k0, @NotNull Component v0,
-                                     @NotNull String k1, @NotNull Component v1,
-                                     @NotNull String k2, @NotNull Component v2,
-                                     @NotNull String k3, @NotNull Component v3,
-                                     @NotNull String k4, @NotNull Component v4,
-                                     @NotNull String k5, @NotNull Component v5,
-                                     @NotNull String k6, @NotNull Component v6,
-                                     @NotNull String k7, @NotNull Component v7,
-                                     @NotNull String k8, @NotNull Component v8,
-                                     @NotNull String k9, @NotNull Component v9) {
-        if (this.placeholderKeys.length == 0) return this.token.render(null);
-
-        final RenderBuffer renderBuffer = RENDER_SCRATCH.get().acquire(this.placeholderKeys.length);
-        final Component[] buffer = renderBuffer.components;
-        try {
-            for (int index = 0; index < this.placeholderKeys.length; index++) {
-                final String key = this.placeholderKeys[index];
-                final Component value =
-                        key.equals(k0) ? v0 :
-                                key.equals(k1) ? v1 :
-                                        key.equals(k2) ? v2 :
-                                                key.equals(k3) ? v3 :
-                                                        key.equals(k4) ? v4 :
-                                                                key.equals(k5) ? v5 :
-                                                                        key.equals(k6) ? v6 :
-                                                                                key.equals(k7) ? v7 :
-                                                                                        key.equals(k8) ? v8 :
-                                                                                                key.equals(k9) ? v9 :
-                                                                                                        null;
-                this.fillSlot(buffer, index, value);
-            }
-            return this.renderResolved(buffer);
-        } finally {
-            renderBuffer.release();
-        }
-    }
-
-    private void fillSlot(Component[] buffer, int index, Component value) {
-        buffer[index] = value == null ? this.fallbacks()[index] : value;
     }
 
     private Component[] fallbacks() {
@@ -375,22 +83,45 @@ final class TextImpl implements Text {
         return fallbacks;
     }
 
-    private Component renderResolved(Component[] buffer) {
-        if (!this.cacheable) return this.token.render(buffer);
+    @Override
+    public @NotNull BoundText<C> bind(@Nullable C context) {
+        return new BoundText<>(this, context);
+    }
+
+    int bindingSize() {
+        return this.resolvers == null ? 0 : this.resolvers.length;
+    }
+
+    void resolveBound(int index, C context, ValueResolver.Value output) {
+        final ValueResolver<C> resolver = this.resolvers[index];
+        if (resolver != null) resolver.resolve(context, output);
+    }
+
+    Component boundFallback(int index) {
+        return this.fallbacks()[index];
+    }
+
+    Component renderBound(Object[] values, long[] numbers) {
+        if (values == null && this.placeholderKeys.length != 0) values = this.fallbacks();
+        return this.token.render(values, numbers);
+    }
+
+    private Component renderResolved(Object[] buffer, long[] numbers) {
+        if (!this.cacheable) return this.token.render(buffer, numbers);
 
         final RenderCache cache = this.renderCache.get();
         if (cache.hasCachedResult && matches(buffer, cache.cachedValues)) {
             return cache.cachedResult;
         }
 
-        final Component rendered = this.token.render(buffer);
+        final Component rendered = this.token.render(buffer, numbers);
         System.arraycopy(buffer, 0, cache.cachedValues, 0, cache.cachedValues.length);
         cache.cachedResult = rendered;
         cache.hasCachedResult = true;
         return rendered;
     }
 
-    private static boolean matches(Component[] buffer, Component[] cachedValues) {
+    private static boolean matches(Object[] buffer, Object[] cachedValues) {
         for (int index = 0; index < cachedValues.length; index++) {
             if (!Objects.equals(buffer[index], cachedValues[index])) return false;
         }
@@ -399,12 +130,12 @@ final class TextImpl implements Text {
 
     private static final class RenderCache {
 
-        private final Component[] cachedValues;
+        private final Object[] cachedValues;
         private Component cachedResult;
         private boolean hasCachedResult;
 
         private RenderCache(int placeholderCount) {
-            this.cachedValues = new Component[placeholderCount];
+            this.cachedValues = new Object[placeholderCount];
         }
     }
 
@@ -435,23 +166,48 @@ final class TextImpl implements Text {
         }
     }
 
-    private static final class RenderBuffer {
+    private static final class RenderBuffer implements ValueResolver.Value {
 
         private static final int MAX_RETAINED_CAPACITY = 256;
 
         private final RenderScratch owner;
-        private Component[] components = EMPTY_COMPONENTS;
+        private Object[] values = EMPTY_VALUES;
+        private long[] numbers;
+        private Object resolved;
+        private long resolvedNumber;
         private int size;
+        private ComponentValue componentValue;
 
         private RenderBuffer(RenderScratch owner) {
             this.owner = owner;
         }
 
+        @Override
+        public void text(String text) {
+            this.resolved = text;
+        }
+
+        @Override
+        public void number(long number) {
+            this.resolved = Token.NUMBER_VALUE;
+            this.resolvedNumber = number;
+        }
+
+        @Override
+        public void component(Component component) {
+            this.resolved = component;
+        }
+
+        private ComponentValue componentValue() {
+            if (this.componentValue == null) this.componentValue = new ComponentValue(this);
+            return this.componentValue;
+        }
+
         private void prepare(int size) {
-            if (this.components.length < size) {
+            if (this.values.length < size) {
                 int capacity = 8;
                 while (capacity < size) capacity <<= 1;
-                this.components = new Component[capacity];
+                this.values = new Object[capacity];
             }
             this.size = size;
         }
@@ -460,13 +216,46 @@ final class TextImpl implements Text {
             this.owner.release(this);
         }
 
+        private void storeNumber(int index) {
+            if (this.numbers == null || this.numbers.length < this.values.length) {
+                this.numbers = new long[this.values.length];
+            }
+            this.numbers[index] = this.resolvedNumber;
+        }
+
         private void clear() {
-            if (this.components.length > MAX_RETAINED_CAPACITY) {
-                this.components = EMPTY_COMPONENTS;
+            this.resolved = null;
+            if (this.values.length > MAX_RETAINED_CAPACITY) {
+                this.values = EMPTY_VALUES;
+                this.numbers = null;
             } else {
-                Arrays.fill(this.components, 0, this.size, null);
+                Arrays.fill(this.values, 0, this.size, null);
             }
             this.size = 0;
+        }
+    }
+
+    private static final class ComponentValue implements ValueResolver.Value {
+
+        private final RenderBuffer buffer;
+
+        private ComponentValue(RenderBuffer buffer) {
+            this.buffer = buffer;
+        }
+
+        @Override
+        public void text(String text) {
+            this.buffer.resolved = text == null ? null : Component.text(text);
+        }
+
+        @Override
+        public void number(long number) {
+            this.buffer.resolved = Component.text(number);
+        }
+
+        @Override
+        public void component(Component component) {
+            this.buffer.resolved = component;
         }
     }
 

@@ -1,34 +1,31 @@
 # GikyMessage
 
-A **compile-once, render-many** text formatting library for [Adventure](https://github.com/KyoriPowered/adventure)-based Minecraft servers.
-
-> **Why GikyMessage?**
-> This library was built for a single, specific purpose: **reducing memory pressure and allocation overhead** under high-concurrency, high-frequency text rendering.
-> It is **not** a replacement for MiniMessage, the legacy formatting API, or any other general-purpose format.
-> If you need placeholder replacement called thousands of times per second on the same template string, this is for you.
-
----
-
-## How it works
+Compile a short Adventure template and bind its placeholder handlers once. Render it
+with different contexts without selecting handlers by key again.
 
 ```java
-// Compile once — the format string is parsed into a token tree
-Text greeting = Text.of("&aHello, {player}! Your score: &e{score}");
+record Account(String name, long balance) {}
 
-// Render many times — no re-parsing, minimal allocation
-Component result = greeting.render("player", playerName, "score", scoreComponent);
+Text<Account> message = Text.of("&a{name}: &e{balance}", key -> switch (key) {
+    case "name" -> (context, value) -> value.text(context.name());
+    case "balance" -> (context, value) -> value.number(context.balance());
+    default -> null; // Literal {key} fallback.
+});
+
+Component alice = message.render(new Account("Alice", 10));
+Component bob = message.render(new Account("Bob", 20));
 ```
 
-`Text.of(...)` builds an immutable token tree from the raw format string.
-Every subsequent `render(...)` call walks that tree and substitutes placeholders without touching the original string.
+`ResolverFactory<C>` is called once per unique compiled key, after parsing succeeds.
+It returns a `ValueResolver<C>` that reads the current context. Repeated keys share one
+handler call per render. No values are requested while binding. Reuse an existing
+context object when available; the API does not require an allocation per render.
 
-For hot paths where the same placeholder value repeats frequently, use `Text.cacheableOf(...)` to reuse resolved components:
-
-```java
-Text msg = Text.cacheableOf("&7Prefix &r{player}&7: {message}");
-```
-
----
+This API is source/binary incompatible with the previous key-based render entry point.
+See [MIGRATION.md](MIGRATION.md) for conversion examples. Compile with the factory,
+then pass data to `render(context)`.
+The template syntax and rendered component structure are preserved. Performance
+depends on value types, template structure and cache reuse.
 
 ## Format reference
 
@@ -49,8 +46,6 @@ Text msg = Text.cacheableOf("&7Prefix &r{player}&7: {message}");
 &r&aGreen after reset
 ```
 
-**Code confirmation:** `Compiler.java` handles `&` followed by `#` via `parseHexPacked()` for hex and `ColorUtils.fromLegacyCode()` for named colors. `&r` explicitly zeroes `curColor`, `curDeco`, and `curShadow`.
-
 ---
 
 ### Decoration codes — `&`
@@ -69,7 +64,7 @@ Decorations stack — `&l&o` gives bold italic. `&r` clears everything.
 
 ### Shadow color — `$`
 
-Applies a drop shadow color (added in Minecraft 1.21.4 / Adventure 4.18+).
+Applies a drop shadow color when the receiving platform supports it.
 
 ```
 $#RRGGBB   — full hex shadow color
@@ -81,8 +76,6 @@ $#RGB      — short hex shadow color
 $#000000&#ffffff White text with black shadow
 ```
 
-**Code confirmation:** `Compiler.java` handles `$` + `#` via `parseHexPacked()`, storing the result as `ShadowColor` in `curShadow`. `ColorUtils.shadowColorOf()` provides a cached `ShadowColor` instance.
-
 ---
 
 ### Placeholders — `{key}`
@@ -93,15 +86,13 @@ $#000000&#ffffff White text with black shadow
 {prefix}
 ```
 
-Placeholders are resolved at render time via a `Resolver`. The placeholder's color and decorations are inherited by any static text that immediately follows it.
+Bound handlers supply placeholder values at render time. Following static text keeps the template style; replacement formatting does not leak into it.
 
 **Example:**
 ```
 &7Welcome, {player}&7!
 ```
-Here `&7!` is rendered as a child of the `{player}` component, inheriting its color.
-
-**Code confirmation:** `Token.PlainDyn` implements the *placeholder-as-parent* model described in its Javadoc. `TextImpl.fillSlot()` handles null-resolution fallback.
+Here `&7!` keeps the template's gray color even when the replacement has its own style.
 
 ---
 
@@ -115,7 +106,13 @@ Applies click events, hover text, gradients, or object components to a span of t
 [Text](action:"value with spaces", action2:value2)
 ```
 
-Values containing spaces must be quoted with `"` or `'`. Placeholders (`{key}`) are supported inside values.
+Spaces are allowed in unquoted values. Quote values containing commas, or when leading
+or trailing spaces must be preserved. Quoted values use `"` or `'`; escape the matching
+quote or a backslash with `\`.
+
+Placeholders are supported in `run`, `suggest`, `url`, `copy`, `show`, `head`, `style`
+and `color`. `insert`, `page`, `sprite`, and the gradient color list are static. A
+gradient's text content may still contain placeholders.
 
 #### Available actions
 
@@ -127,12 +124,12 @@ Values containing spaces must be quoted with `"` or `'`. Placeholders (`{key}`) 
 | `copy` | `ClickEvent.copyToClipboard(...)` | Copy text to clipboard |
 | `show` | `HoverEvent.showText(...)` | Show hover tooltip (supports full format syntax) |
 | `insert` | `Style.insertion(...)` | Shift+click inserts text into chat |
-| `page` | `ClickEvent.changePage(n)` | Turn to page `n` in a book/dialog |
+| `page` | `ClickEvent.changePage(n)` | Turn to page `n` in a book |
 | `style` | static or dynamic formatting | Color and decorations across the text |
 | `color` | static or dynamic color | Uniform color across the text |
-| `gradient` | per-character color interpolation | Color gradient across the text |
-| `head` | `ObjectContents.playerHead(...)` | Insert a player head object (1.21.5+) |
-| `sprite` | `ObjectContents.sprite(Key)` | Insert a texture sprite (1.21.5+) |
+| `gradient` | per-code-point color interpolation | Color gradient across the text |
+| `head` | `ObjectContents.playerHead(...)` | Insert a player head object |
+| `sprite` | `ObjectContents.sprite(Key)` | Insert a texture sprite |
 
 **Examples:**
 
@@ -159,15 +156,18 @@ Colors are separated by `-`. Accepts full (`#RRGGBB`) or short (`#RGB`) hex, as 
 [Legacy](gradient:c-e-a)
 ```
 
-The gradient is applied per character using linear interpolation across all provided color stops.
-
-**Code confirmation:** `Compiler.buildBracketToken()` parses all actions from the raw `char[]` without intermediate `String` allocation. `parseGradientColors()` handles the `-`-separated stop list. `Token.Gradient` and `Token.GradientDyn` implement per-character `ColorUtils.interpolate()`.
+The gradient is applied per Unicode code point using linear interpolation across all
+provided color stops, including text-node children of replacements.
 
 ---
 
 ### Combining actions
 
-Multiple actions can be combined on one segment:
+Multiple actions can be combined on one segment. One click action is selected in priority
+order `run` → `suggest` → `url` → `copy` → `page`; one content action in priority order
+`head` → `sprite` → `gradient`. The last occurrence of the selected action wins. The
+last `show` and `insert` win independently. The first `style` and `color` win, and apply
+after content processing in that order:
 
 ```
 [Click](run:"/spawn", show:"&aTeleport to spawn")
@@ -191,69 +191,136 @@ Multiple actions can be combined on one segment:
 
 ## Java API
 
-### Compiling
-
 ```java
-// Standard — no render caching
-Text msg = Text.of("&aHello, {player}!");
+// No bound handlers: placeholders remain literal.
+Text<Void> literal = Text.of("Hello, {name}");
+Component fallback = literal.render();
 
-// Cacheable — reuses last component for each placeholder when value unchanged
-Text msg = Text.cacheableOf("&7{prefix} &r{player}&7: {message}");
-```
-
-### Rendering
-
-```java
-// No placeholders
-Component c = msg.render();
-
-// With a resolver
-Component c = msg.render(resolver);
-
-// Convenience overloads (1–10 key/value pairs)
-Component c = msg.render("player", playerComponent);
-Component c = msg.render("player", playerComponent, "score", scoreComponent);
-
-// Map-based
-Component c = msg.render(Map.of("player", playerComponent));
-```
-
-### Custom resolver
-
-```java
-Resolver r = key -> switch (key) {
-    case "player" -> Component.text(player.getName()).color(NamedTextColor.GOLD);
-    case "health" -> Component.text(String.valueOf(player.getHealth())).color(NamedTextColor.RED);
-    default -> null;   // null = use sentinel fallback
+// Bind once; the registry is consulted only while compiling.
+ResolverFactory<Account> factory = key -> switch (key) {
+    case "name" -> (context, value) -> value.text(context.name());
+    case "balance" -> (context, value) -> value.number(context.balance());
+    default -> null;
 };
+Text<Account> text = Text.of("{name}: {balance}", factory);
+Text<Account> cached = Text.cacheableOf("{name}: {balance}", factory);
 
-Component c = msg.render(r);
+Component current = text.render(account);
+Component unresolved = text.render(); // Skips handlers, uses literal fallbacks.
 ```
 
----
+`render(context)` passes the supplied context unchanged, including null. `render()`
+always skips handlers. The no-factory `of(raw)` / `cacheableOf(raw)` forms compile
+literal fallbacks and return `Text<Void>`; they do not support late key-based binding.
 
-## Design notes
+A null factory is rejected. A null handler, no reported value, `text(null)`, or
+`component(null)` means literal `{key}`. An empty string/component means empty text.
+The last report wins. The `Value` receiver is valid only during its handler call;
+do not retain it. Text and numbers are used directly in text-only rendering paths;
+components are created when needed. Styled components retain their structure.
+Supplied values are not parsed as templates.
 
-**Token tree, not string manipulation.** The format string is parsed once into an immutable tree of `Token` objects. Rendering walks the tree — it never touches the original string again.
+Binding follows compiler registration order, including keys from content later
+replaced by an action. The factory is not retained by the text. Its returned handlers
+are retained and may capture services. Replacing a registry entry does not replace a
+bound handler; compile a new text to select new handlers. Changes in context data are
+read by the existing handlers without rebinding.
 
-**Per-decoration bit packing.** `StyleImpl` stores all five `TextDecoration` states in a single `short` (2 bits each), reducing object count versus a standard `EnumMap`.
+A factory exception aborts preparation before any text is returned. A handler exception
+stops the current render before later handlers, clears temporary references, and
+leaves the last successful ordinary result cache available. No result is delivered
+through a callback: rendering returns a Component to its caller.
 
-**Delta styling.** During compilation, style changes are stored as *deltas* relative to the inherited style. Unchanged properties produce no object allocation at render time.
+### Last-result cache
 
-**Color caching.** `ColorUtils.textColorOf(int)` and `ColorUtils.shadowColorOf(int)` cache instances by their integer value, so the same RGB never allocates a second `TextColor` or `ShadowColor`.
+`cacheableOf` stores one complete tuple/result per text and physical thread. Handlers
+still run on every contextual render, before component equality is checked. Equal
+component tuples reuse the result even across different report types or contexts;
+A → B → A can evict A. `render()` participates using literal fallbacks. The context
+object itself is not stored; cached components can retain data read from it.
+This cache materializes values as components before comparison; cache misses still
+create placeholder components.
 
-**Thread safety.** `TextImpl` uses `ThreadLocal<Component[]>` for its per-render placeholder buffer, making concurrent rendering from multiple threads safe without synchronization.
+### Cache for one context
 
-**Static caching.** Tokens that produce the same result regardless of placeholder values cache their `Component` on the first call.
+Create a binding when the same context is rendered repeatedly:
 
----
+```java
+BoundText<Account> alice = message.bind(new Account("Alice", 10));
+BoundText<Account> bob = message.bind(new Account("Bob", 20));
+Component first = alice.render();
+bob.render();
+Component again = alice.render(); // same instance while Alice's values remain equal
+```
 
-## Limitations
+`bind(context)` calls no handlers. Each `BoundText.render()` reads current data through
+every shared handler, in the usual key order. Each binding retains its own values and
+result; other contexts do not evict it. Native text/numbers are compared before creating
+components. Unchanged materialized insertions are reused when another key changes;
+the final template is rebuilt when the complete value tuple changes. Type transitions
+use component equality. Null/no report still means literal fallback.
 
-- Placeholders are identified at compile time from the format string. Resolving a key that was not present in the original format string has no effect.
-- Maximum placeholder count per format string: 16 (configurable in `Compiler.PH_CAP`).
-- `head` with a dynamic player name requires the value to be wrapped in `{…}`: `[icon](head:{player})`.
-- `sprite`, `head`, and `page` / `dialog` require a compatible Adventure + server version.
+The binding holds a strong reference to its context. Keep it between renders and release
+it when finished; creating it for every message defeats the cache. Its arrays and retained
+values trade memory for less repeated work. All-changing values still pay comparison costs.
+The binding uses its own cache even if created from `cacheableOf`, bypassing the ordinary
+thread cache. It introduces no timers, periods or callback delivery.
+
+Use each binding sequentially. Transfer between threads requires happens-before and a
+valid execution context for its handlers. Recursive render of the same binding throws
+`IllegalStateException`; other bindings and ordinary renders may nest. A handler or
+renderer exception clears the binding's value/result references; the next render obtains
+a complete fresh tuple. External handler effects are not rolled back.
+
+### Ownership and execution
+
+Compiled structure and bound handlers are shared. Temporary buffers are isolated by
+physical thread and nesting depth and cleared after each render. Handlers and context
+data must support the caller's execution context; a shared Text does not make external
+APIs thread-safe. Texts have no periods, clocks, registrations or background work.
+Number buffers are allocated lazily and reused with the other temporary buffers.
+
+### Compiled work
+
+Static components are constructed during compilation. Dynamic tokens preserve the
+existing rendering rules. `StyleUtils` packs decoration state during compilation;
+color caches have bounded slot counts and replace entries on collisions. Dynamic
+gradients still depend on current content and length.
+
+There is no fixed 16-key limit; the compiler grows its key table. Object components
+such as head/sprite require a receiving platform that supports these objects. Java 21
+and Adventure API are required. The build targets Adventure 5.2.0. The tested 4.26.1
+path preserves that runtime's less strict head-name validation; exact results and
+boundaries are described in [VALIDATION.md](VALIDATION.md).
+
+### Dependencies and packaging
+
+Adventure is a provided dependency: GM does not bundle it or choose the platform's
+Adventure version. Consumers must declare/provide `net.kyori:adventure-api` themselves.
+For a plugin whose platform supplies it:
+
+```kotlin
+dependencies {
+    compileOnly("net.kyori:adventure-api:5.2.0")
+    // Include GikyMessage from its JAR or your chosen publication repository.
+}
+```
+
+Package GM with your application/plugin if the platform does not supply it. Do not
+package a second copy of Adventure into a platform that already provides it. A
+standalone application needs Adventure API on its runtime classpath. Gson and
+MiniMessage are not required by GM at runtime; MiniMessage is used only in tests.
+
+Build and check on Java 21:
+
+```bash
+./gradlew test javadoc jar sourcesJar javadocJar
+```
+
+The build produces `1.0.0-beta` prerelease artifacts in `build/libs`: the library JAR,
+`GikyMessage-1.0.0-beta-sources.jar` and `GikyMessage-1.0.0-beta-javadoc.jar`.
+Public release/publication configuration is prepared separately;
+`publishToMavenLocal` is a local installation.
 
 ### Uniform color
 
@@ -300,6 +367,6 @@ Invalid or unresolved values leave the content unchanged; empty styles do nothin
 
 `style` is applied after content actions and before `color`, regardless of their
 order in the action list. Thus an explicit `color` overrides the color in `style`.
-The first occurrence of each action wins. An outer formatting action overrides
+The first `style` and `color` entries win. An outer formatting action overrides
 specified properties in nested blocks. Static values are parsed during compilation;
 `cacheableOf` reuses its result while all placeholder values remain equal.

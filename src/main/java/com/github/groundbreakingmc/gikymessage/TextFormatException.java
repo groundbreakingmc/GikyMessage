@@ -5,7 +5,7 @@ package com.github.groundbreakingmc.gikymessage;
  * Other malformed syntax may be tolerated; this is not a general validation result.
  *
  * @see Text#of(String)
- * @since 1.0.0
+ * @since 1.0
  */
 public final class TextFormatException extends IllegalArgumentException {
 
@@ -14,7 +14,7 @@ public final class TextFormatException extends IllegalArgumentException {
      *
      * @param message the detail message, or {@code null}
      * @param cause   the underlying failure, or {@code null}
-     * @since 1.0.0
+     * @since 1.0
      */
     public TextFormatException(String message, Throwable cause) {
         super(message, cause);

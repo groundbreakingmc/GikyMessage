@@ -19,36 +19,37 @@ class TextDynamicTest extends TextTestBase {
     @Test
     void dynamicActionPreservesAdjacentKeysAndUnicode() {
         final String prefix = "текст😀".repeat(64);
-        final Component rendered = Text.of("[copy](copy:'" + prefix + "{a}{b}尾{a}')")
-                .render("a", Component.text("A"), "b", Component.text("B"));
+        final Component rendered = bound("[copy](copy:'" + prefix + "{a}{b}尾{a}')")
+                .render((slotKey, slotValue) -> slotValue.component(
+                        slotKey.equals("a") ? Component.text("A") : slotKey.equals("b") ? Component.text("B") : null));
         org.junit.jupiter.api.Assertions.assertEquals(
                 ClickEvent.copyToClipboard(prefix + "AB尾A"), rendered.clickEvent());
     }
 
     @Test
     void unresolvedRenderSurvivesReplacementRenders() {
-        for (final Text text : new Text[]{Text.of("{a}:{b}"), Text.cacheableOf("{a}:{b}")}) {
+        for (final Text<TestValues> text : java.util.List.of(bound("{a}:{b}"), cached("{a}:{b}"))) {
             final Component unresolved = text.render();
-            text.render("a", Component.text("changed"));
+            text.render((slotKey, slotValue) -> slotValue.component(slotKey.equals("a") ? Component.text("changed") : null));
             org.junit.jupiter.api.Assertions.assertEquals(unresolved, text.render());
             org.junit.jupiter.api.Assertions.assertEquals(
                     MM.serialize(Component.text("A:{b}")),
-                    MM.serialize(text.render("a", Component.text("A"))));
+                    MM.serialize(text.render((slotKey, slotValue) -> slotValue.component(slotKey.equals("a") ? Component.text("A") : null))));
         }
     }
 
     @Test
     void singlePlaceholderPreservesUnicodeAndStyledReplacements() {
-        final Text text = Text.of("&e前{value}後");
+        final Text<TestValues> text = bound("&e前{value}後");
         org.junit.jupiter.api.Assertions.assertEquals(
                 MM.serialize(Component.text("前😀後", NamedTextColor.YELLOW)),
-                MM.serialize(text.render("value", Component.text("😀"))));
+                MM.serialize(text.render((slotKey, slotValue) -> slotValue.component(slotKey.equals("value") ? Component.text("😀") : null))));
         final Component replacement = Component.text("red", NamedTextColor.RED)
                 .append(Component.text("child"));
         org.junit.jupiter.api.Assertions.assertEquals(
                 MM.serialize(Component.text("前", NamedTextColor.YELLOW)
                         .append(replacement).append(Component.text("後"))),
-                MM.serialize(text.render("value", replacement)));
+                MM.serialize(text.render((slotKey, slotValue) -> slotValue.component(slotKey.equals("value") ? replacement : null))));
     }
 
     @Test
@@ -61,8 +62,8 @@ class TextDynamicTest extends TextTestBase {
     @Test
     void dynamicActionKeepsUnmatchedBraceTail() {
         final String tail = "{".repeat(4096);
-        final Component rendered = Text.of("[copy](copy:'{value}" + tail + "')")
-                .render("value", Component.text("resolved"));
+        final Component rendered = bound("[copy](copy:'{value}" + tail + "')")
+                .render((slotKey, slotValue) -> slotValue.component(slotKey.equals("value") ? Component.text("resolved") : null));
         org.junit.jupiter.api.Assertions.assertEquals(
                 ClickEvent.copyToClipboard("resolved" + tail), rendered.clickEvent());
     }
@@ -169,21 +170,21 @@ class TextDynamicTest extends TextTestBase {
 
             org.junit.jupiter.api.Assertions.assertEquals(
                     MM.serialize(Component.text("Hello, ").append(player)),
-                    MM.serialize(Text.of("Hello, {player}").render("player", player))
+                    MM.serialize(bound("Hello, {player}").render((slotKey, slotValue) -> slotValue.component(slotKey.equals("player") ? player : null)))
             );
         }
 
         @Test
         @DisplayName("Resolver may render another text")
         void resolverMayRenderNestedText() {
-            final Text nested = Text.of("Inner {value}");
-            final Text outer = Text.of("Outer {nested}");
+            final Text<TestValues> nested = bound("Inner {value}");
+            final Text<TestValues> outer = bound("Outer {nested}");
 
-            final Component rendered = outer.render(key ->
+            final Component rendered = outer.render((key, value) -> value.component(
                     key.equals("nested")
-                            ? nested.render("value", Component.text("ok"))
+                            ? nested.render((slotKey, slotValue) -> slotValue.component(slotKey.equals("value") ? Component.text("ok") : null))
                             : null
-            );
+            ));
 
             org.junit.jupiter.api.Assertions.assertEquals(
                     MM.serialize(Component.text("Outer Inner ok")),

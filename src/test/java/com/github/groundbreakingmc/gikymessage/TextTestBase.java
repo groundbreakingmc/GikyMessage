@@ -12,10 +12,25 @@ abstract class TextTestBase {
 
     static final MiniMessage MM = MiniMessage.miniMessage();
 
+    // Existing rendering fixtures use a functional context; production has no key-based adapter.
+    @FunctionalInterface
+    interface TestValues {
+        void resolve(String key, ValueResolver.Value value);
+    }
+
+    static Text<TestValues> bound(String raw) {
+        return Text.of(raw, key -> (context, value) -> context.resolve(key, value));
+    }
+
+    static Text<TestValues> cached(String raw) {
+        return Text.cacheableOf(raw, key -> (context, value) -> context.resolve(key, value));
+    }
+
+
     static void assertRenders(Component expected, String input) {
         assertEquals(
                 MM.serialize(expected),
-                MM.serialize(Text.of(input).render()),
+                MM.serialize(bound(input).render()),
                 "format: " + input
         );
     }
@@ -24,7 +39,7 @@ abstract class TextTestBase {
                               String k0, String v0) {
         assertEquals(
                 MM.serialize(expected),
-                MM.serialize(Text.of(input).render(k0, Component.text(v0))),
+                MM.serialize(bound(input).render((slotKey, slotValue) -> slotValue.component(slotKey.equals(k0) ? Component.text(v0) : null))),
                 "format: " + input
         );
     }
@@ -34,7 +49,8 @@ abstract class TextTestBase {
                               String k1, String v1) {
         assertEquals(
                 MM.serialize(expected),
-                MM.serialize(Text.of(input).render(k0, Component.text(v0), k1, Component.text(v1))),
+                MM.serialize(bound(input).render((slotKey, slotValue) -> slotValue.component(
+                        slotKey.equals(k0) ? Component.text(v0) : slotKey.equals(k1) ? Component.text(v1) : null))),
                 "format: " + input
         );
     }
@@ -45,7 +61,8 @@ abstract class TextTestBase {
                               String k2, String v2) {
         assertEquals(
                 MM.serialize(expected),
-                MM.serialize(Text.of(input).render(k0, Component.text(v0), k1, Component.text(v1), k2, Component.text(v2))),
+                MM.serialize(bound(input).render((slotKey, slotValue) -> slotValue.component(
+                        slotKey.equals(k0) ? Component.text(v0) : slotKey.equals(k1) ? Component.text(v1) : slotKey.equals(k2) ? Component.text(v2) : null))),
                 "format: " + input
         );
     }
@@ -57,7 +74,8 @@ abstract class TextTestBase {
                               String k3, String v3) {
         assertEquals(
                 MM.serialize(expected),
-                MM.serialize(Text.of(input).render(k0, Component.text(v0), k1, Component.text(v1), k2, Component.text(v2), k3, Component.text(v3))),
+                MM.serialize(bound(input).render((slotKey, slotValue) -> slotValue.component(
+                        slotKey.equals(k0) ? Component.text(v0) : slotKey.equals(k1) ? Component.text(v1) : slotKey.equals(k2) ? Component.text(v2) : slotKey.equals(k3) ? Component.text(v3) : null))),
                 "format: " + input
         );
     }

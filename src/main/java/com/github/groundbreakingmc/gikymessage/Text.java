@@ -3,351 +3,137 @@ package com.github.groundbreakingmc.gikymessage;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.Style;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
-import java.util.Map;
+import java.util.Objects;
 
 /**
- * A compiled Adventure template with formatting, events, and {@code {key}} placeholders.
- * Keep the instance for repeated rendering.
+ * A compiled Adventure template with handlers bound to its unique placeholder keys.
+ * Keep the instance and supply the current context to {@link #render(Object)}.
  *
- * <p>Keys are case-sensitive and omit braces. Missing or {@code null} values use
- * literal {@code {key}} fallbacks; use {@link Component#empty()} for empty text.
- * Replacements are not parsed as templates. Enclosing formatting actions can
- * modify them; following static text keeps the template's style.
- * String-valued actions use text-node content, recursively visiting children.
+ * <p>Keys are case-sensitive and omit braces. Missing or null values use literal
+ * {@code {key}} fallbacks; use an empty value for empty text. Replacements are not
+ * parsed as templates. Enclosing actions can modify their formatting; following
+ * static text keeps the template's style. String-valued actions recursively use
+ * text-node content from replacements.
  *
- * <p>Key/value overloads ignore unused keys and use the first pair for duplicate
- * keys. Rendering runs on the calling thread; callers must arrange safe access
- * to resolver/map data and obey any external API's thread requirements.
+ * <p>Rendering runs on the calling thread. Shared handlers must support their callers'
+ * execution contexts and safely access their data. Direct render calls do not retain
+ * the context; returned components and optional cached values may refer to its data.
+ * A {@link #bind(Object)} binding retains its context for repeated renders.
  *
- * @since 1.0.0
+ * @param <C> the context passed to the bound handlers
+ * @since 1.0
  */
-public sealed interface Text permits TextImpl {
+public sealed interface Text<C> permits TextImpl {
 
     /**
-     * The shared empty text.
+     * The shared empty text, with no handlers.
      *
-     * @since 1.0.0
+     * @since 1.0
      */
-    Text EMPTY = new TextImpl(new Token.Plain("", Style.empty()), new String[0], false);
+    Text<Void> EMPTY = new TextImpl<>(new Token.Plain("", Style.empty()), new String[0], false, null);
 
     /**
-     * Compiles a template without the optional result cache; static parts are reused.
-     * Parsing is permissive: unclosed groups are closed at end of input, unclosed
-     * placeholders stay literal, and unknown actions are ignored.
+     * Compiles without handlers; placeholders keep their literal fallbacks.
+     * Unclosed groups are closed at end of input, unclosed placeholders stay literal,
+     * and unknown actions are ignored.
      *
-     * @param raw the format string
-     * @return the compiled text, or {@link #EMPTY} for empty or {@code null} input
-     * @throws TextFormatException      if a selected sprite key is invalid, including in hover text
+     * @param raw the format string, or null for empty text
+     * @return the compiled text
+     * @throws TextFormatException      if a selected sprite key is invalid
      * @throws IllegalArgumentException if Adventure rejects another action value
-     * @since 1.0.0
+     * @since 1.0
      */
-    static Text of(@NotNull String raw) {
-        return Compiler.compile(raw, false);
+    static @NotNull Text<Void> of(@Nullable String raw) {
+        return Compiler.compile(raw, false, null);
     }
 
     /**
-     * Compiles a template with a last-result cache per instance and physical thread.
-     * Each render still obtains all values, applies fallbacks, and compares the full
-     * set using component equality. Equal sets reuse the result; different sets
-     * replace the retained values and result. This also applies to {@link #render()}.
-     * Texts without compiled keys need no result cache.
+     * Compiles the template, then binds each unique key once in compiler registration
+     * order. This includes keys in content replaced by an action. Binding obtains
+     * handlers, not values; later registry changes do not replace stored handlers.
      *
-     * <p>Compiles on every factory call; parsing is the same as {@link #of(String)}.
-     *
-     * @param raw the format string
-     * @return the compiled text, or {@link #EMPTY} for empty or {@code null} input
-     * @throws TextFormatException      if a selected sprite key is invalid, including in hover text
+     * @param raw     the format string, or null for empty text
+     * @param factory the factory used only during this call; null handlers mean literal fallback
+     * @param <C>     the render context type
+     * @return the compiled text with its bound handlers
+     * @throws NullPointerException     if factory is null
+     * @throws TextFormatException      if a selected sprite key is invalid
      * @throws IllegalArgumentException if Adventure rejects another action value
-     * @since 1.0.0
+     * @throws RuntimeException         if binding fails; remaining keys are not bound
+     * @since 1.0
      */
-    static Text cacheableOf(@NotNull String raw) {
-        return Compiler.compile(raw, true);
+    static <C> @NotNull Text<C> of(@Nullable String raw, @NotNull ResolverFactory<C> factory) {
+        return Compiler.compile(raw, false, Objects.requireNonNull(factory, "factory"));
     }
 
     /**
-     * Renders with literal {@code {key}} fallbacks for all placeholders.
-     * Formatting and actions still apply; previous values are not reused.
+     * Compiles without handlers, with the last-result cache described by
+     * {@link #cacheableOf(String, ResolverFactory)}.
+     *
+     * @param raw the format string, or null for empty text
+     * @return the compiled text with literal fallbacks
+     * @throws TextFormatException      if a selected sprite key is invalid
+     * @throws IllegalArgumentException if Adventure rejects another action value
+     * @since 1.0
+     */
+    static @NotNull Text<Void> cacheableOf(@Nullable String raw) {
+        return Compiler.compile(raw, true, null);
+    }
+
+    /**
+     * Compiles and binds as {@link #of(String, ResolverFactory)}, retaining the last
+     * complete value tuple and result per text and physical thread. Every contextual
+     * render still calls its bound handlers and compares component values, including
+     * styles and events. Equal tuples reuse the result; a different context can replace
+     * it. This is not a cache indexed by context. Texts without keys need no result cache.
+     *
+     * @param raw     the format string, or null for empty text
+     * @param factory the factory used only during this call
+     * @param <C>     the render context type
+     * @return the compiled text with bound handlers and an optional result cache
+     * @throws NullPointerException     if factory is null
+     * @throws TextFormatException      if a selected sprite key is invalid
+     * @throws IllegalArgumentException if Adventure rejects another action value
+     * @throws RuntimeException         if binding fails; remaining keys are not bound
+     * @since 1.0
+     */
+    static <C> @NotNull Text<C> cacheableOf(@Nullable String raw, @NotNull ResolverFactory<C> factory) {
+        return Compiler.compile(raw, true, Objects.requireNonNull(factory, "factory"));
+    }
+
+    /**
+     * Renders literal fallbacks for every placeholder without calling handlers.
+     * Formatting, actions and the optional result cache still apply.
      *
      * @return the rendered component
      * @throws IllegalArgumentException if Adventure rejects a rendered action value
-     * @since 1.0.0
+     * @since 1.0
      */
     @NotNull Component render();
 
     /**
-     * Resolves each distinct compiled key once, before checking the result cache.
-     * Calls follow compiler registration order, which can differ from written action
-     * order and includes keys in content replaced by an action. Repeated keys share
-     * a value; no compiled keys means no calls. The resolver is not retained.
+     * Calls each bound handler once in compiler registration order before checking
+     * the result cache. Repeated keys share one value. No key lookup or binding is
+     * performed here. Keys without a handler keep their literal fallback.
      *
-     * @param resolver the current value provider; {@code null} results use literal fallbacks
+     * @param context the current context, passed unchanged to handlers, including null
      * @return the rendered component
-     * @throws NullPointerException     if resolver is {@code null} and the text has compiled keys
      * @throws IllegalArgumentException if Adventure rejects a rendered action value
-     * @throws RuntimeException         if resolution fails; remaining keys are not resolved
-     * @since 1.0.0
+     * @throws RuntimeException         if a handler fails; remaining handlers are not called
+     * @since 1.0
      */
-    @NotNull Component render(@NotNull Resolver resolver);
+    @NotNull Component render(@Nullable C context);
 
     /**
-     * Reads {@link Map#get(Object)} once per compiled key, in resolver order,
-     * even on a cache hit. Missing entries and {@code null} values use literal
-     * fallbacks. The map is not copied or retained; keep it stable during a call
-     * when a consistent set is required.
+     * Creates an independent cache for repeated renders under one context.
+     * Creation does not call handlers. Keep the binding between renders; it retains
+     * the context and uses its own cache even when this text is cacheable.
      *
-     * @param replacements the current values, keyed without braces
-     * @return the rendered component
-     * @throws NullPointerException     if replacements is {@code null} and the text has compiled keys
-     * @throws IllegalArgumentException if Adventure rejects a rendered action value
-     * @throws RuntimeException         if a map lookup fails
-     * @see #render(Resolver)
-     * @since 1.0.0
+     * @param context the context retained and passed unchanged to handlers, including null
+     * @return a new binding for sequential use
+     * @since 1.0
      */
-    @NotNull Component render(@NotNull Map<String, Component> replacements);
-
-    /**
-     * Renders with one key/component pair.
-     *
-     * @param k0 a placeholder key without braces
-     * @param v0 the replacement for {@code k0}
-     * @return the rendered component
-     * @throws IllegalArgumentException if Adventure rejects a rendered action value
-     * @since 1.0.0
-     */
-    @NotNull Component render(@NotNull String k0, @NotNull Component v0);
-
-    /**
-     * Renders with two key/component pairs.
-     *
-     * @param k0 a placeholder key without braces
-     * @param v0 the replacement for {@code k0}
-     * @param k1 a placeholder key without braces
-     * @param v1 the replacement for {@code k1}
-     * @return the rendered component
-     * @throws IllegalArgumentException if Adventure rejects a rendered action value
-     * @since 1.0.0
-     */
-    @NotNull Component render(@NotNull String k0, @NotNull Component v0,
-                              @NotNull String k1, @NotNull Component v1);
-
-    /**
-     * Renders with three key/component pairs.
-     *
-     * @param k0 a placeholder key without braces
-     * @param v0 the replacement for {@code k0}
-     * @param k1 a placeholder key without braces
-     * @param v1 the replacement for {@code k1}
-     * @param k2 a placeholder key without braces
-     * @param v2 the replacement for {@code k2}
-     * @return the rendered component
-     * @throws IllegalArgumentException if Adventure rejects a rendered action value
-     * @since 1.0.0
-     */
-    @NotNull Component render(@NotNull String k0, @NotNull Component v0,
-                              @NotNull String k1, @NotNull Component v1,
-                              @NotNull String k2, @NotNull Component v2);
-
-    /**
-     * Renders with four key/component pairs.
-     *
-     * @param k0 a placeholder key without braces
-     * @param v0 the replacement for {@code k0}
-     * @param k1 a placeholder key without braces
-     * @param v1 the replacement for {@code k1}
-     * @param k2 a placeholder key without braces
-     * @param v2 the replacement for {@code k2}
-     * @param k3 a placeholder key without braces
-     * @param v3 the replacement for {@code k3}
-     * @return the rendered component
-     * @throws IllegalArgumentException if Adventure rejects a rendered action value
-     * @since 1.0.0
-     */
-    @NotNull Component render(@NotNull String k0, @NotNull Component v0,
-                              @NotNull String k1, @NotNull Component v1,
-                              @NotNull String k2, @NotNull Component v2,
-                              @NotNull String k3, @NotNull Component v3);
-
-    /**
-     * Renders with five key/component pairs.
-     *
-     * @param k0 a placeholder key without braces
-     * @param v0 the replacement for {@code k0}
-     * @param k1 a placeholder key without braces
-     * @param v1 the replacement for {@code k1}
-     * @param k2 a placeholder key without braces
-     * @param v2 the replacement for {@code k2}
-     * @param k3 a placeholder key without braces
-     * @param v3 the replacement for {@code k3}
-     * @param k4 a placeholder key without braces
-     * @param v4 the replacement for {@code k4}
-     * @return the rendered component
-     * @throws IllegalArgumentException if Adventure rejects a rendered action value
-     * @since 1.0.0
-     */
-    @NotNull Component render(@NotNull String k0, @NotNull Component v0,
-                              @NotNull String k1, @NotNull Component v1,
-                              @NotNull String k2, @NotNull Component v2,
-                              @NotNull String k3, @NotNull Component v3,
-                              @NotNull String k4, @NotNull Component v4);
-
-    /**
-     * Renders with six key/component pairs.
-     *
-     * @param k0 a placeholder key without braces
-     * @param v0 the replacement for {@code k0}
-     * @param k1 a placeholder key without braces
-     * @param v1 the replacement for {@code k1}
-     * @param k2 a placeholder key without braces
-     * @param v2 the replacement for {@code k2}
-     * @param k3 a placeholder key without braces
-     * @param v3 the replacement for {@code k3}
-     * @param k4 a placeholder key without braces
-     * @param v4 the replacement for {@code k4}
-     * @param k5 a placeholder key without braces
-     * @param v5 the replacement for {@code k5}
-     * @return the rendered component
-     * @throws IllegalArgumentException if Adventure rejects a rendered action value
-     * @since 1.0.0
-     */
-    @NotNull Component render(@NotNull String k0, @NotNull Component v0,
-                              @NotNull String k1, @NotNull Component v1,
-                              @NotNull String k2, @NotNull Component v2,
-                              @NotNull String k3, @NotNull Component v3,
-                              @NotNull String k4, @NotNull Component v4,
-                              @NotNull String k5, @NotNull Component v5);
-
-    /**
-     * Renders with seven key/component pairs.
-     *
-     * @param k0 a placeholder key without braces
-     * @param v0 the replacement for {@code k0}
-     * @param k1 a placeholder key without braces
-     * @param v1 the replacement for {@code k1}
-     * @param k2 a placeholder key without braces
-     * @param v2 the replacement for {@code k2}
-     * @param k3 a placeholder key without braces
-     * @param v3 the replacement for {@code k3}
-     * @param k4 a placeholder key without braces
-     * @param v4 the replacement for {@code k4}
-     * @param k5 a placeholder key without braces
-     * @param v5 the replacement for {@code k5}
-     * @param k6 a placeholder key without braces
-     * @param v6 the replacement for {@code k6}
-     * @return the rendered component
-     * @throws IllegalArgumentException if Adventure rejects a rendered action value
-     * @since 1.0.0
-     */
-    @NotNull Component render(@NotNull String k0, @NotNull Component v0,
-                              @NotNull String k1, @NotNull Component v1,
-                              @NotNull String k2, @NotNull Component v2,
-                              @NotNull String k3, @NotNull Component v3,
-                              @NotNull String k4, @NotNull Component v4,
-                              @NotNull String k5, @NotNull Component v5,
-                              @NotNull String k6, @NotNull Component v6);
-
-    /**
-     * Renders with eight key/component pairs.
-     *
-     * @param k0 a placeholder key without braces
-     * @param v0 the replacement for {@code k0}
-     * @param k1 a placeholder key without braces
-     * @param v1 the replacement for {@code k1}
-     * @param k2 a placeholder key without braces
-     * @param v2 the replacement for {@code k2}
-     * @param k3 a placeholder key without braces
-     * @param v3 the replacement for {@code k3}
-     * @param k4 a placeholder key without braces
-     * @param v4 the replacement for {@code k4}
-     * @param k5 a placeholder key without braces
-     * @param v5 the replacement for {@code k5}
-     * @param k6 a placeholder key without braces
-     * @param v6 the replacement for {@code k6}
-     * @param k7 a placeholder key without braces
-     * @param v7 the replacement for {@code k7}
-     * @return the rendered component
-     * @throws IllegalArgumentException if Adventure rejects a rendered action value
-     * @since 1.0.0
-     */
-    @NotNull Component render(@NotNull String k0, @NotNull Component v0,
-                              @NotNull String k1, @NotNull Component v1,
-                              @NotNull String k2, @NotNull Component v2,
-                              @NotNull String k3, @NotNull Component v3,
-                              @NotNull String k4, @NotNull Component v4,
-                              @NotNull String k5, @NotNull Component v5,
-                              @NotNull String k6, @NotNull Component v6,
-                              @NotNull String k7, @NotNull Component v7);
-
-    /**
-     * Renders with nine key/component pairs.
-     *
-     * @param k0 a placeholder key without braces
-     * @param v0 the replacement for {@code k0}
-     * @param k1 a placeholder key without braces
-     * @param v1 the replacement for {@code k1}
-     * @param k2 a placeholder key without braces
-     * @param v2 the replacement for {@code k2}
-     * @param k3 a placeholder key without braces
-     * @param v3 the replacement for {@code k3}
-     * @param k4 a placeholder key without braces
-     * @param v4 the replacement for {@code k4}
-     * @param k5 a placeholder key without braces
-     * @param v5 the replacement for {@code k5}
-     * @param k6 a placeholder key without braces
-     * @param v6 the replacement for {@code k6}
-     * @param k7 a placeholder key without braces
-     * @param v7 the replacement for {@code k7}
-     * @param k8 a placeholder key without braces
-     * @param v8 the replacement for {@code k8}
-     * @return the rendered component
-     * @throws IllegalArgumentException if Adventure rejects a rendered action value
-     * @since 1.0.0
-     */
-    @NotNull Component render(@NotNull String k0, @NotNull Component v0,
-                              @NotNull String k1, @NotNull Component v1,
-                              @NotNull String k2, @NotNull Component v2,
-                              @NotNull String k3, @NotNull Component v3,
-                              @NotNull String k4, @NotNull Component v4,
-                              @NotNull String k5, @NotNull Component v5,
-                              @NotNull String k6, @NotNull Component v6,
-                              @NotNull String k7, @NotNull Component v7,
-                              @NotNull String k8, @NotNull Component v8);
-
-    /**
-     * Renders with ten key/component pairs.
-     *
-     * @param k0 a placeholder key without braces
-     * @param v0 the replacement for {@code k0}
-     * @param k1 a placeholder key without braces
-     * @param v1 the replacement for {@code k1}
-     * @param k2 a placeholder key without braces
-     * @param v2 the replacement for {@code k2}
-     * @param k3 a placeholder key without braces
-     * @param v3 the replacement for {@code k3}
-     * @param k4 a placeholder key without braces
-     * @param v4 the replacement for {@code k4}
-     * @param k5 a placeholder key without braces
-     * @param v5 the replacement for {@code k5}
-     * @param k6 a placeholder key without braces
-     * @param v6 the replacement for {@code k6}
-     * @param k7 a placeholder key without braces
-     * @param v7 the replacement for {@code k7}
-     * @param k8 a placeholder key without braces
-     * @param v8 the replacement for {@code k8}
-     * @param k9 a placeholder key without braces
-     * @param v9 the replacement for {@code k9}
-     * @return the rendered component
-     * @throws IllegalArgumentException if Adventure rejects a rendered action value
-     * @since 1.0.0
-     */
-    @NotNull Component render(@NotNull String k0, @NotNull Component v0,
-                              @NotNull String k1, @NotNull Component v1,
-                              @NotNull String k2, @NotNull Component v2,
-                              @NotNull String k3, @NotNull Component v3,
-                              @NotNull String k4, @NotNull Component v4,
-                              @NotNull String k5, @NotNull Component v5,
-                              @NotNull String k6, @NotNull Component v6,
-                              @NotNull String k7, @NotNull Component v7,
-                              @NotNull String k8, @NotNull Component v8,
-                              @NotNull String k9, @NotNull Component v9);
+    @NotNull BoundText<C> bind(@Nullable C context);
 }

@@ -4,21 +4,17 @@ plugins {
 }
 
 group = "com.github.groundbreakingmc"
-version = "1.0-SNAPSHOT"
+version = "1.0.0-beta"
 
 repositories {
     mavenCentral()
 }
 
 dependencies {
-    // Source: https://mvnrepository.com/artifact/net.kyori/adventure-text-serializer-gson
-    compileOnly(libs.adventure.gson)
-    testImplementation(libs.adventure.gson)
-
-    // Source: https://mvnrepository.com/artifact/net.kyori/adventure-text-minimessage
+    compileOnly(libs.adventure.api)
+    compileOnly(libs.annotations)
+    testImplementation(libs.adventure.api)
     testImplementation(libs.adventure.minimessage)
-
-    // Source: https://mvnrepository.com/artifact/org.junit/junit-bom
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.platform.launcher)

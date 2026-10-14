@@ -39,15 +39,19 @@ final class Compiler {
     private Compiler() {
     }
 
-    static Text compile(String raw, boolean cacheable) {
-        if (raw == null || raw.isEmpty()) return Text.EMPTY;
+    static <C> Text<C> compile(String raw, boolean cacheable, ResolverFactory<C> factory) {
+        if (raw == null || raw.isEmpty()) {
+            // Empty text has no handlers and never reads a context.
+            @SuppressWarnings("unchecked") final Text<C> empty = (Text<C>) Text.EMPTY;
+            return empty;
+        }
         if (isPlainText(raw)) {
-            return new TextImpl(new Token.Plain(raw, Style.empty()), Token.NO_PARTS, cacheable);
+            return new TextImpl<>(new Token.Plain(raw, Style.empty()), Token.NO_PARTS, cacheable, factory);
         }
 
         final PlaceholderTable placeholders = new PlaceholderTable();
         final Token root = compileToken(raw, placeholders);
-        return new TextImpl(root, placeholders.toArray(), cacheable);
+        return new TextImpl<>(root, placeholders.toArray(), cacheable, factory);
     }
 
     private static boolean isPlainText(String raw) {
@@ -284,7 +288,7 @@ final class Compiler {
                         dynStatic = Arrays.copyOf(dynStatic, dynStatic.length << 1);
                     }
 
-                    dynStatic[dynPhCnt] = textBuf.isEmpty() ? "" : textBuf.toString();
+                    dynStatic[dynPhCnt] = textBuf.isEmpty() ? null : textBuf.toString();
                     textBuf.setLength(0);
                     dynPh[dynPhCnt] = phIdx;
                     dynPhCnt++;
@@ -717,6 +721,7 @@ final class Compiler {
                 valueStart = position;
 
                 while (position < actionEnd && source[position] != ',') {
+                    //noinspection IfStatementMissingBreakInLoop
                     if (captureValue
                             && detectDynamic
                             && source[position] == '{') {
@@ -1047,7 +1052,7 @@ final class Compiler {
                             Style.empty()
                     );
 
-                    contentToken = new Token.GradientContent(
+                    contentToken = Token.GradientContent.create(
                             rawContent,
                             gradientColors,
                             contentStyle,
@@ -1074,12 +1079,12 @@ final class Compiler {
         if (styleValue != null) {
             if (styleDynamic) {
                 final DynamicValue value = parseDynamicValue(styleValue, placeholders);
-                contentToken = new Token.StyleContent(contentToken, value.staticParts,
+                contentToken = Token.StyleContent.create(contentToken, value.staticParts,
                         value.placeholderIndices, null, true);
             } else {
                 final Style value = StyleUtils.parseStyle(styleValue);
                 if (value != null && !value.isEmpty()) {
-                    contentToken = new Token.StyleContent(contentToken, Token.NO_PARTS,
+                    contentToken = Token.StyleContent.create(contentToken, Token.NO_PARTS,
                             Token.NO_PH, value, isDynamic(contentToken));
                 }
             }
@@ -1088,12 +1093,12 @@ final class Compiler {
         if (colorValue != null) {
             if (colorDynamic) {
                 final DynamicValue value = parseDynamicValue(colorValue, placeholders);
-                contentToken = new Token.ColorContent(contentToken, value.staticParts,
+                contentToken = Token.ColorContent.create(contentToken, value.staticParts,
                         value.placeholderIndices, null, true);
             } else {
                 final TextColor value = StyleUtils.parseColor(colorValue);
                 if (value != null) {
-                    contentToken = new Token.ColorContent(contentToken, Token.NO_PARTS,
+                    contentToken = Token.ColorContent.create(contentToken, Token.NO_PARTS,
                             Token.NO_PH, value, isDynamic(contentToken));
                 }
             }
@@ -1230,20 +1235,16 @@ final class Compiler {
             final Token[] content = {token};
             return isDynamic(token)
                     ? new Token.DynChildren("", style, content, 1)
-                    : new Token.Children("", style, content, 1);
+                    : new Token.Constant("", style, content, 1);
         }
 
-        final Token[] content;
-        if (innerText == null && children.length == childCount) {
-            content = children;
-        } else {
-            content = Arrays.copyOf(children, count);
-            if (innerText != null) content[childCount] = innerText;
-        }
+        // Frames reuse their child arrays while compiling subsequent groups.
+        final Token[] content = Arrays.copyOf(children, count);
+        if (innerText != null) content[childCount] = innerText;
 
         return hasDynamicChildren(content, count)
                 ? new Token.DynChildren("", style, content, count)
-                : new Token.Children("", style, content, count);
+                : new Token.Constant("", style, content, count);
     }
 
     private static boolean hasDynamicChildren(Token[] children, int count) {
@@ -1259,9 +1260,9 @@ final class Compiler {
                 || token instanceof Token.MetaFullDyn
                 || token instanceof Token.ObjDyn
                 || token instanceof Token.DynChildren
-                || token instanceof Token.GradientContent gradientContent && gradientContent.dynamic
-                || token instanceof Token.ColorContent colorContent && colorContent.dynamic
-                || token instanceof Token.StyleContent styleContent && styleContent.dynamic;
+                || token instanceof Token.GradientContent
+                || token instanceof Token.ColorContent
+                || token instanceof Token.StyleContent;
     }
 
     private static HoverEvent<?> buildStaticHover(String show) {
@@ -1276,12 +1277,12 @@ final class Compiler {
             final boolean dynChild = hasDynamicChildren(children, children.length);
             return dynChild
                     ? new Token.DynChildren(first.text, first.style, children, children.length)
-                    : new Token.Children(first.text, first.style, children, children.length);
+                    : new Token.Constant(first.text, first.style, children, children.length);
         }
         final boolean dynChild = hasDynamicChildren(tokens, count);
         return dynChild
                 ? new Token.DynChildren("", Style.empty(), Arrays.copyOf(tokens, count), count)
-                : new Token.Children("", Style.empty(), tokens, count);
+                : new Token.Constant("", Style.empty(), tokens, count);
     }
 
     // Finds a root-level reset, ignoring escapes, placeholders, nested groups, and actions.
@@ -1725,25 +1726,6 @@ final class Compiler {
             }
 
             final String key = source.substring(offset, offset + length);
-            final Integer existing = this.indices.get(key);
-            if (existing != null) return existing;
-
-            final int index = this.add(key);
-            this.indices.put(key, index);
-            return index;
-        }
-
-        private int intern(String key) {
-            if (this.indices == null) {
-                for (int index = 0; index < this.count; index++) {
-                    if (this.keys[index].equals(key)) return index;
-                }
-
-                final int index = this.add(key);
-                if (this.count == PLACEHOLDER_HASH_THRESHOLD) this.promoteToHash();
-                return index;
-            }
-
             final Integer existing = this.indices.get(key);
             if (existing != null) return existing;
 

@@ -13,7 +13,50 @@ import java.util.*;
 // Compiled tokens render from indexed values; static results are built during compilation.
 interface Token {
 
-    Component render(Component[] placeholders);
+    // A number occupies the same index in the primitive array; other values are String or Component.
+    Object NUMBER_VALUE = new Object();
+    Object USED_NUMBER_VALUE = new Object();
+
+    Component render(Object[] placeholders, long[] numbers);
+
+    // Materialize once per slot when a component is needed by a non-text branch or the result cache.
+    static Component component(Object[] values, long[] numbers, int index) {
+        final Object value = values[index];
+        if (value instanceof Component component) return component;
+        final Component component = isNumber(value)
+                ? Component.text(numbers[index]) : Component.text((String) value);
+        values[index] = component;
+        return component;
+    }
+
+    private static String plainText(Object[] values, long[] numbers, int index) {
+        final Object value = values[index];
+        if (value instanceof String text) return text;
+        if (isNumber(value)) return numberText(values, numbers, index);
+        return ((TextComponent) value).content();
+    }
+
+    private static boolean isNumber(Object value) {
+        return value == NUMBER_VALUE || value == USED_NUMBER_VALUE;
+    }
+
+    private static String numberText(Object[] values, long[] numbers, int index) {
+        final String text = Long.toString(numbers[index]);
+        values[index] = text;
+        return text;
+    }
+
+    private static void appendValue(StringBuilder builder, Object[] values, long[] numbers, int index) {
+        final Object value = values[index];
+        if (value instanceof String text) builder.append(text);
+        else if (value == NUMBER_VALUE) {
+            builder.append(numbers[index]);
+            values[index] = USED_NUMBER_VALUE;
+        }
+        // Repeated numeric uses share decimal text; one use needs no temporary String.
+        else if (value == USED_NUMBER_VALUE) builder.append(numberText(values, numbers, index));
+        else appendText(builder, (Component) value);
+    }
 
     final class Plain implements Token {
 
@@ -28,17 +71,21 @@ interface Token {
         }
 
         @Override
-        public Component render(Component[] placeholders) {
+        public Component render(Object[] placeholders, long[] numbers) {
             return this.component;
         }
     }
 
-    // Precomputes the result of a group whose children are all static.
-    final class Children implements Token {
+    // Retains only the rendered result of static content.
+    final class Constant implements Token {
 
         private final Component staticComponent;
 
-        Children(
+        Constant(Component component) {
+            this.staticComponent = component;
+        }
+
+        Constant(
                 String text,
                 Style style,
                 Token[] children,
@@ -48,7 +95,7 @@ interface Token {
         }
 
         @Override
-        public Component render(Component[] placeholders) {
+        public Component render(Object[] placeholders, long[] numbers) {
             return this.staticComponent;
         }
 
@@ -56,7 +103,7 @@ interface Token {
             final ChildBuffer rendered = acquireChildren(childCount);
             try {
                 for (int index = 0; index < childCount; index++) {
-                    rendered.setComponent(index, children[index].render(null));
+                    rendered.setComponent(index, children[index].render(null, null));
                 }
                 return textComponent(text, style, rendered);
             } finally {
@@ -85,15 +132,15 @@ interface Token {
         }
 
         @Override
-        public Component render(Component[] placeholders) {
-            return this.renderChildren(placeholders);
+        public Component render(Object[] placeholders, long[] numbers) {
+            return this.renderChildren(placeholders, numbers);
         }
 
-        private Component renderChildren(Component[] placeholders) {
+        private Component renderChildren(Object[] placeholders, long[] numbers) {
             final ChildBuffer rendered = acquireChildren(this.childCount);
             try {
                 for (int index = 0; index < this.childCount; index++) {
-                    rendered.setComponent(index, this.children[index].render(placeholders));
+                    rendered.setComponent(index, this.children[index].render(placeholders, numbers));
                 }
                 return textComponent(this.text, this.style, rendered);
             } finally {
@@ -139,15 +186,15 @@ interface Token {
         }
 
         @Override
-        public Component render(Component[] compPh) {
-            final Component flattened = this.flatten(compPh);
+        public Component render(Object[] compPh, long[] numbers) {
+            final Component flattened = this.flatten(compPh, numbers);
             if (flattened != null) return flattened;
 
             final ChildBuffer children = acquireChildren(this.childCount);
             try {
                 int outputIndex = 0;
                 for (int index = 0; index < this.phIndices.length; index++) {
-                    children.setComponent(outputIndex++, compPh[this.phIndices[index]]);
+                    children.setComponent(outputIndex++, component(compPh, numbers, this.phIndices[index]));
 
                     if (this.staticTails != null) {
                         final Component tail = this.staticTails[index];
@@ -160,9 +207,11 @@ interface Token {
             }
         }
 
-        private Component flatten(Component[] placeholders) {
+        private Component flatten(Object[] placeholders, long[] numbers) {
             for (final int placeholderIndex : this.phIndices) {
-                final Component component = placeholders[placeholderIndex];
+                final Object value = placeholders[placeholderIndex];
+                if (value instanceof String || isNumber(value)) continue;
+                final Component component = (Component) value;
                 if (!(component instanceof TextComponent textComponent)
                         || !textComponent.style().isEmpty()
                         || !textComponent.children().isEmpty()) {
@@ -171,11 +220,11 @@ interface Token {
             }
 
             if (this.phIndices.length == 1 && this.staticParts.length == 0 && this.base.style().isEmpty()) {
-                return placeholders[this.phIndices[0]];
+                return component(placeholders, numbers, this.phIndices[0]);
             }
 
             if (this.phIndices.length == 1) {
-                final String replacement = ((TextComponent) placeholders[this.phIndices[0]]).content();
+                final String replacement = plainText(placeholders, numbers, this.phIndices[0]);
                 final String tail = this.staticParts.length > 1 && this.staticParts[1] != null
                         ? this.staticParts[1] : "";
                 return Component.text(this.base.content() + replacement + tail, this.base.style());
@@ -189,7 +238,7 @@ interface Token {
                 }
 
                 for (int index = 0; index < this.phIndices.length; index++) {
-                    builder.append(((TextComponent) placeholders[this.phIndices[index]]).content());
+                    appendValue(builder, placeholders, numbers, this.phIndices[index]);
 
                     final int staticIndex = index + 1;
                     if (staticIndex < this.staticParts.length && this.staticParts[staticIndex] != null) {
@@ -212,9 +261,11 @@ interface Token {
             this.content = content;
         }
 
-        HoverEvent<?> render(Component[] placeholders) {
-            return HoverEvent.showText(this.content.render(placeholders));
+        HoverEvent<?> render(Object[] placeholders, long[] numbers) {
+            return HoverEvent.showText(this.content.render(placeholders, numbers));
         }
+
+
     }
 
     // Replaces one event on the content root, preserving its other styles and metadata.
@@ -247,17 +298,17 @@ interface Token {
         }
 
         @Override
-        public Component render(Component[] compPh) {
-            final Component component = this.content.render(compPh);
+        public Component render(Object[] compPh, long[] numbers) {
+            final Component component = this.content.render(compPh, numbers);
             final Style baseStyle = component.style();
 
-            ClickEvent click = baseStyle.clickEvent();
+            ClickEvent<?> click = baseStyle.clickEvent();
             HoverEvent<?> hover = baseStyle.hoverEvent();
 
             if (this.actionType == MetaDyn.SHOW) {
-                hover = this.dynamicHover.render(compPh);
+                hover = this.dynamicHover.render(compPh, numbers);
             } else {
-                final String value = buildText(this.metaStatic, this.metaPh, compPh);
+                final String value = buildText(this.metaStatic, this.metaPh, compPh, numbers);
                 click = MetaFullDyn.buildClick(this.actionType, value);
             }
 
@@ -302,25 +353,25 @@ interface Token {
         }
 
         @Override
-        public Component render(Component[] compPh) {
-            final Component component = this.content.render(compPh);
+        public Component render(Object[] compPh, long[] numbers) {
+            final Component component = this.content.render(compPh, numbers);
             final Style baseStyle = component.style();
 
-            ClickEvent click = baseStyle.clickEvent();
+            ClickEvent<?> click = baseStyle.clickEvent();
             HoverEvent<?> hover = baseStyle.hoverEvent();
 
             if (this.actionType == MetaDyn.SHOW) {
-                hover = this.dynamicHover.render(compPh);
+                hover = this.dynamicHover.render(compPh, numbers);
             } else {
-                final String value = buildText(this.metaStatic, this.metaPh, compPh);
+                final String value = buildText(this.metaStatic, this.metaPh, compPh, numbers);
                 click = MetaFullDyn.buildClick(this.actionType, value);
             }
 
             if (this.action2Type != -1) {
                 if (this.action2Type == MetaDyn.SHOW) {
-                    hover = this.dynamicHover2.render(compPh);
+                    hover = this.dynamicHover2.render(compPh, numbers);
                 } else {
-                    final String value2 = buildText(this.meta2Static, this.meta2Ph, compPh);
+                    final String value2 = buildText(this.meta2Static, this.meta2Ph, compPh, numbers);
                     click = MetaFullDyn.buildClick(this.action2Type, value2);
                 }
             }
@@ -347,25 +398,26 @@ interface Token {
         private final String[] staticParts;
         private final int[] placeholderIndices;
         private final TextColor color;
-        final boolean dynamic;
-        private final Component staticComponent;
 
-        ColorContent(Token content, String[] staticParts, int[] placeholderIndices,
-                     TextColor color, boolean dynamic) {
+        static Token create(Token content, String[] staticParts, int[] placeholderIndices,
+                            TextColor color, boolean dynamic) {
+            return dynamic ? new ColorContent(content, staticParts, placeholderIndices, color)
+                    : new Constant(applyColor(content.render(null, null), color));
+        }
+
+        private ColorContent(Token content, String[] staticParts, int[] placeholderIndices,
+                             TextColor color) {
             this.content = content;
             this.staticParts = staticParts;
             this.placeholderIndices = placeholderIndices;
             this.color = color;
-            this.dynamic = dynamic;
-            this.staticComponent = dynamic ? null : applyColor(content.render(null), color);
         }
 
         @Override
-        public Component render(Component[] placeholders) {
-            if (!this.dynamic) return this.staticComponent;
-            final Component rendered = this.content.render(placeholders);
+        public Component render(Object[] placeholders, long[] numbers) {
+            final Component rendered = this.content.render(placeholders, numbers);
             final TextColor resolved = this.placeholderIndices.length == 0 ? this.color
-                    : StyleUtils.parseColor(buildText(this.staticParts, this.placeholderIndices, placeholders));
+                    : StyleUtils.parseColor(buildText(this.staticParts, this.placeholderIndices, placeholders, numbers));
             return resolved == null ? rendered : applyColor(rendered, resolved);
         }
     }
@@ -392,25 +444,26 @@ interface Token {
         private final String[] staticParts;
         private final int[] placeholderIndices;
         private final Style style;
-        final boolean dynamic;
-        private final Component staticComponent;
 
-        StyleContent(Token content, String[] staticParts, int[] placeholderIndices,
-                     Style style, boolean dynamic) {
+        static Token create(Token content, String[] staticParts, int[] placeholderIndices,
+                            Style style, boolean dynamic) {
+            return dynamic ? new StyleContent(content, staticParts, placeholderIndices, style)
+                    : new Constant(applyStyle(content.render(null, null), style));
+        }
+
+        private StyleContent(Token content, String[] staticParts, int[] placeholderIndices,
+                             Style style) {
             this.content = content;
             this.staticParts = staticParts;
             this.placeholderIndices = placeholderIndices;
             this.style = style;
-            this.dynamic = dynamic;
-            this.staticComponent = dynamic ? null : applyStyle(content.render(null), style);
         }
 
         @Override
-        public Component render(Component[] placeholders) {
-            if (!this.dynamic) return this.staticComponent;
-            final Component rendered = this.content.render(placeholders);
+        public Component render(Object[] placeholders, long[] numbers) {
+            final Component rendered = this.content.render(placeholders, numbers);
             final Style resolved = this.placeholderIndices.length == 0 ? this.style
-                    : StyleUtils.parseStyle(buildText(this.staticParts, this.placeholderIndices, placeholders));
+                    : StyleUtils.parseStyle(buildText(this.staticParts, this.placeholderIndices, placeholders, numbers));
             return resolved == null || resolved.isEmpty() ? rendered : applyStyle(rendered, resolved);
         }
     }
@@ -435,35 +488,35 @@ interface Token {
         private final Token content;
         private final int[] colors;
         private final Style baseStyle;
-        final boolean dynamic;
-        private final Component staticComponent;
         private volatile Style[] styleCache0;
         private volatile Style[] styleCache1;
         private volatile Style[] styleCache2;
         private volatile Style[] styleCache3;
 
-        GradientContent(Token content, int[] colors, Style baseStyle, boolean dynamic) {
+        static Token create(Token content, int[] colors, Style baseStyle, boolean dynamic) {
+            if (dynamic) return new GradientContent(content, colors, baseStyle);
+            final Component rendered = content.render(null, null);
+            return new Constant(renderGradient(rendered,
+                    gradientStyles(countCodePoints(rendered), colors), baseStyle));
+        }
+
+        private GradientContent(Token content, int[] colors, Style baseStyle) {
             this.content = content;
             this.colors = colors;
             this.baseStyle = baseStyle;
-            this.dynamic = dynamic;
-            this.staticComponent = dynamic ? null : this.renderGradient(null);
         }
 
         @Override
-        public Component render(Component[] placeholders) {
-            return this.dynamic ? this.renderGradient(placeholders) : this.staticComponent;
+        public Component render(Object[] placeholders, long[] numbers) {
+            final Component rendered = this.content.render(placeholders, numbers);
+            return renderGradient(rendered, this.styles(countCodePoints(rendered)), this.baseStyle);
         }
 
-        private Component renderGradient(Component[] placeholders) {
-            final Component rendered = this.content.render(placeholders);
-            final int codePointCount = countCodePoints(rendered);
-
-            final Style[] styles = this.styles(codePointCount);
+        private static Component renderGradient(Component rendered, Style[] styles, Style baseStyle) {
 
             final ChildScratch scratch = CHILD_SCRATCH.get();
             final Component colored;
-            if (codePointCount == 0) {
+            if (styles.length == 0) {
                 colored = rendered;
             } else {
                 scratch.gradientIndex = 0;
@@ -472,7 +525,7 @@ interface Token {
             final ChildBuffer children = scratch.acquire(1);
             try {
                 children.setComponent(0, colored);
-                return textComponent("", this.baseStyle, children);
+                return textComponent("", baseStyle, children);
             } finally {
                 releaseChildren(children);
             }
@@ -510,7 +563,7 @@ interface Token {
         }
 
         @Override
-        public Component render(Component[] placeholders) {
+        public Component render(Object[] placeholders, long[] numbers) {
             return this.component;
         }
     }
@@ -528,11 +581,11 @@ interface Token {
         }
 
         @Override
-        public Component render(Component[] placeholders) {
+        public Component render(Object[] placeholders, long[] numbers) {
             final String profileName = buildText(
                     this.staticParts,
                     this.placeholderIndices,
-                    placeholders
+                    placeholders, numbers
             );
             final Component component = Component.object(ObjectContents.playerHead(profileName));
             return this.style.isEmpty() ? component : component.style(this.style);
@@ -562,11 +615,14 @@ interface Token {
     private static String buildText(
             String[] staticParts,
             int[] placeholderIndices,
-            Component[] placeholders
+            Object[] placeholders, long[] numbers
     ) {
         if (staticParts.length == 0 && placeholderIndices.length == 1) {
-            final Component component = placeholders[placeholderIndices[0]];
-            if (component instanceof TextComponent textComponent && component.children().isEmpty()) {
+            final int index = placeholderIndices[0];
+            final Object value = placeholders[index];
+            if (value instanceof String text) return text;
+            if (isNumber(value)) return numberText(placeholders, numbers, index);
+            if (value instanceof TextComponent textComponent && textComponent.children().isEmpty()) {
                 return textComponent.content();
             }
         }
@@ -579,7 +635,7 @@ interface Token {
             }
 
             for (int index = 0; index < placeholderIndices.length; index++) {
-                appendText(builder, placeholders[placeholderIndices[index]]);
+                appendValue(builder, placeholders, numbers, placeholderIndices[index]);
 
                 final int staticIndex = index + 1;
                 if (staticIndex < staticParts.length && staticParts[staticIndex] != null) {
@@ -587,19 +643,6 @@ interface Token {
                 }
             }
 
-            return builder.toString();
-        } finally {
-            releaseBuilder(builder);
-        }
-    }
-
-    private static String extractText(Component component) {
-        if (component == null) return "";
-
-        final StringBuilder builder = TL_SB.get();
-        builder.setLength(0);
-        try {
-            appendText(builder, component);
             return builder.toString();
         } finally {
             releaseBuilder(builder);

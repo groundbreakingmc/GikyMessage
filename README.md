@@ -275,7 +275,9 @@ a complete fresh tuple. External handler effects are not rolled back.
 ### Ownership and execution
 
 Compiled structure and bound handlers are shared. Temporary buffers are isolated by
-physical thread and nesting depth and cleared after each render. Handlers and context
+physical thread and nesting depth and cleared after each render. A thread refers to
+them weakly: idle buffers may be collected, and a thread that outlives the application
+embedding GM does not keep GM's class loader alive. Handlers and context
 data must support the caller's execution context; a shared Text does not make external
 APIs thread-safe. Texts have no periods, clocks, registrations or background work.
 Number buffers are allocated lazily and reused with the other temporary buffers.

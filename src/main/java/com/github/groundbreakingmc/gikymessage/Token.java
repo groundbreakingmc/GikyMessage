@@ -8,6 +8,7 @@ import net.kyori.adventure.text.format.Style;
 import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.object.ObjectContents;
 
+import java.lang.ref.WeakReference;
 import java.util.*;
 
 // Compiled tokens render from indexed values; static results are built during compilation.
@@ -514,7 +515,7 @@ interface Token {
 
         private static Component renderGradient(Component rendered, Style[] styles, Style baseStyle) {
 
-            final ChildScratch scratch = CHILD_SCRATCH.get();
+            final ChildScratch scratch = childScratch();
             final Component colored;
             if (styles.length == 0) {
                 colored = rendered;
@@ -595,7 +596,11 @@ interface Token {
     int MAX_RETAINED_BUILDER_CAPACITY = 8 * 1024;
     // Finish using the builder before another operation on this thread reuses it.
     ThreadLocal<StringBuilder> TL_SB = ThreadLocal.withInitial(() -> new StringBuilder(128));
-    ThreadLocal<ChildScratch> CHILD_SCRATCH = ThreadLocal.withInitial(ChildScratch::new);
+    // Held weakly: a thread's strong reference to an object of this library would keep the
+    // library's class loader alive for as long as that thread runs, for example the main
+    // thread of a server that unloads the plugin embedding this library. A buffer in use is
+    // reachable from the render that acquired it; idle ones may be collected and created again.
+    ThreadLocal<WeakReference<ChildScratch>> CHILD_SCRATCH = new ThreadLocal<>();
     Component[] EMPTY_COMPONENTS = new Component[0];
     Style[] EMPTY_STYLES = new Style[0];
 
@@ -773,8 +778,18 @@ interface Token {
         }
     }
 
+    private static ChildScratch childScratch() {
+        final WeakReference<ChildScratch> reference = CHILD_SCRATCH.get();
+        ChildScratch scratch = reference == null ? null : reference.get();
+        if (scratch == null) {
+            scratch = new ChildScratch();
+            CHILD_SCRATCH.set(new WeakReference<>(scratch));
+        }
+        return scratch;
+    }
+
     private static ChildBuffer acquireChildren(int size) {
-        return CHILD_SCRATCH.get().acquire(size);
+        return childScratch().acquire(size);
     }
 
     private static void releaseChildren(ChildBuffer buffer) {

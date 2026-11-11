@@ -4,20 +4,24 @@ import net.kyori.adventure.text.Component;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.lang.ref.WeakReference;
 import java.util.Arrays;
 import java.util.Objects;
 
 final class TextImpl<C> implements Text<C> {
 
     private static final Object[] EMPTY_VALUES = new Object[0];
-    private static final ThreadLocal<RenderScratch> RENDER_SCRATCH =
-            ThreadLocal.withInitial(RenderScratch::new);
+    // A thread must not strongly hold an object of this library: that would keep the library's
+    // class loader alive for as long as the thread runs. See Token.CHILD_SCRATCH.
+    private static final ThreadLocal<WeakReference<RenderScratch>> RENDER_SCRATCH = new ThreadLocal<>();
 
     private final Token token;
     private final String[] placeholderKeys;
     private final ValueResolver<C>[] resolvers;
     private volatile Component[] fallbacks;
-    private final ThreadLocal<RenderCache> renderCache;
+    // Per thread: the last value tuple, then the result it produced, null until one is cached.
+    // A plain array for the same reason as above.
+    private final ThreadLocal<Object[]> renderCache;
     private final boolean cacheable;
 
     TextImpl(Token token, String[] placeholderKeys, boolean cacheable, ResolverFactory<C> factory) {
@@ -29,7 +33,7 @@ final class TextImpl<C> implements Text<C> {
         final int placeholderCount = this.placeholderKeys.length;
         this.renderCache = placeholderCount == 0 || !cacheable
                 ? null
-                : ThreadLocal.withInitial(() -> new RenderCache(placeholderCount));
+                : ThreadLocal.withInitial(() -> new Object[placeholderCount + 1]);
     }
 
     private static <C> ValueResolver<C>[] bind(String[] keys, ResolverFactory<C> factory) {
@@ -53,7 +57,7 @@ final class TextImpl<C> implements Text<C> {
     public @NotNull Component render(@Nullable C context) {
         if (this.resolvers == null) return this.render();
 
-        final RenderBuffer renderBuffer = RENDER_SCRATCH.get().acquire(this.placeholderKeys.length);
+        final RenderBuffer renderBuffer = renderScratch().acquire(this.placeholderKeys.length);
         final Object[] buffer = renderBuffer.values;
         try {
             final ValueResolver.Value output = this.cacheable ? renderBuffer.componentValue() : renderBuffer;
@@ -109,34 +113,35 @@ final class TextImpl<C> implements Text<C> {
     private Component renderResolved(Object[] buffer, long[] numbers) {
         if (!this.cacheable) return this.token.render(buffer, numbers);
 
-        final RenderCache cache = this.renderCache.get();
-        if (cache.hasCachedResult && matches(buffer, cache.cachedValues)) {
-            return cache.cachedResult;
+        final Object[] cache = this.renderCache.get();
+        final int valueCount = cache.length - 1;
+        final Object cachedResult = cache[valueCount];
+        if (cachedResult != null && matches(buffer, cache, valueCount)) {
+            return (Component) cachedResult;
         }
 
         final Component rendered = this.token.render(buffer, numbers);
-        System.arraycopy(buffer, 0, cache.cachedValues, 0, cache.cachedValues.length);
-        cache.cachedResult = rendered;
-        cache.hasCachedResult = true;
+        System.arraycopy(buffer, 0, cache, 0, valueCount);
+        cache[valueCount] = rendered;
         return rendered;
     }
 
-    private static boolean matches(Object[] buffer, Object[] cachedValues) {
-        for (int index = 0; index < cachedValues.length; index++) {
+    private static boolean matches(Object[] buffer, Object[] cachedValues, int valueCount) {
+        for (int index = 0; index < valueCount; index++) {
             if (!Objects.equals(buffer[index], cachedValues[index])) return false;
         }
         return true;
     }
 
-    private static final class RenderCache {
-
-        private final Object[] cachedValues;
-        private Component cachedResult;
-        private boolean hasCachedResult;
-
-        private RenderCache(int placeholderCount) {
-            this.cachedValues = new Object[placeholderCount];
+    // Buffers left unused between renders may be collected and are then created again.
+    private static RenderScratch renderScratch() {
+        final WeakReference<RenderScratch> reference = RENDER_SCRATCH.get();
+        RenderScratch scratch = reference == null ? null : reference.get();
+        if (scratch == null) {
+            scratch = new RenderScratch();
+            RENDER_SCRATCH.set(new WeakReference<>(scratch));
         }
+        return scratch;
     }
 
     // Nested resolver renders need distinct buffers, released in LIFO order.

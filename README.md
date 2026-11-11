@@ -213,6 +213,15 @@ Component unresolved = text.render(); // Skips handlers, uses literal fallbacks.
 always skips handlers. The no-factory `of(raw)` / `cacheableOf(raw)` forms compile
 literal fallbacks and return `Text<Void>`; they do not support late key-based binding.
 
+`keys()` lists a text's unique keys in binding order, including keys without a handler.
+Use it to classify a compiled text without rendering it:
+
+```java
+List<String> keys = text.keys();          // [name, balance]
+boolean constant = keys.isEmpty();        // nothing to resolve: render() never changes
+boolean personal = keys.contains("viewer");
+```
+
 A null factory is rejected. A null handler, no reported value, `text(null)`, or
 `component(null)` means literal `{key}`. An empty string/component means empty text.
 The last report wins. The `Value` receiver is valid only during its handler call;

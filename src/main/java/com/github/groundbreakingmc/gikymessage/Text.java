@@ -4,7 +4,9 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.Style;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.annotations.Unmodifiable;
 
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -140,4 +142,15 @@ public sealed interface Text<C> permits TextImpl {
      * @since 1.0
      */
     @NotNull BoundText<C> bind(@Nullable C context);
+
+    /**
+     * Returns the unique placeholder keys of this template, without braces, in compiler
+     * registration order: the order in which they were bound and in which their handlers
+     * run. Keys in content replaced by an action and keys without a handler are included.
+     * A text without keys renders the same component on every call.
+     *
+     * @return an unmodifiable list, empty when the template has no placeholders
+     * @since 1.0
+     */
+    @NotNull @Unmodifiable List<String> keys();
 }

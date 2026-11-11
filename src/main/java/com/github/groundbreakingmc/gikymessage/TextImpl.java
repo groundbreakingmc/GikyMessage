@@ -6,6 +6,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.lang.ref.WeakReference;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
 
 final class TextImpl<C> implements Text<C> {
@@ -90,6 +91,11 @@ final class TextImpl<C> implements Text<C> {
     @Override
     public @NotNull BoundText<C> bind(@Nullable C context) {
         return new BoundText<>(this, context);
+    }
+
+    @Override
+    public @NotNull List<String> keys() {
+        return List.of(this.placeholderKeys);
     }
 
     int bindingSize() {

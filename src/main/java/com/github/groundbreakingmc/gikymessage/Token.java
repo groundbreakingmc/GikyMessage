@@ -1,5 +1,6 @@
 package com.github.groundbreakingmc.gikymessage;
 
+import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.event.ClickEvent;
@@ -558,7 +559,17 @@ interface Token {
 
         private final Component component;
 
-        Obj(ObjectContents contents, Style style) {
+        // These factories keep Adventure's object types, absent before 4.25, out of the
+        // compiler: it must load on an older Adventure for templates that use no objects.
+        static Obj head(String profileName, Style style) {
+            return new Obj(ObjectContents.playerHead(profileName), style);
+        }
+
+        static Obj sprite(Key sprite, Style style) {
+            return new Obj(ObjectContents.sprite(sprite), style);
+        }
+
+        private Obj(ObjectContents contents, Style style) {
             final Component component = Component.object(contents);
             this.component = style.isEmpty() ? component : component.style(style);
         }

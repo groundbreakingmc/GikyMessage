@@ -8,21 +8,34 @@ import java.net.URLClassLoader;
 /**
  * Loads a second, private copy of the library from its compiled classes, the way the class
  * loader of an application that embeds the library does. Every other class comes from the
- * test class path. The copy is reached through reflection, because its types are not the
- * ones the tests were compiled against.
+ * test class path, except those hidden from the copy to stand in for an older dependency.
+ * The copy is reached through reflection, because its types are not the ones the tests
+ * were compiled against.
  */
 final class IsolatedLibrary extends URLClassLoader {
 
     private static final String PACKAGE = Text.class.getPackageName() + '.';
 
-    IsolatedLibrary() {
+    private final String[] hidden;
+
+    /**
+     * @param hidden prefixes of class names that the copy must find absent; classes outside
+     *               the copy still see them
+     */
+    IsolatedLibrary(String... hidden) {
         super(new URL[]{Text.class.getProtectionDomain().getCodeSource().getLocation()},
                 IsolatedLibrary.class.getClassLoader());
+        this.hidden = hidden;
     }
 
     @Override
     protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
-        if (!name.startsWith(PACKAGE)) return super.loadClass(name, resolve);
+        if (!name.startsWith(PACKAGE)) {
+            for (final String prefix : this.hidden) {
+                if (name.startsWith(prefix)) throw new ClassNotFoundException(name);
+            }
+            return super.loadClass(name, resolve);
+        }
         synchronized (this.getClassLoadingLock(name)) {
             Class<?> type = this.findLoadedClass(name);
             if (type == null) type = this.findClass(name);

@@ -295,6 +295,10 @@ and Adventure API are required. The build targets Adventure 5.2.0. The tested 4.
 path preserves that runtime's less strict head-name validation; exact results and
 boundaries are described in [VALIDATION.md](VALIDATION.md).
 
+GM also loads on an older Adventure and renders everything that Adventure can
+represent. A template that uses shadow colors before Adventure 4.18, or `head` or
+`sprite` before 4.25, fails to compile with `TextFormatException` naming the version.
+
 ### Dependencies and packaging
 
 Adventure is a provided dependency: GM does not bundle it or choose the platform's

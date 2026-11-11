@@ -4,7 +4,6 @@ import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.*;
-import net.kyori.adventure.text.object.ObjectContents;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -237,6 +236,7 @@ final class Compiler {
                 if (next == '#') {
                     final long packed = StyleUtils.parseHexPacked(src, pos + 1);
                     if (packed != -1L) {
+                        if (!Platform.SHADOW_COLORS) throw unsupported("Shadow colors", "4.18");
                         // Flush accumulated text before the shadow style changes.
                         final Token shadowFlush = flushText(textBuf, dynStatic, dynPh, dynPhCnt, hasDyn,
                                 curDeco, curColor, curShadow, inhDeco, inhColor, inhShadow);
@@ -1014,6 +1014,11 @@ final class Compiler {
 
         Token contentToken;
 
+        if ((selectedContentType == ACTION_HEAD || selectedContentType == ACTION_SPRITE)
+                && !Platform.OBJECT_COMPONENTS) {
+            throw unsupported("Head and sprite objects", "4.25");
+        }
+
         if (selectedContentType == ACTION_HEAD) {
             if (selectedContentDynamic) {
                 final DynamicValue dynamicHead = parseDynamicValue(
@@ -1027,16 +1032,14 @@ final class Compiler {
                         contentStyle
                 );
             } else {
-                contentToken = new Token.Obj(
-                        ObjectContents.playerHead(selectedContentValue),
+                contentToken = Token.Obj.head(
+                        selectedContentValue,
                         contentStyle
                 );
             }
         } else if (selectedContentType == ACTION_SPRITE) {
-            contentToken = new Token.Obj(
-                    ObjectContents.sprite(
-                            parseSpriteKey(selectedContentValue)
-                    ),
+            contentToken = Token.Obj.sprite(
+                    parseSpriteKey(selectedContentValue),
                     contentStyle
             );
         } else {
@@ -1637,6 +1640,12 @@ final class Compiler {
         } catch (RuntimeException exception) {
             throw new TextFormatException("Invalid sprite key: " + value, exception);
         }
+    }
+
+    // Raised while compiling: rendering such a template would fail to link on this Adventure.
+    private static TextFormatException unsupported(String feature, String adventureVersion) {
+        return new TextFormatException(feature + " need Adventure " + adventureVersion
+                + " or newer, and the Adventure in use is older", null);
     }
 
     private static void releaseScratch(StringBuilder scratch) {

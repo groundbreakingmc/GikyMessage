@@ -50,7 +50,7 @@ final class StyleUtils {
 
         final Style.Builder builder = Style.style();
         if (color != null) builder.color(color);
-        if (shadowColor != null) builder.shadowColor(shadowColor);
+        if (shadowColor != null) Shadows.apply(builder, shadowColor);
 
         applyDecoration(builder, decorations, TextDecoration.BOLD);
         applyDecoration(builder, decorations, TextDecoration.ITALIC);
@@ -311,6 +311,16 @@ final class StyleUtils {
             builder.decoration(decoration, TextDecoration.State.TRUE);
         } else if (state == BIT_FALSE) {
             builder.decoration(decoration, TextDecoration.State.FALSE);
+        }
+    }
+
+    // The only call into Adventure's shadow API, which is absent before 4.18. In a class of
+    // its own, so that the rest of this one links on an older Adventure; it loads with the
+    // first shadow, and the compiler rejects shadows the platform lacks before that.
+    private static final class Shadows {
+
+        private static void apply(Style.Builder builder, ShadowColor shadowColor) {
+            builder.shadowColor(shadowColor);
         }
     }
 }

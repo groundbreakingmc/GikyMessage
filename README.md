@@ -269,6 +269,21 @@ components. Unchanged materialized insertions are reused when another key change
 the final template is rebuilt when the complete value tuple changes. Type transitions
 use component equality. Null/no report still means literal fallback.
 
+A value that has to be parsed from a string, such as a formatted prefix, can be reported
+with its parser instead of as a finished component:
+
+```java
+static final Function<String, Component> LEGACY =
+        LegacyComponentSerializer.legacyAmpersand()::deserialize;
+
+case "prefix" -> (context, value) -> value.component(context.rawPrefix(), LEGACY);
+```
+
+A binding compares the string with the one it holds and calls the parser only for a
+different string or parser instance; the parsed component is kept with the binding.
+Renders without a binding call the parser every time. Pass one parser instance, not a
+lambda created per call, and make it depend only on its argument.
+
 The binding holds a strong reference to its context. Keep it between renders and release
 it when finished; creating it for every message defeats the cache. Its arrays and retained
 values trade memory for less repeated work. All-changing values still pay comparison costs.

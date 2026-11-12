@@ -8,6 +8,7 @@ import java.lang.ref.WeakReference;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Function;
 
 final class TextImpl<C> implements Text<C> {
 
@@ -209,6 +210,11 @@ final class TextImpl<C> implements Text<C> {
             this.resolved = component;
         }
 
+        @Override
+        public void component(String source, Function<? super String, ? extends Component> parser) {
+            this.resolved = parse(source, parser);
+        }
+
         private ComponentValue componentValue() {
             if (this.componentValue == null) this.componentValue = new ComponentValue(this);
             return this.componentValue;
@@ -268,6 +274,16 @@ final class TextImpl<C> implements Text<C> {
         public void component(Component component) {
             this.buffer.resolved = component;
         }
+
+        @Override
+        public void component(String source, Function<? super String, ? extends Component> parser) {
+            this.buffer.resolved = parse(source, parser);
+        }
     }
 
+    // A render without a binding keeps nothing between calls, so it parses every time.
+    private static Component parse(String source, Function<? super String, ? extends Component> parser) {
+        Objects.requireNonNull(parser, "parser");
+        return source == null ? null : parser.apply(source);
+    }
 }

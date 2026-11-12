@@ -394,8 +394,14 @@ final class Compiler {
                         src, actStart, actEnd, placeholders,
                         inhDeco, inhColor, inhShadow);
 
-                if (depth == 0) rootTokens = pushToken(rootTokens, rootTokenCnt++, bracketToken);
-                else stack[depth - 1].add(bracketToken);
+                if (depth == 0) {
+                    // A group that opens the template must not become the root: everything
+                    // after it would be its child and inherit its events and inner style.
+                    if (rootTokenCnt == 0) canHoistRootStyle = false;
+                    rootTokens = pushToken(rootTokens, rootTokenCnt++, bracketToken);
+                } else {
+                    stack[depth - 1].add(bracketToken);
+                }
                 continue;
             }
 

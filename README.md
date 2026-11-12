@@ -99,6 +99,8 @@ Here `&7!` keeps the template's gray color even when the replacement has its own
 ### Bracketed segments — `[text](action:value)`
 
 Applies click events, hover text, gradients, or object components to a span of text.
+A segment's actions and the formatting set inside it apply to its own text only, also
+when the segment opens the template.
 
 ```
 [Click me](action:value)

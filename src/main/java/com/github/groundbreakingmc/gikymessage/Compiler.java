@@ -235,7 +235,7 @@ final class Compiler {
                 final char next = src[pos + 1];
 
                 if (next == '#') {
-                    final long packed = StyleUtils.parseHexPacked(src, pos + 1);
+                    final long packed = StyleUtils.parseShadowPacked(src, pos + 1);
                     if (packed != -1L) {
                         if (!Platform.SHADOW_COLORS) throw unsupported("Shadow colors", "4.18");
                         // Flush accumulated text before the shadow style changes.

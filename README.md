@@ -69,11 +69,17 @@ Applies a drop shadow color when the receiving platform supports it.
 ```
 $#RRGGBB   — full hex shadow color
 $#RGB      — short hex shadow color
+$#RRGGBBAA — full hex shadow color with alpha
+$#RGBA     — short hex shadow color with alpha
 ```
+
+Alpha comes last, as in Adventure's and MiniMessage's hex strings: `00` is invisible,
+`FF` opaque. Without alpha the shadow is opaque; `$#00000000` hides it.
 
 **Example:**
 ```
 $#000000&#ffffff White text with black shadow
+$#00000060&f White text with a faint shadow
 ```
 
 ---

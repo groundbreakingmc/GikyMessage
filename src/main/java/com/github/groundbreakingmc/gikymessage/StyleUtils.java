@@ -107,8 +107,7 @@ final class StyleUtils {
         return textColor;
     }
 
-    static ShadowColor shadowColorOf(int color) {
-        final int argb = OPAQUE_ALPHA | (color & 0x00FFFFFF);
+    static ShadowColor shadowColorOf(int argb) {
         final int slot = colorCacheSlot(argb);
         final ShadowColor cached = SHADOW_COLOR_CACHE.get(slot);
         if (cached != null && cached.value() == argb) return cached;
@@ -303,6 +302,43 @@ final class StyleUtils {
             return ((long) 7 << 32) | (rgb & 0xFFFFFFFFL);
         }
         return -1L;
+    }
+
+    // Packs consumed length in the high 32 bits and ARGB in the low 32; -1 means invalid hex.
+    // Eight digits are RRGGBBAA and four are RGBA: alpha comes last, as in Adventure's hex
+    // strings. Six and three digits are opaque. Seven digits keep their earlier meaning, a
+    // six-digit color followed by one character of text.
+    static long parseShadowPacked(char[] src, int start) {
+        if (start >= src.length || src[start] != '#') return -1L;
+        int count = 0;
+        long digits = 0;
+        while (count < 8 && start + 1 + count < src.length) {
+            final int digit = hexVal(src[start + 1 + count]);
+            if (digit == -1) break;
+            digits = (digits << 4) | digit;
+            count++;
+        }
+        final int argb;
+        if (count == 8) {
+            argb = (int) ((digits & 0xFF) << 24 | digits >>> 8);
+        } else if (count == 6 || count == 7) {
+            argb = OPAQUE_ALPHA | (int) (count == 7 ? digits >>> 4 : digits);
+            count = 6;
+        } else if (count == 4) {
+            argb = expand((int) (digits & 0xF)) << 24 | expand((int) (digits >>> 12 & 0xF)) << 16
+                    | expand((int) (digits >>> 8 & 0xF)) << 8 | expand((int) (digits >>> 4 & 0xF));
+        } else if (count == 3) {
+            argb = OPAQUE_ALPHA | expand((int) (digits >>> 8 & 0xF)) << 16
+                    | expand((int) (digits >>> 4 & 0xF)) << 8 | expand((int) (digits & 0xF));
+        } else {
+            return -1L;
+        }
+        return ((long) (count + 1) << 32) | (argb & 0xFFFFFFFFL);
+    }
+
+    // One hex digit of a short form stands for two equal digits.
+    private static int expand(int digit) {
+        return digit * 17;
     }
 
     private static void applyDecoration(Style.Builder builder, short decorations, TextDecoration decoration) {

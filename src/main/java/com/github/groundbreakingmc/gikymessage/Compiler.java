@@ -35,6 +35,7 @@ final class Compiler {
     private static final byte ACTION_COLOR = 11;
     private static final byte ACTION_STYLE = 12;
     private static final byte ACTION_FONT = 13;
+    private static final byte ACTION_LANG = 14;
 
     private Compiler() {
     }
@@ -665,7 +666,9 @@ final class Compiler {
 
                 case ACTION_SPRITE -> selectedContentPriority >= 1;
 
-                case ACTION_GRADIENT -> selectedContentPriority >= 2;
+                case ACTION_LANG -> selectedContentPriority >= 2;
+
+                case ACTION_GRADIENT -> selectedContentPriority >= 3;
 
                 default -> false;
             };
@@ -676,7 +679,7 @@ final class Compiler {
                         ACTION_URL,
                         ACTION_COPY,
                         ACTION_SHOW,
-                        ACTION_HEAD, ACTION_COLOR, ACTION_STYLE -> true;
+                        ACTION_HEAD, ACTION_COLOR, ACTION_STYLE, ACTION_LANG -> true;
 
                 default -> false;
             };
@@ -946,8 +949,24 @@ final class Compiler {
                     colorDynamic = dynamic;
                 }
 
-                case ACTION_GRADIENT -> {
+                case ACTION_LANG -> {
                     selectedContentPriority = 2;
+                    selectedContentType = ACTION_LANG;
+                    selectedContentDynamic = dynamic;
+
+                    if (quoted) {
+                        selectedContentValue = quotedValue;
+                        selectedContentValueStart = -1;
+                        selectedContentValueEnd = -1;
+                    } else {
+                        selectedContentValue = null;
+                        selectedContentValueStart = valueStart;
+                        selectedContentValueEnd = valueEnd;
+                    }
+                }
+
+                case ACTION_GRADIENT -> {
+                    selectedContentPriority = 3;
                     selectedContentType = ACTION_GRADIENT;
                     selectedContentDynamic = false;
 
@@ -1084,6 +1103,15 @@ final class Compiler {
                     parseKey("sprite", selectedContentValue),
                     contentStyle
             );
+        } else if (selectedContentType == ACTION_LANG) {
+            if (!Platform.TRANSLATION_FALLBACKS) throw unsupported("Translations", "4.13");
+            final Token text = wrapContent(innerText, children, childCount, contentStyle);
+            if (selectedContentDynamic) {
+                final DynamicValue key = parseDynamicValue(selectedContentValue, placeholders);
+                contentToken = Token.Translated.create(text, key.staticParts, key.placeholderIndices);
+            } else {
+                contentToken = Token.Translated.create(text, selectedContentValue, isDynamic(text));
+            }
         } else {
             if (selectedContentType == ACTION_GRADIENT) {
                 final int[] gradientColors =
@@ -1307,7 +1335,8 @@ final class Compiler {
                 || token instanceof Token.DynChildren
                 || token instanceof Token.GradientContent
                 || token instanceof Token.ColorContent
-                || token instanceof Token.StyleContent;
+                || token instanceof Token.StyleContent
+                || token instanceof Token.Translated;
     }
 
     private static HoverEvent<?> buildStaticHover(String show) {
@@ -1502,6 +1531,13 @@ final class Compiler {
                         && source[offset + 2] == 'n'
                         && source[offset + 3] == 't') {
                     yield ACTION_FONT;
+                }
+
+                if (first == 'l'
+                        && source[offset + 1] == 'a'
+                        && source[offset + 2] == 'n'
+                        && source[offset + 3] == 'g') {
+                    yield ACTION_LANG;
                 }
 
                 yield ACTION_UNKNOWN;

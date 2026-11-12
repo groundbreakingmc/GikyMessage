@@ -555,6 +555,61 @@ interface Token {
         }
     }
 
+    // Replaces content with a translation that each client looks up in its own language. The
+    // content's text, placeholders resolved, is the fallback for clients without the key, and
+    // the translation takes the content root's style. Nested styles of the content are not kept.
+    // Only segments with a lang action create this token; other templates pay nothing for it.
+    final class Translated implements Token {
+
+        private final Token content;
+        // The key when it has no placeholders; otherwise it is built from the parts per render.
+        private final String key;
+        private final String[] keyParts;
+        private final int[] keyPlaceholders;
+
+        static Token create(Token content, String key, boolean dynamicContent) {
+            final Translated token = new Translated(content, key, NO_PARTS, NO_PH);
+            return dynamicContent ? token : new Constant(token.render(null, null));
+        }
+
+        static Token create(Token content, String[] keyParts, int[] keyPlaceholders) {
+            return new Translated(content, null, keyParts, keyPlaceholders);
+        }
+
+        private Translated(Token content, String key, String[] keyParts, int[] keyPlaceholders) {
+            this.content = content;
+            this.key = key;
+            this.keyParts = keyParts;
+            this.keyPlaceholders = keyPlaceholders;
+        }
+
+        @Override
+        public Component render(Object[] placeholders, long[] numbers) {
+            final Component rendered = this.content.render(placeholders, numbers);
+            final String key = this.key != null ? this.key
+                    : buildText(this.keyParts, this.keyPlaceholders, placeholders, numbers);
+            // Like an invalid color, an empty key leaves the content as it is.
+            if (key.isEmpty()) return rendered;
+            final String fallback = contentText(rendered);
+            final Component translated = fallback.isEmpty()
+                    ? Component.translatable(key)
+                    : Component.translatable(key, fallback);
+            return rendered.style().isEmpty() ? translated : translated.style(rendered.style());
+        }
+    }
+
+    private static String contentText(Component component) {
+        if (component instanceof TextComponent text && text.children().isEmpty()) return text.content();
+        final StringBuilder builder = TL_SB.get();
+        builder.setLength(0);
+        try {
+            appendText(builder, component);
+            return builder.toString();
+        } finally {
+            releaseBuilder(builder);
+        }
+    }
+
     final class Obj implements Token {
 
         private final Component component;

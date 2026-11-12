@@ -118,9 +118,9 @@ Spaces are allowed in unquoted values. Quote values containing commas, or when l
 or trailing spaces must be preserved. Quoted values use `"` or `'`; escape the matching
 quote or a backslash with `\`.
 
-Placeholders are supported in `run`, `suggest`, `url`, `copy`, `show`, `head`, `style`
-and `color`. `insert`, `page`, `sprite`, `font`, and the gradient color list are static.
-A gradient's text content may still contain placeholders.
+Placeholders are supported in `run`, `suggest`, `url`, `copy`, `show`, `head`, `lang`,
+`style` and `color`. `insert`, `page`, `sprite`, `font`, and the gradient color list are
+static. A gradient's text content may still contain placeholders.
 
 #### Available actions
 
@@ -137,6 +137,7 @@ A gradient's text content may still contain placeholders.
 | `style` | static or dynamic formatting | Color and decorations across the text |
 | `color` | static or dynamic color | Uniform color across the text |
 | `gradient` | per-code-point color interpolation | Color gradient across the text |
+| `lang` | `Component.translatable(key, fallback)` | Text the client translates into its language |
 | `head` | `ObjectContents.playerHead(...)` | Insert a player head object |
 | `sprite` | `ObjectContents.sprite(Key)` | Insert a texture sprite |
 
@@ -150,6 +151,7 @@ A gradient's text content may still contain placeholders.
 [Hover me](show:"&aGreen tooltip!")
 [Shift-click](insert:"hello ")
 [★](font:myserver:icons) {player}
+[Diamond](lang:item.minecraft.diamond)
 [Turn page](page:2)
 [Rainbow](gradient:#ff0000-#00ff00-#0000ff)
 [{player}](head:{player})
@@ -175,7 +177,7 @@ provided color stops, including text-node children of replacements.
 
 Multiple actions can be combined on one segment. One click action is selected in priority
 order `run` → `suggest` → `url` → `copy` → `page`; one content action in priority order
-`head` → `sprite` → `gradient`. The last occurrence of the selected action wins. The
+`head` → `sprite` → `lang` → `gradient`. The last occurrence of the selected action wins. The
 last `show`, `insert` and `font` win independently. The first `style` and `color` win,
 and apply after content processing in that order:
 
@@ -330,8 +332,9 @@ path preserves that runtime's less strict head-name validation; exact results an
 boundaries are described in [VALIDATION.md](VALIDATION.md).
 
 GM also loads on an older Adventure and renders everything that Adventure can
-represent. A template that uses shadow colors before Adventure 4.18, or `head` or
-`sprite` before 4.25, fails to compile with `TextFormatException` naming the version.
+represent. A template that uses `lang` before Adventure 4.13, shadow colors before 4.18,
+or `head` or `sprite` before 4.25, fails to compile with `TextFormatException` naming
+the version.
 
 ### Dependencies and packaging
 
@@ -361,6 +364,24 @@ The build produces `1.0.0-beta` prerelease artifacts in `build/libs`: the librar
 `GikyMessage-1.0.0-beta-sources.jar` and `GikyMessage-1.0.0-beta-javadoc.jar`.
 Public release/publication configuration is prepared separately;
 `publishToMavenLocal` is a local installation.
+
+### Translations
+
+```text
+[Diamond](lang:item.minecraft.diamond)
+&6[VIP](lang:myserver.tag.vip) {name}
+[{rank}](lang:myserver.rank.{rank})
+```
+
+`lang` replaces the segment with a translatable component. Each client shows the
+translation for the key in its own language, from the game or a resource pack, so one
+rendered component serves players of every language. The segment's text, with
+placeholders resolved, is the fallback for clients without the key; an empty segment
+has none. The translation takes the formatting of the segment's text; formatting nested
+deeper inside it is not kept. The key may contain placeholders; an empty key leaves the
+segment as ordinary text. Translation arguments are not supported. A segment whose key
+and text are static is built once, during compilation. Templates without `lang` are
+unaffected.
 
 ### Uniform color
 

@@ -1,6 +1,7 @@
 package com.github.groundbreakingmc.gikymessage;
 
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.TranslatableComponent;
 import net.kyori.adventure.text.format.Style;
 
 import java.lang.reflect.Method;
@@ -19,6 +20,9 @@ final class Platform {
     /** Object components such as player heads and sprites, added in Adventure 4.25. */
     static final boolean OBJECT_COMPONENTS = declares(Component.class, "object")
             && present("net.kyori.adventure.text.object.ObjectContents");
+
+    /** Fallback text of a translatable component, added in Adventure 4.13. */
+    static final boolean TRANSLATION_FALLBACKS = declares(TranslatableComponent.class, "fallback");
 
     private Platform() {
     }

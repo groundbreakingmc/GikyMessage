@@ -98,7 +98,7 @@ Here `&7!` keeps the template's gray color even when the replacement has its own
 
 ### Bracketed segments — `[text](action:value)`
 
-Applies click events, hover text, gradients, or object components to a span of text.
+Applies click events, hover text, fonts, gradients, or object components to a span of text.
 A segment's actions and the formatting set inside it apply to its own text only, also
 when the segment opens the template.
 
@@ -113,8 +113,8 @@ or trailing spaces must be preserved. Quoted values use `"` or `'`; escape the m
 quote or a backslash with `\`.
 
 Placeholders are supported in `run`, `suggest`, `url`, `copy`, `show`, `head`, `style`
-and `color`. `insert`, `page`, `sprite`, and the gradient color list are static. A
-gradient's text content may still contain placeholders.
+and `color`. `insert`, `page`, `sprite`, `font`, and the gradient color list are static.
+A gradient's text content may still contain placeholders.
 
 #### Available actions
 
@@ -126,6 +126,7 @@ gradient's text content may still contain placeholders.
 | `copy` | `ClickEvent.copyToClipboard(...)` | Copy text to clipboard |
 | `show` | `HoverEvent.showText(...)` | Show hover tooltip (supports full format syntax) |
 | `insert` | `Style.insertion(...)` | Shift+click inserts text into chat |
+| `font` | `Style.font(Key)` | Draw the text with a resource-pack font |
 | `page` | `ClickEvent.changePage(n)` | Turn to page `n` in a book |
 | `style` | static or dynamic formatting | Color and decorations across the text |
 | `color` | static or dynamic color | Uniform color across the text |
@@ -142,6 +143,7 @@ gradient's text content may still contain placeholders.
 [Copy IP](copy:play.example.com)
 [Hover me](show:"&aGreen tooltip!")
 [Shift-click](insert:"hello ")
+[★](font:myserver:icons) {player}
 [Turn page](page:2)
 [Rainbow](gradient:#ff0000-#00ff00-#0000ff)
 [{player}](head:{player})
@@ -168,8 +170,8 @@ provided color stops, including text-node children of replacements.
 Multiple actions can be combined on one segment. One click action is selected in priority
 order `run` → `suggest` → `url` → `copy` → `page`; one content action in priority order
 `head` → `sprite` → `gradient`. The last occurrence of the selected action wins. The
-last `show` and `insert` win independently. The first `style` and `color` win, and apply
-after content processing in that order:
+last `show`, `insert` and `font` win independently. The first `style` and `color` win,
+and apply after content processing in that order:
 
 ```
 [Click](run:"/spawn", show:"&aTeleport to spawn")

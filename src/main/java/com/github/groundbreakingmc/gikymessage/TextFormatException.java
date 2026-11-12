@@ -1,9 +1,9 @@
 package com.github.groundbreakingmc.gikymessage;
 
 /**
- * Reports a template that cannot be compiled. Either a selected sprite key is invalid, and
- * its cause is preserved, or the template uses a feature that the Adventure API in use
- * cannot represent: shadow colors before 4.18, head and sprite objects before 4.25.
+ * Reports a template that cannot be compiled. Either the selected sprite key or a font key
+ * is invalid, and its cause is preserved, or the template uses a feature that the Adventure
+ * API in use cannot represent: shadow colors before 4.18, head and sprite objects before 4.25.
  * Other malformed syntax may be tolerated; this is not a general validation result.
  *
  * @see Text#of(String)

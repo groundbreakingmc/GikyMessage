@@ -43,8 +43,8 @@ public sealed interface Text<C> permits TextImpl {
      *
      * @param raw the format string, or null for empty text
      * @return the compiled text
-     * @throws TextFormatException      if a selected sprite key is invalid, or the template uses
-     *                                  a feature that the Adventure in use lacks
+     * @throws TextFormatException      if the selected sprite key or a font key is invalid, or the
+     *                                  template uses a feature that the Adventure in use lacks
      * @throws IllegalArgumentException if Adventure rejects another action value
      * @since 1.0
      */
@@ -62,8 +62,8 @@ public sealed interface Text<C> permits TextImpl {
      * @param <C>     the render context type
      * @return the compiled text with its bound handlers
      * @throws NullPointerException     if factory is null
-     * @throws TextFormatException      if a selected sprite key is invalid, or the template uses
-     *                                  a feature that the Adventure in use lacks
+     * @throws TextFormatException      if the selected sprite key or a font key is invalid, or the
+     *                                  template uses a feature that the Adventure in use lacks
      * @throws IllegalArgumentException if Adventure rejects another action value
      * @throws RuntimeException         if binding fails; remaining keys are not bound
      * @since 1.0
@@ -78,8 +78,8 @@ public sealed interface Text<C> permits TextImpl {
      *
      * @param raw the format string, or null for empty text
      * @return the compiled text with literal fallbacks
-     * @throws TextFormatException      if a selected sprite key is invalid, or the template uses
-     *                                  a feature that the Adventure in use lacks
+     * @throws TextFormatException      if the selected sprite key or a font key is invalid, or the
+     *                                  template uses a feature that the Adventure in use lacks
      * @throws IllegalArgumentException if Adventure rejects another action value
      * @since 1.0
      */
@@ -99,8 +99,8 @@ public sealed interface Text<C> permits TextImpl {
      * @param <C>     the render context type
      * @return the compiled text with bound handlers and an optional result cache
      * @throws NullPointerException     if factory is null
-     * @throws TextFormatException      if a selected sprite key is invalid, or the template uses
-     *                                  a feature that the Adventure in use lacks
+     * @throws TextFormatException      if the selected sprite key or a font key is invalid, or the
+     *                                  template uses a feature that the Adventure in use lacks
      * @throws IllegalArgumentException if Adventure rejects another action value
      * @throws RuntimeException         if binding fails; remaining keys are not bound
      * @since 1.0

@@ -34,6 +34,7 @@ final class Compiler {
     private static final byte ACTION_GRADIENT = 10;
     private static final byte ACTION_COLOR = 11;
     private static final byte ACTION_STYLE = 12;
+    private static final byte ACTION_FONT = 13;
 
     private Compiler() {
     }
@@ -587,6 +588,12 @@ final class Compiler {
         int insertionValueStart = -1;
         int insertionValueEnd = -1;
 
+        boolean hasFont = false;
+
+        String fontValue = null;
+        int fontValueStart = -1;
+        int fontValueEnd = -1;
+
         int position = actionStart;
 
         while (position < actionEnd) {
@@ -642,7 +649,7 @@ final class Compiler {
             }
 
             final boolean captureValue = switch (action) {
-                case ACTION_RUN, ACTION_HEAD, ACTION_SHOW, ACTION_INSERT -> true;
+                case ACTION_RUN, ACTION_HEAD, ACTION_SHOW, ACTION_INSERT, ACTION_FONT -> true;
 
                 case ACTION_COLOR -> colorValue == null;
 
@@ -883,6 +890,20 @@ final class Compiler {
                     }
                 }
 
+                case ACTION_FONT -> {
+                    hasFont = true;
+
+                    if (quoted) {
+                        fontValue = quotedValue;
+                        fontValueStart = -1;
+                        fontValueEnd = -1;
+                    } else {
+                        fontValue = null;
+                        fontValueStart = valueStart;
+                        fontValueEnd = valueEnd;
+                    }
+                }
+
                 case ACTION_HEAD -> {
                     selectedContentPriority = 0;
                     selectedContentType = ACTION_HEAD;
@@ -983,6 +1004,21 @@ final class Compiler {
             );
         }
 
+        if (hasFont
+                && fontValue == null
+                && fontValueStart != -1) {
+            fontValue = new String(
+                    source,
+                    fontValueStart,
+                    fontValueEnd - fontValueStart
+            );
+        }
+
+        // An empty font names nothing and leaves the font to the surrounding text.
+        final Key font = fontValue == null || fontValue.isEmpty()
+                ? null
+                : parseKey("font", fontValue);
+
         final byte clickType = selectedClickType;
         final String clickValue = selectedClickValue;
         final boolean clickDynamic = selectedClickDynamic;
@@ -1015,7 +1051,7 @@ final class Compiler {
                 staticClick,
                 staticHover,
                 insertionValue,
-                null
+                font
         );
 
         Token contentToken;
@@ -1045,7 +1081,7 @@ final class Compiler {
             }
         } else if (selectedContentType == ACTION_SPRITE) {
             contentToken = Token.Obj.sprite(
-                    parseSpriteKey(selectedContentValue),
+                    parseKey("sprite", selectedContentValue),
                     contentStyle
             );
         } else {
@@ -1461,6 +1497,13 @@ final class Compiler {
                     yield ACTION_PAGE;
                 }
 
+                if (first == 'f'
+                        && source[offset + 1] == 'o'
+                        && source[offset + 2] == 'n'
+                        && source[offset + 3] == 't') {
+                    yield ACTION_FONT;
+                }
+
                 yield ACTION_UNKNOWN;
             }
 
@@ -1640,11 +1683,11 @@ final class Compiler {
     private record DynamicValue(String[] staticParts, int[] placeholderIndices) {
     }
 
-    private static Key parseSpriteKey(String value) {
+    private static Key parseKey(String action, String value) {
         try {
             return Key.key(value);
         } catch (RuntimeException exception) {
-            throw new TextFormatException("Invalid sprite key: " + value, exception);
+            throw new TextFormatException("Invalid " + action + " key: " + value, exception);
         }
     }
 

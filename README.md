@@ -494,7 +494,7 @@ Build and check on Java 21:
 ./gradlew test javadoc jar sourcesJar javadocJar
 ```
 
-The build produces `1.0.0-beta` prerelease artifacts in `build/libs`: the library JAR,
-`GikyMessage-1.0.0-beta-sources.jar` and `GikyMessage-1.0.0-beta-javadoc.jar`.
+The build produces its artifacts in `build/libs`: the library JAR,
+`GikyMessage-<version>-sources.jar` and `GikyMessage-<version>-javadoc.jar`.
 Public release/publication configuration is prepared separately;
 `publishToMavenLocal` is a local installation.

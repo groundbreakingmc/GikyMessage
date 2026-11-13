@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "com.github.groundbreakingmc"
-version = "1.0.0-beta"
+version = "1.0.0-rc.1"
 
 repositories {
     mavenCentral()

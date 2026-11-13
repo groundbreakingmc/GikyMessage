@@ -1,6 +1,7 @@
 package com.github.groundbreakingmc.gikymessage;
 
 import net.kyori.adventure.key.Key;
+import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.*;
@@ -37,6 +38,8 @@ final class Compiler {
     private static final byte ACTION_FONT = 13;
     private static final byte ACTION_LANG = 14;
     private static final byte ACTION_PHASE = 15;
+    private static final byte ACTION_IF = 16;
+    private static final byte ACTION_UNLESS = 17;
 
     private Compiler() {
     }
@@ -598,6 +601,12 @@ final class Compiler {
 
         String phaseValue = null;
 
+        String ifValue = null;
+        boolean ifDynamic = false;
+
+        String unlessValue = null;
+        boolean unlessDynamic = false;
+
         int position = actionStart;
 
         while (position < actionEnd) {
@@ -654,7 +663,7 @@ final class Compiler {
 
             final boolean captureValue = switch (action) {
                 case ACTION_RUN, ACTION_HEAD, ACTION_SHOW, ACTION_INSERT, ACTION_FONT,
-                        ACTION_PHASE -> true;
+                        ACTION_PHASE, ACTION_IF, ACTION_UNLESS -> true;
 
                 case ACTION_COLOR -> colorValue == null;
 
@@ -683,7 +692,8 @@ final class Compiler {
                         ACTION_URL,
                         ACTION_COPY,
                         ACTION_SHOW,
-                        ACTION_HEAD, ACTION_COLOR, ACTION_STYLE, ACTION_LANG -> true;
+                        ACTION_HEAD, ACTION_COLOR, ACTION_STYLE, ACTION_LANG,
+                        ACTION_IF, ACTION_UNLESS -> true;
 
                 default -> false;
             };
@@ -899,6 +909,16 @@ final class Compiler {
 
                 case ACTION_PHASE -> phaseValue = quoted
                         ? quotedValue : new String(source, valueStart, valueEnd - valueStart);
+
+                case ACTION_IF -> {
+                    ifValue = quoted ? quotedValue : new String(source, valueStart, valueEnd - valueStart);
+                    ifDynamic = dynamic;
+                }
+
+                case ACTION_UNLESS -> {
+                    unlessValue = quoted ? quotedValue : new String(source, valueStart, valueEnd - valueStart);
+                    unlessDynamic = dynamic;
+                }
 
                 case ACTION_FONT -> {
                     hasFont = true;
@@ -1185,11 +1205,10 @@ final class Compiler {
             }
         }
 
+        final Token segment;
         if (!clickDynamic && !showDynamic) {
-            return contentToken;
-        }
-
-        if (clickDynamic && showDynamic) {
+            segment = contentToken;
+        } else if (clickDynamic && showDynamic) {
             final DynamicValue dynamicClick = parseDynamicValue(
                     clickValue,
                     placeholders
@@ -1201,7 +1220,7 @@ final class Compiler {
                             placeholders
                     );
 
-            return new Token.MetaFullDyn(
+            segment = new Token.MetaFullDyn(
                     contentToken,
                     clickType,
                     dynamicClick.staticParts,
@@ -1212,33 +1231,48 @@ final class Compiler {
                     null,
                     dynamicHover
             );
-        }
-
-        if (clickDynamic) {
+        } else if (clickDynamic) {
             final DynamicValue dynamicClick = parseDynamicValue(
                     clickValue,
                     placeholders
             );
 
-            return new Token.MetaDyn(
+            segment = new Token.MetaDyn(
                     contentToken,
                     clickType,
                     dynamicClick.staticParts,
                     dynamicClick.placeholderIndices,
                     null
             );
+        } else {
+            segment = new Token.MetaDyn(
+                    contentToken,
+                    Token.MetaDyn.SHOW,
+                    Token.NO_PARTS,
+                    Token.NO_PH,
+                    compileDynamicHover(
+                            showText,
+                            placeholders
+                    )
+            );
         }
 
-        return new Token.MetaDyn(
-                contentToken,
-                Token.MetaDyn.SHOW,
-                Token.NO_PARTS,
-                Token.NO_PH,
-                compileDynamicHover(
-                        showText,
-                        placeholders
-                )
-        );
+        // Conditions decide about the finished segment, so they apply last.
+        final Token shown = condition(segment, ifValue, ifDynamic, false, placeholders);
+        return condition(shown, unlessValue, unlessDynamic, true, placeholders);
+    }
+
+    // A condition without placeholders is decided here; the segment is kept or replaced by nothing.
+    private static Token condition(Token segment, String value, boolean dynamic, boolean negated,
+                                   PlaceholderTable placeholders) {
+        if (value == null) return segment;
+        final DynamicValue parts = dynamic ? parseDynamicValue(value, placeholders)
+                : new DynamicValue(new String[]{value}, Token.NO_PH);
+        if (parts.placeholderIndices.length != 0) {
+            return new Token.Conditional(segment, parts.staticParts, parts.placeholderIndices, negated);
+        }
+        return Token.Conditional.hasText(parts.staticParts) != negated
+                ? segment : new Token.Constant(Component.empty());
     }
 
     // Any decimal number; a whole cycle of the colors is 1, so only the fraction matters.
@@ -1362,7 +1396,8 @@ final class Compiler {
                 || token instanceof Token.GradientContent
                 || token instanceof Token.ColorContent
                 || token instanceof Token.StyleContent
-                || token instanceof Token.Translated;
+                || token instanceof Token.Translated
+                || token instanceof Token.Conditional;
     }
 
     private static HoverEvent<?> buildStaticHover(String show) {
@@ -1590,8 +1625,14 @@ final class Compiler {
                 yield ACTION_UNKNOWN;
             }
 
+            case 2 -> regionEquals(source, offset, length, "if") ? ACTION_IF : ACTION_UNKNOWN;
+
             case 6 -> {
                 final char first = source[offset];
+
+                if (regionEquals(source, offset, length, "unless")) {
+                    yield ACTION_UNLESS;
+                }
 
                 if (first == 'i'
                         && source[offset + 1] == 'n'

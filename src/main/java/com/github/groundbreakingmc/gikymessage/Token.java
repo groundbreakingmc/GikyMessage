@@ -613,6 +613,57 @@ interface Token {
         }
     }
 
+    // Shows its segment only while the condition has text, or only while it has none when
+    // negated. Blank text counts as none. Values are inspected where they are; nothing is
+    // built to decide, and a hidden segment is not rendered at all.
+    final class Conditional implements Token {
+
+        private final Token segment;
+        private final String[] staticParts;
+        private final int[] placeholderIndices;
+        private final boolean negated;
+
+        Conditional(Token segment, String[] staticParts, int[] placeholderIndices, boolean negated) {
+            this.segment = segment;
+            this.staticParts = staticParts;
+            this.placeholderIndices = placeholderIndices;
+            this.negated = negated;
+        }
+
+        @Override
+        public Component render(Object[] placeholders, long[] numbers) {
+            boolean present = hasText(this.staticParts);
+            for (int index = 0; !present && index < this.placeholderIndices.length; index++) {
+                present = valueHasText(placeholders[this.placeholderIndices[index]]);
+            }
+            return present != this.negated ? this.segment.render(placeholders, numbers) : Component.empty();
+        }
+
+        static boolean hasText(String[] parts) {
+            for (final String part : parts) {
+                if (part != null && !part.isBlank()) return true;
+            }
+            return false;
+        }
+
+        // A number always has digits.
+        private static boolean valueHasText(Object value) {
+            if (value instanceof String text) return !text.isBlank();
+            if (isNumber(value)) return true;
+            return componentHasText((Component) value);
+        }
+
+        // Components other than text, such as translations, show something of their own.
+        private static boolean componentHasText(Component component) {
+            if (!(component instanceof TextComponent text) || !text.content().isBlank()) return true;
+            final List<Component> children = component.children();
+            for (int index = 0, size = children.size(); index < size; index++) {
+                if (componentHasText(children.get(index))) return true;
+            }
+            return false;
+        }
+    }
+
     final class Obj implements Token {
 
         private final Component component;

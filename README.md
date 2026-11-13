@@ -119,8 +119,8 @@ or trailing spaces must be preserved. Quoted values use `"` or `'`; escape the m
 quote or a backslash with `\`.
 
 Placeholders are supported in `run`, `suggest`, `url`, `copy`, `show`, `head`, `lang`,
-`style` and `color`. `insert`, `page`, `sprite`, `font`, `phase` and the gradient color
-list are static. A gradient's text content may still contain placeholders.
+`style`, `color`, `if` and `unless`. `insert`, `page`, `sprite`, `font`, `phase` and the
+gradient color list are static. A gradient's text content may still contain placeholders.
 
 #### Available actions
 
@@ -139,6 +139,8 @@ list are static. A gradient's text content may still contain placeholders.
 | `gradient` | per-code-point color interpolation | Color gradient across the text |
 | `phase` | shift of the gradient | Move the gradient's colors along the text |
 | `lang` | `Component.translatable(key, fallback)` | Text the client translates into its language |
+| `if` | condition | Show the segment only if the value has text |
+| `unless` | condition | Show the segment only if the value has no text |
 | `head` | `ObjectContents.playerHead(...)` | Insert a player head object |
 | `sprite` | `ObjectContents.sprite(Key)` | Insert a texture sprite |
 
@@ -156,6 +158,7 @@ list are static. A gradient's text content may still contain placeholders.
 [Turn page](page:2)
 [Rainbow](gradient:#ff0000-#00ff00-#0000ff)
 [Flowing](gradient:#ff0000-#0000ff, phase:0.25)
+[&7\[{clan}&7\] ](if:{clan})
 [{player}](head:{player})
 [icon](sprite:minecraft:textures/item/diamond.png)
 ```
@@ -189,13 +192,34 @@ The phase is static. Without a gradient it does nothing; an invalid number is ig
 
 ---
 
+### Conditional segments
+
+```
+[&7\[{clan}&7\] ](if:{clan}){player}
+[&8no clan](unless:{clan})
+[{prefix} ](if:{prefix}, unless:{hidden})
+```
+
+`if` shows the segment only when its value has text; `unless` only when it has none.
+Text made of spaces counts as none, and so does a component that holds only formatting,
+such as a prefix that sets a color and nothing else. Numbers, and components other than
+text, such as translations, count as text. A missing value renders as its literal
+`{key}` and therefore counts as text. Several placeholders in one value count as text if
+any of them has some. A segment with both shows when both hold; the last `if` and the
+last `unless` win. A hidden segment is not rendered at all and leaves nothing behind;
+put spaces and brackets that belong to the value inside the segment, escaping brackets
+as `\[` and `\]`.
+
+---
+
 ### Combining actions
 
 Multiple actions can be combined on one segment. One click action is selected in priority
 order `run` → `suggest` → `url` → `copy` → `page`; one content action in priority order
 `head` → `sprite` → `lang` → `gradient`. The last occurrence of the selected action wins. The
 last `show`, `insert`, `font` and `phase` win independently. The first `style` and `color`
-win, and apply after content processing in that order:
+win, and apply after content processing in that order. `if` and `unless` decide about the
+finished segment:
 
 ```
 [Click](run:"/spawn", show:"&aTeleport to spawn")

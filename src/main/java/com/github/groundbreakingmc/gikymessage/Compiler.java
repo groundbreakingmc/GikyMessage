@@ -36,6 +36,7 @@ final class Compiler {
     private static final byte ACTION_STYLE = 12;
     private static final byte ACTION_FONT = 13;
     private static final byte ACTION_LANG = 14;
+    private static final byte ACTION_PHASE = 15;
 
     private Compiler() {
     }
@@ -595,6 +596,8 @@ final class Compiler {
         int fontValueStart = -1;
         int fontValueEnd = -1;
 
+        String phaseValue = null;
+
         int position = actionStart;
 
         while (position < actionEnd) {
@@ -650,7 +653,8 @@ final class Compiler {
             }
 
             final boolean captureValue = switch (action) {
-                case ACTION_RUN, ACTION_HEAD, ACTION_SHOW, ACTION_INSERT, ACTION_FONT -> true;
+                case ACTION_RUN, ACTION_HEAD, ACTION_SHOW, ACTION_INSERT, ACTION_FONT,
+                        ACTION_PHASE -> true;
 
                 case ACTION_COLOR -> colorValue == null;
 
@@ -893,6 +897,9 @@ final class Compiler {
                     }
                 }
 
+                case ACTION_PHASE -> phaseValue = quoted
+                        ? quotedValue : new String(source, valueStart, valueEnd - valueStart);
+
                 case ACTION_FONT -> {
                     hasFont = true;
 
@@ -1129,7 +1136,8 @@ final class Compiler {
                             rawContent,
                             gradientColors,
                             contentStyle,
-                            isDynamic(rawContent)
+                            isDynamic(rawContent),
+                            parsePhase(phaseValue)
                     );
                 } else {
                     contentToken = wrapContent(
@@ -1231,6 +1239,24 @@ final class Compiler {
                         placeholders
                 )
         );
+    }
+
+    // Any decimal number; a whole cycle of the colors is 1, so only the fraction matters.
+    private static float parsePhase(String value) {
+        if (value == null || value.isEmpty()) return 0f;
+        for (int index = 0; index < value.length(); index++) {
+            final char character = value.charAt(index);
+            if ((character < '0' || character > '9') && character != '.' && character != '-' && character != '+') {
+                return 0f;
+            }
+        }
+        final double phase;
+        try {
+            phase = Double.parseDouble(value);
+        } catch (NumberFormatException invalid) {
+            return 0f;
+        }
+        return (float) (phase - Math.floor(phase));
     }
 
     private static DynamicValue parseDynamicValue(String value, PlaceholderTable placeholders) {
@@ -1557,6 +1583,9 @@ final class Compiler {
                         && source[offset + 3] == 'l'
                         && source[offset + 4] == 'e') {
                     yield ACTION_STYLE;
+                }
+                if (regionEquals(source, offset, length, "phase")) {
+                    yield ACTION_PHASE;
                 }
                 yield ACTION_UNKNOWN;
             }

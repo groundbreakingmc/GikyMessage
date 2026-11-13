@@ -490,22 +490,25 @@ interface Token {
         private final Token content;
         private final int[] colors;
         private final Style baseStyle;
+        // Fraction of a full color cycle in [0, 1); zero is the plain gradient.
+        private final float phase;
         private volatile Style[] styleCache0;
         private volatile Style[] styleCache1;
         private volatile Style[] styleCache2;
         private volatile Style[] styleCache3;
 
-        static Token create(Token content, int[] colors, Style baseStyle, boolean dynamic) {
-            if (dynamic) return new GradientContent(content, colors, baseStyle);
+        static Token create(Token content, int[] colors, Style baseStyle, boolean dynamic, float phase) {
+            if (dynamic) return new GradientContent(content, colors, baseStyle, phase);
             final Component rendered = content.render(null, null);
             return new Constant(renderGradient(rendered,
-                    gradientStyles(countCodePoints(rendered), colors), baseStyle));
+                    gradientStyles(countCodePoints(rendered), colors, phase), baseStyle));
         }
 
-        private GradientContent(Token content, int[] colors, Style baseStyle) {
+        private GradientContent(Token content, int[] colors, Style baseStyle, float phase) {
             this.content = content;
             this.colors = colors;
             this.baseStyle = baseStyle;
+            this.phase = phase;
         }
 
         @Override
@@ -544,7 +547,7 @@ interface Token {
 
             if (styles != null && styles.length == length) return styles;
 
-            styles = gradientStyles(length, this.colors);
+            styles = gradientStyles(length, this.colors, this.phase);
             switch (slot) {
                 case 0 -> this.styleCache0 = styles;
                 case 1 -> this.styleCache1 = styles;
@@ -768,13 +771,16 @@ interface Token {
         return children.isEmpty() ? component : component.children(children);
     }
 
-    private static Style[] gradientStyles(int length, int[] colors) {
+    private static Style[] gradientStyles(int length, int[] colors, float phase) {
         if (length == 0) return EMPTY_STYLES;
 
         final Style[] styles = new Style[length];
         for (int index = 0; index < length; index++) {
             final float position = length == 1 ? 0f : (float) index / (length - 1);
-            final int rgb = StyleUtils.interpolate(colors, position);
+            // Without a phase the gradient is computed exactly as before phases existed.
+            final int rgb = phase == 0f
+                    ? StyleUtils.interpolate(colors, position)
+                    : StyleUtils.interpolateCycle(colors, position, phase);
             styles[index] = Style.style(StyleUtils.textColorOf(rgb));
         }
         return styles;

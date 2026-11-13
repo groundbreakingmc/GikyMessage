@@ -119,8 +119,8 @@ or trailing spaces must be preserved. Quoted values use `"` or `'`; escape the m
 quote or a backslash with `\`.
 
 Placeholders are supported in `run`, `suggest`, `url`, `copy`, `show`, `head`, `lang`,
-`style` and `color`. `insert`, `page`, `sprite`, `font`, and the gradient color list are
-static. A gradient's text content may still contain placeholders.
+`style` and `color`. `insert`, `page`, `sprite`, `font`, `phase` and the gradient color
+list are static. A gradient's text content may still contain placeholders.
 
 #### Available actions
 
@@ -137,6 +137,7 @@ static. A gradient's text content may still contain placeholders.
 | `style` | static or dynamic formatting | Color and decorations across the text |
 | `color` | static or dynamic color | Uniform color across the text |
 | `gradient` | per-code-point color interpolation | Color gradient across the text |
+| `phase` | shift of the gradient | Move the gradient's colors along the text |
 | `lang` | `Component.translatable(key, fallback)` | Text the client translates into its language |
 | `head` | `ObjectContents.playerHead(...)` | Insert a player head object |
 | `sprite` | `ObjectContents.sprite(Key)` | Insert a texture sprite |
@@ -154,6 +155,7 @@ static. A gradient's text content may still contain placeholders.
 [Diamond](lang:item.minecraft.diamond)
 [Turn page](page:2)
 [Rainbow](gradient:#ff0000-#00ff00-#0000ff)
+[Flowing](gradient:#ff0000-#0000ff, phase:0.25)
 [{player}](head:{player})
 [icon](sprite:minecraft:textures/item/diamond.png)
 ```
@@ -171,6 +173,20 @@ Colors are separated by `-`. Accepts full (`#RRGGBB`) or short (`#RGB`) hex, as 
 The gradient is applied per Unicode code point using linear interpolation across all
 provided color stops, including text-node children of replacements.
 
+`phase` moves the colors along the text. The stops are treated as a loop that returns
+from the last color to the first; the phase is the fraction of that loop by which the
+gradient is shifted. `phase:0` is the ordinary gradient, `phase:1` equals `phase:0`, and
+negative values move the other way. Frames with evenly spaced phases make the colors flow:
+
+```
+[{player}](gradient:#ff5555-#5555ff, phase:0)
+[{player}](gradient:#ff5555-#5555ff, phase:0.25)
+[{player}](gradient:#ff5555-#5555ff, phase:0.5)
+[{player}](gradient:#ff5555-#5555ff, phase:0.75)
+```
+
+The phase is static. Without a gradient it does nothing; an invalid number is ignored.
+
 ---
 
 ### Combining actions
@@ -178,8 +194,8 @@ provided color stops, including text-node children of replacements.
 Multiple actions can be combined on one segment. One click action is selected in priority
 order `run` → `suggest` → `url` → `copy` → `page`; one content action in priority order
 `head` → `sprite` → `lang` → `gradient`. The last occurrence of the selected action wins. The
-last `show`, `insert` and `font` win independently. The first `style` and `color` win,
-and apply after content processing in that order:
+last `show`, `insert`, `font` and `phase` win independently. The first `style` and `color`
+win, and apply after content processing in that order:
 
 ```
 [Click](run:"/spawn", show:"&aTeleport to spawn")

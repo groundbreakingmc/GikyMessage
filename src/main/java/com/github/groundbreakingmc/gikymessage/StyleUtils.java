@@ -130,6 +130,23 @@ final class StyleUtils {
         return lerpColor(colors[idx], colors[idx + 1], scaled - idx);
     }
 
+    // The colors form a loop c0 -> c1 -> ... -> c(n-1) -> c0. Without a shift the text spans
+    // c0 to c(n-1), as an ordinary gradient does. The phase moves that span along the loop by a
+    // fraction of its whole length, so phases 0 and 1 give the same colors and a sequence of
+    // evenly spaced phases moves the colors smoothly along the text.
+    static int interpolateCycle(int[] colors, float position, float phase) {
+        final int count = colors.length;
+        double segment = (double) position * (count - 1) + (double) phase * count;
+        segment -= Math.floor(segment / count) * count;
+        int low = (int) segment;
+        if (low >= count) {
+            low = 0;
+            segment = 0;
+        }
+        final int high = low + 1 == count ? 0 : low + 1;
+        return lerpColor(colors[low], colors[high], (float) (segment - low));
+    }
+
     static boolean isHexChar(char c) {
         return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
     }

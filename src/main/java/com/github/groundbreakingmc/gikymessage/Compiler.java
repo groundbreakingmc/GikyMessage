@@ -1074,20 +1074,9 @@ final class Compiler {
         final String clickValue = selectedClickValue;
         final boolean clickDynamic = selectedClickDynamic;
 
-        final ClickEvent staticClick;
-
-        if (clickType != -1) {
-            staticClick = clickDynamic
-                    ? null
-                    : Token.MetaFullDyn.buildClick(
-                    clickType,
-                    clickValue
-            );
-        } else if (pageValue != -1) {
-            staticClick = ClickEvent.changePage(pageValue);
-        } else {
-            staticClick = null;
-        }
+        final ClickEvent staticClick = clickType != -1 && clickDynamic
+                ? null
+                : buildStaticClick(clickType, clickValue, pageValue);
 
         final HoverEvent<?> staticHover =
                 showText != null && !showDynamic
@@ -1125,13 +1114,19 @@ final class Compiler {
                 contentToken = new Token.ObjDyn(
                         dynamicHead.staticParts,
                         dynamicHead.placeholderIndices,
-                        contentStyle
+                        contentStyle,
+                        transform(wrapContent(innerText, children, childCount, contentStyle), transforms)
                 );
             } else {
-                contentToken = Token.Obj.head(
-                        selectedContentValue,
-                        contentStyle
-                );
+                try {
+                    contentToken = Token.Obj.head(
+                            selectedContentValue,
+                            contentStyle
+                    );
+                } catch (IllegalArgumentException rejected) {
+                    // Like an invalid sprite key, a static name that Adventure rejects is a template error.
+                    throw new TextFormatException("Invalid head name: " + selectedContentValue, rejected);
+                }
             }
         } else if (selectedContentType == ACTION_SPRITE) {
             contentToken = Token.Obj.sprite(
@@ -1840,6 +1835,17 @@ final class Compiler {
             return Key.key(value);
         } catch (RuntimeException exception) {
             throw new TextFormatException("Invalid " + action + " key: " + value, exception);
+        }
+    }
+
+    // Like an invalid sprite key, a static value that Adventure rejects, such as a URL with
+    // spaces or page 0, is a template error.
+    private static ClickEvent buildStaticClick(byte type, String value, int page) {
+        try {
+            if (type != -1) return Token.MetaFullDyn.buildClick(type, value);
+            return page != -1 ? ClickEvent.changePage(page) : null;
+        } catch (IllegalArgumentException rejected) {
+            throw new TextFormatException("Invalid click value: " + (type != -1 ? value : page), rejected);
         }
     }
 

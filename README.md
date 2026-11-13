@@ -457,8 +457,13 @@ gradients still depend on current content and length.
 
 There is no fixed 16-key limit; the compiler grows its key table. Object components
 such as head/sprite require a receiving platform that supports these objects. Java 21
-and Adventure API are required. The build targets Adventure 5.2.0. The tested 4.26.1
-path preserves that runtime's less strict head-name validation.
+and Adventure API are required. The build targets Adventure 5.2.0. Adventure decides
+which head names and click values are valid: 5.2.0 accepts head names of at most 16
+ASCII characters from `!` to `}`, which excludes spaces, URLs that parse as URIs and
+pages from 1, while 4.26.1 accepts any head name. A static value that Adventure rejects
+fails to compile with `TextFormatException`. A placeholder value that it rejects does not
+fail the render: a head leaves the segment as ordinary text, and a click action leaves
+the segment's click as it was.
 
 GM also loads on an older Adventure and renders everything that Adventure can
 represent. A template that uses `lang` before Adventure 4.13, shadow colors before 4.18,

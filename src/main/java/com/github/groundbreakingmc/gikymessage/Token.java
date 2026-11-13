@@ -313,7 +313,7 @@ interface Token {
                 hover = this.dynamicHover.render(compPh, numbers);
             } else {
                 final String value = buildText(this.metaStatic, this.metaPh, compPh, numbers);
-                click = MetaFullDyn.buildClick(this.actionType, value);
+                click = MetaFullDyn.dynamicClick(this.actionType, value, click);
             }
 
             final Style style = withEvents(baseStyle, click, hover);
@@ -368,7 +368,7 @@ interface Token {
                 hover = this.dynamicHover.render(compPh, numbers);
             } else {
                 final String value = buildText(this.metaStatic, this.metaPh, compPh, numbers);
-                click = MetaFullDyn.buildClick(this.actionType, value);
+                click = MetaFullDyn.dynamicClick(this.actionType, value, click);
             }
 
             if (this.action2Type != -1) {
@@ -376,7 +376,7 @@ interface Token {
                     hover = this.dynamicHover2.render(compPh, numbers);
                 } else {
                     final String value2 = buildText(this.meta2Static, this.meta2Ph, compPh, numbers);
-                    click = MetaFullDyn.buildClick(this.action2Type, value2);
+                    click = MetaFullDyn.dynamicClick(this.action2Type, value2, click);
                 }
             }
 
@@ -392,6 +392,16 @@ interface Token {
                 case MetaDyn.COPY -> ClickEvent.copyToClipboard(value);
                 default -> throw new IllegalStateException("Not a click action: " + type);
             };
+        }
+
+        // Newer Adventure rejects some values, such as a URL with spaces. A placeholder value
+        // must not fail the render, so a rejected one leaves the content's click as it was.
+        static ClickEvent<?> dynamicClick(byte type, String value, ClickEvent<?> current) {
+            try {
+                return buildClick(type, value);
+            } catch (IllegalArgumentException rejected) {
+                return current;
+            }
         }
     }
 
@@ -861,11 +871,14 @@ interface Token {
         private final String[] staticParts;
         private final int[] placeholderIndices;
         private final Style style;
+        // The segment's own text, rendered when Adventure rejects the name.
+        private final Token fallback;
 
-        ObjDyn(String[] staticParts, int[] placeholderIndices, Style style) {
+        ObjDyn(String[] staticParts, int[] placeholderIndices, Style style, Token fallback) {
             this.staticParts = staticParts;
             this.placeholderIndices = placeholderIndices;
             this.style = style;
+            this.fallback = fallback;
         }
 
         @Override
@@ -875,7 +888,15 @@ interface Token {
                     this.placeholderIndices,
                     placeholders, numbers
             );
-            final Component component = Component.object(ObjectContents.playerHead(profileName));
+            final ObjectContents head;
+            try {
+                head = ObjectContents.playerHead(profileName);
+            } catch (IllegalArgumentException rejected) {
+                // Newer Adventure rejects names that no player can have, such as ones with
+                // spaces. A placeholder value must not fail the render: the segment stays text.
+                return this.fallback.render(placeholders, numbers);
+            }
+            final Component component = Component.object(head);
             return this.style.isEmpty() ? component : component.style(this.style);
         }
     }

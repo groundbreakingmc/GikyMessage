@@ -212,16 +212,37 @@ class BoundTextTest {
         }
     }
 
+    // Runs on a thread whose stack is too small to walk a deeply nested component.
+    private static void onSmallStack(Runnable action) throws Exception {
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        Thread thread = new Thread(null, () -> {
+            try {
+                action.run();
+            } catch (Throwable thrown) {
+                failure.set(thrown);
+            }
+        }, "small-stack", 256 * 1024);
+        thread.start();
+        thread.join();
+        if (failure.get() != null) throw new AssertionError(failure.get());
+    }
+
     @Test
     void rendererFailureDoesNotLeaveAPartiallyValidCache() throws Exception {
         Context c = new Context();
-        Text<Context> text = compile("[x](head:{value})", false);
+        Text<Context> text = compile("[{value}](gradient:#f00-#00f)", false);
         c.value = "Steve";
         BoundText<Context> binding = text.bind(c);
         Component good = binding.render();
-        c.value = "a".repeat(17);
-        assertThrows(IllegalArgumentException.class, () -> text.render(c));
-        assertThrows(IllegalArgumentException.class, binding::render);
+        // Values Adventure rejects no longer fail a render; a gradient walking a value nested
+        // deeper than the stack allows still does, after every handler has run.
+        Component deep = Component.text("x");
+        for (int depth = 0; depth < 20_000; depth++) deep = Component.text("").append(deep);
+        c.value = deep;
+        onSmallStack(() -> {
+            assertThrows(StackOverflowError.class, () -> text.render(c));
+            assertThrows(StackOverflowError.class, binding::render);
+        });
         assertNull(field(binding, "result"));
         c.value = "Steve";
         assertEquals(good, binding.render());

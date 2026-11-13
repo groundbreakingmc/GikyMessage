@@ -67,9 +67,8 @@ public final class BoundText<C> {
      * Every key is checked even on a cache hit.
      *
      * @return the current result, reusing the previous instance for equal value tuples
-     * @throws IllegalStateException    if this binding is already rendering
-     * @throws IllegalArgumentException if Adventure rejects a rendered action value
-     * @throws RuntimeException         if a handler or parser fails; remaining handlers are not called
+     * @throws IllegalStateException if this binding is already rendering
+     * @throws RuntimeException      if a handler or parser fails; remaining handlers are not called
      * @since 1.0
      */
     public @NotNull Component render() {

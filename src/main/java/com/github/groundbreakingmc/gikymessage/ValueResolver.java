@@ -1,6 +1,7 @@
 package com.github.groundbreakingmc.gikymessage;
 
 import net.kyori.adventure.text.Component;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -38,8 +39,12 @@ public interface ValueResolver<C> {
     /**
      * Receives the value of the key being resolved. Not thread-safe; do not retain.
      *
+     * <p>Only this library implements this interface. Later versions may add methods to
+     * it, so do not implement it.
+     *
      * @since 1.0
      */
+    @ApiStatus.NonExtendable
     interface Value {
 
         /**

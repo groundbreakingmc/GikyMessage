@@ -10,6 +10,8 @@ import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.object.ObjectContents;
 
 import java.lang.ref.WeakReference;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.*;
 
 // Compiled tokens render from indexed values; static results are built during compilation.
@@ -664,6 +666,171 @@ interface Token {
         }
     }
 
+    // Rewrites the text of every text node of its content, step by step: case, small capitals,
+    // compact numbers. Then it keeps at most a limit of characters over the whole content.
+    // Nodes whose text does not change are kept as they are.
+    final class TransformContent implements Token {
+
+        static final byte UPPER = 0;
+        static final byte LOWER = 1;
+        static final byte SMALL_CAPS = 2;
+        static final byte COMPACT = 3;
+
+        // Small capitals for a to z, used for both cases; x has none and stays x.
+        private static final String SMALL_CAPITALS = "ᴀʙᴄᴅᴇꜰɢʜɪ"
+                + "ᴊᴋʟᴍɴᴏᴘǫʀꜱᴛᴜᴠᴡxʏᴢ";
+        private static final String[] UNITS = {"K", "M", "B", "T"};
+        private static final BigDecimal THOUSAND = BigDecimal.valueOf(1000);
+
+        private final Token content;
+        private final byte[] steps;
+        // Characters to keep, or -1 for all.
+        private final int limit;
+
+        static Token create(Token content, byte[] steps, int limit, boolean dynamic) {
+            final TransformContent token = new TransformContent(content, steps, limit);
+            return dynamic ? token : new Constant(token.render(null, null));
+        }
+
+        private TransformContent(Token content, byte[] steps, int limit) {
+            this.content = content;
+            this.steps = steps;
+            this.limit = limit;
+        }
+
+        @Override
+        public Component render(Object[] placeholders, long[] numbers) {
+            final Component rendered = this.content.render(placeholders, numbers);
+            final ChildScratch scratch = childScratch();
+            // Nested transforms have finished rendering by now, so the budget is this token's alone.
+            scratch.transformBudget = this.limit;
+            return this.apply(rendered, scratch);
+        }
+
+        private Component apply(Component component, ChildScratch scratch) {
+            Component result = component;
+            if (component instanceof TextComponent text) {
+                final String original = text.content();
+                String changed = original;
+                for (final byte step : this.steps) changed = transform(step, changed);
+                if (this.limit >= 0) changed = keep(changed, scratch);
+                if (!changed.equals(original)) result = text.content(changed);
+            }
+            final List<Component> children = component.children();
+            if (children.isEmpty()) return result;
+            final ChildBuffer buffer = scratch.acquire(children.size());
+            try {
+                boolean childChanged = false;
+                for (int index = 0; index < children.size(); index++) {
+                    final Component child = children.get(index);
+                    final Component next = this.apply(child, scratch);
+                    if (next != child) childChanged = true;
+                    buffer.setComponent(index, next);
+                }
+                return childChanged ? result.children(buffer) : result;
+            } finally {
+                releaseChildren(buffer);
+            }
+        }
+
+        private static String transform(byte step, String text) {
+            return switch (step) {
+                case UPPER -> text.toUpperCase(Locale.ROOT);
+                case LOWER -> text.toLowerCase(Locale.ROOT);
+                case SMALL_CAPS -> smallCaps(text);
+                default -> compact(text);
+            };
+        }
+
+        private static String smallCaps(String text) {
+            char[] result = null;
+            for (int index = 0; index < text.length(); index++) {
+                final char character = text.charAt(index);
+                final int letter = character >= 'a' && character <= 'z' ? character - 'a'
+                        : character >= 'A' && character <= 'Z' ? character - 'A' : -1;
+                if (letter < 0) continue;
+                final char small = SMALL_CAPITALS.charAt(letter);
+                if (small == character) continue;
+                if (result == null) result = text.toCharArray();
+                result[index] = small;
+            }
+            return result == null ? text : new String(result);
+        }
+
+        // Shortens every number of at least 1000 that stands on its own: 1234567 becomes 1.2M.
+        // Digits inside a word, such as a player name, are left alone.
+        private static String compact(String text) {
+            StringBuilder result = null;
+            int copied = 0;
+            int index = 0;
+            final int length = text.length();
+            while (index < length) {
+                if (!isDigit(text.charAt(index)) || index > 0 && isWordPart(text.charAt(index - 1))) {
+                    index++;
+                    continue;
+                }
+                final boolean signed = index > 0 && text.charAt(index - 1) == '-'
+                        && (index == 1 || !isWordPart(text.charAt(index - 2)));
+                final int start = signed ? index - 1 : index;
+                int end = index;
+                while (end < length && isDigit(text.charAt(end))) end++;
+                if (end + 1 < length && text.charAt(end) == '.' && isDigit(text.charAt(end + 1))) {
+                    end += 2;
+                    while (end < length && isDigit(text.charAt(end))) end++;
+                }
+                final String formatted = end < length && isWordPart(text.charAt(end))
+                        ? null : compactNumber(text.substring(start, end));
+                if (formatted != null) {
+                    if (result == null) result = new StringBuilder(length);
+                    result.append(text, copied, start).append(formatted);
+                    copied = end;
+                }
+                index = end;
+            }
+            return result == null ? text : result.append(text, copied, length).toString();
+        }
+
+        // One decimal, rounded half up, without a trailing .0; null below 1000.
+        private static String compactNumber(String number) {
+            BigDecimal value = new BigDecimal(number);
+            final boolean negative = value.signum() < 0;
+            value = value.abs();
+            if (value.compareTo(THOUSAND) < 0) return null;
+            int unit = 0;
+            while (value.compareTo(THOUSAND) >= 0 && unit < UNITS.length) {
+                value = value.movePointLeft(3);
+                unit++;
+            }
+            value = value.setScale(1, RoundingMode.HALF_UP);
+            if (value.compareTo(THOUSAND) >= 0 && unit < UNITS.length) {
+                value = value.movePointLeft(3).setScale(1, RoundingMode.HALF_UP);
+                unit++;
+            }
+            return (negative ? "-" : "") + value.stripTrailingZeros().toPlainString() + UNITS[unit - 1];
+        }
+
+        private static boolean isDigit(char character) {
+            return character >= '0' && character <= '9';
+        }
+
+        private static boolean isWordPart(char character) {
+            return Character.isLetterOrDigit(character) || character == '_';
+        }
+
+        // Counts code points, so a surrogate pair is never cut in half.
+        private static String keep(String text, ChildScratch scratch) {
+            final int budget = scratch.transformBudget;
+            if (budget <= 0) return text.isEmpty() ? text : "";
+            final int points = text.codePointCount(0, text.length());
+            if (points <= budget) {
+                scratch.transformBudget = budget - points;
+                return text;
+            }
+            scratch.transformBudget = 0;
+            return text.substring(0, text.offsetByCodePoints(0, budget));
+        }
+    }
+
     final class Obj implements Token {
 
         private final Component component;
@@ -927,6 +1094,8 @@ interface Token {
         private ChildBuffer[] buffers = new ChildBuffer[4];
         private int depth;
         private int gradientIndex;
+        // Characters a transform with a limit may still keep while it walks one result.
+        private int transformBudget;
 
         private ChildBuffer acquire(int size) {
             if (this.depth == this.buffers.length) {

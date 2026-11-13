@@ -119,8 +119,9 @@ or trailing spaces must be preserved. Quoted values use `"` or `'`; escape the m
 quote or a backslash with `\`.
 
 Placeholders are supported in `run`, `suggest`, `url`, `copy`, `show`, `head`, `lang`,
-`style`, `color`, `if` and `unless`. `insert`, `page`, `sprite`, `font`, `phase` and the
-gradient color list are static. A gradient's text content may still contain placeholders.
+`style`, `color`, `if` and `unless`. `insert`, `page`, `sprite`, `font`, `phase`,
+`transform` and the gradient color list are static. A gradient's text content may still
+contain placeholders.
 
 #### Available actions
 
@@ -139,6 +140,7 @@ gradient color list are static. A gradient's text content may still contain plac
 | `gradient` | per-code-point color interpolation | Color gradient across the text |
 | `phase` | shift of the gradient | Move the gradient's colors along the text |
 | `lang` | `Component.translatable(key, fallback)` | Text the client translates into its language |
+| `transform` | text rewriting | Case, small capitals, compact numbers, length limit |
 | `if` | condition | Show the segment only if the value has text |
 | `unless` | condition | Show the segment only if the value has no text |
 | `head` | `ObjectContents.playerHead(...)` | Insert a player head object |
@@ -159,6 +161,7 @@ gradient color list are static. A gradient's text content may still contain plac
 [Rainbow](gradient:#ff0000-#00ff00-#0000ff)
 [Flowing](gradient:#ff0000-#0000ff, phase:0.25)
 [&7\[{clan}&7\] ](if:{clan})
+[{player}](transform:smallcaps)
 [{player}](head:{player})
 [icon](sprite:minecraft:textures/item/diamond.png)
 ```
@@ -210,6 +213,29 @@ last `unless` win. A hidden segment is not rendered at all and leaves nothing be
 put spaces and brackets that belong to the value inside the segment, escaping brackets
 as `\[` and `\]`.
 
+### Transforms
+
+```
+[{player}](transform:smallcaps)
+[{balance} coins](transform:compact)
+[{player}](transform:"max:12 upper")
+```
+
+`transform` rewrites the text of the segment, static text and placeholder values alike,
+before the content action such as a gradient or `lang` uses it:
+
+| Step | Result |
+|------|--------|
+| `upper`, `lower` | Upper or lower case |
+| `smallcaps` | Latin letters as small capitals: `Player` → `ᴘʟᴀʏᴇʀ` |
+| `compact` | Free-standing numbers of 1000 or more: `1234567` → `1.2M`, `-1500` → `-1.5K` |
+| `max:N` | At most `N` characters of the whole segment |
+
+Steps run in the order written; `max` always applies last. `compact` uses one decimal,
+rounded half up, with the units K, M, B and T. It leaves digits inside a word, such as
+those of a player name, unchanged. Unknown steps are ignored. A segment whose text is
+static is transformed once, during compilation.
+
 ---
 
 ### Combining actions
@@ -217,9 +243,9 @@ as `\[` and `\]`.
 Multiple actions can be combined on one segment. One click action is selected in priority
 order `run` → `suggest` → `url` → `copy` → `page`; one content action in priority order
 `head` → `sprite` → `lang` → `gradient`. The last occurrence of the selected action wins. The
-last `show`, `insert`, `font` and `phase` win independently. The first `style` and `color`
-win, and apply after content processing in that order. `if` and `unless` decide about the
-finished segment:
+last `show`, `insert`, `font`, `phase` and `transform` win independently. `transform`
+applies first, before the content action. The first `style` and `color` win, and apply
+after content processing in that order. `if` and `unless` decide about the finished segment:
 
 ```
 [Click](run:"/spawn", show:"&aTeleport to spawn")

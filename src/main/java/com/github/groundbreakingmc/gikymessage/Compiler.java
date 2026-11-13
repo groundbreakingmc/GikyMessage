@@ -40,6 +40,7 @@ final class Compiler {
     private static final byte ACTION_PHASE = 15;
     private static final byte ACTION_IF = 16;
     private static final byte ACTION_UNLESS = 17;
+    private static final byte ACTION_TRANSFORM = 18;
 
     private Compiler() {
     }
@@ -600,6 +601,7 @@ final class Compiler {
         int fontValueEnd = -1;
 
         String phaseValue = null;
+        String transformValue = null;
 
         String ifValue = null;
         boolean ifDynamic = false;
@@ -663,7 +665,7 @@ final class Compiler {
 
             final boolean captureValue = switch (action) {
                 case ACTION_RUN, ACTION_HEAD, ACTION_SHOW, ACTION_INSERT, ACTION_FONT,
-                        ACTION_PHASE, ACTION_IF, ACTION_UNLESS -> true;
+                        ACTION_PHASE, ACTION_IF, ACTION_UNLESS, ACTION_TRANSFORM -> true;
 
                 case ACTION_COLOR -> colorValue == null;
 
@@ -910,6 +912,9 @@ final class Compiler {
                 case ACTION_PHASE -> phaseValue = quoted
                         ? quotedValue : new String(source, valueStart, valueEnd - valueStart);
 
+                case ACTION_TRANSFORM -> transformValue = quoted
+                        ? quotedValue : new String(source, valueStart, valueEnd - valueStart);
+
                 case ACTION_IF -> {
                     ifValue = quoted ? quotedValue : new String(source, valueStart, valueEnd - valueStart);
                     ifDynamic = dynamic;
@@ -1107,6 +1112,9 @@ final class Compiler {
             throw unsupported("Head and sprite objects", "4.25");
         }
 
+        // Transforms rewrite the segment's text before a gradient or translation uses it.
+        final Transforms transforms = transformValue == null ? null : Transforms.parse(transformValue);
+
         if (selectedContentType == ACTION_HEAD) {
             if (selectedContentDynamic) {
                 final DynamicValue dynamicHead = parseDynamicValue(
@@ -1132,7 +1140,7 @@ final class Compiler {
             );
         } else if (selectedContentType == ACTION_LANG) {
             if (!Platform.TRANSLATION_FALLBACKS) throw unsupported("Translations", "4.13");
-            final Token text = wrapContent(innerText, children, childCount, contentStyle);
+            final Token text = transform(wrapContent(innerText, children, childCount, contentStyle), transforms);
             if (selectedContentDynamic) {
                 final DynamicValue key = parseDynamicValue(selectedContentValue, placeholders);
                 contentToken = Token.Translated.create(text, key.staticParts, key.placeholderIndices);
@@ -1145,12 +1153,12 @@ final class Compiler {
                         parseGradientColors(selectedContentValue);
 
                 if (gradientColors != null) {
-                    final Token rawContent = wrapContent(
+                    final Token rawContent = transform(wrapContent(
                             innerText,
                             children,
                             childCount,
                             Style.empty()
-                    );
+                    ), transforms);
 
                     contentToken = Token.GradientContent.create(
                             rawContent,
@@ -1160,20 +1168,20 @@ final class Compiler {
                             parsePhase(phaseValue)
                     );
                 } else {
-                    contentToken = wrapContent(
+                    contentToken = transform(wrapContent(
                             innerText,
                             children,
                             childCount,
                             contentStyle
-                    );
+                    ), transforms);
                 }
             } else {
-                contentToken = wrapContent(
+                contentToken = transform(wrapContent(
                         innerText,
                         children,
                         childCount,
                         contentStyle
-                );
+                ), transforms);
             }
         }
 
@@ -1262,6 +1270,11 @@ final class Compiler {
         return condition(shown, unlessValue, unlessDynamic, true, placeholders);
     }
 
+    private static Token transform(Token content, Transforms transforms) {
+        return transforms == null ? content
+                : Token.TransformContent.create(content, transforms.steps(), transforms.limit(), isDynamic(content));
+    }
+
     // A condition without placeholders is decided here; the segment is kept or replaced by nothing.
     private static Token condition(Token segment, String value, boolean dynamic, boolean negated,
                                    PlaceholderTable placeholders) {
@@ -1291,6 +1304,36 @@ final class Compiler {
             return 0f;
         }
         return (float) (phase - Math.floor(phase));
+    }
+
+    // Steps applied to every text node in order, and a limit on characters, -1 for none.
+    private record Transforms(byte[] steps, int limit) {
+
+        // Unknown names and invalid limits are ignored, like unknown actions.
+        private static Transforms parse(String value) {
+            final String[] names = value.trim().split("\\s+");
+            final byte[] steps = new byte[names.length];
+            int count = 0;
+            int limit = -1;
+            for (final String raw : names) {
+                final String name = raw.toLowerCase(java.util.Locale.ROOT);
+                if (name.startsWith("max:")) {
+                    final int parsed = parseIntOrMinusOne(name.substring(4));
+                    if (parsed > 0) limit = limit == -1 ? parsed : Math.min(limit, parsed);
+                    continue;
+                }
+                final byte step = switch (name) {
+                    case "upper" -> Token.TransformContent.UPPER;
+                    case "lower" -> Token.TransformContent.LOWER;
+                    case "smallcaps" -> Token.TransformContent.SMALL_CAPS;
+                    case "compact" -> Token.TransformContent.COMPACT;
+                    default -> -1;
+                };
+                if (step != -1) steps[count++] = step;
+            }
+            if (count == 0 && limit == -1) return null;
+            return new Transforms(Arrays.copyOf(steps, count), limit);
+        }
     }
 
     private static DynamicValue parseDynamicValue(String value, PlaceholderTable placeholders) {
@@ -1397,6 +1440,7 @@ final class Compiler {
                 || token instanceof Token.ColorContent
                 || token instanceof Token.StyleContent
                 || token instanceof Token.Translated
+                || token instanceof Token.TransformContent
                 || token instanceof Token.Conditional;
     }
 
@@ -1626,6 +1670,8 @@ final class Compiler {
             }
 
             case 2 -> regionEquals(source, offset, length, "if") ? ACTION_IF : ACTION_UNKNOWN;
+
+            case 9 -> regionEquals(source, offset, length, "transform") ? ACTION_TRANSFORM : ACTION_UNKNOWN;
 
             case 6 -> {
                 final char first = source[offset];

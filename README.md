@@ -22,8 +22,7 @@ handler call per render. No values are requested while binding. Reuse an existin
 context object when available; the API does not require an allocation per render.
 
 This API is source/binary incompatible with the previous key-based render entry point.
-See [MIGRATION.md](MIGRATION.md) for conversion examples. Compile with the factory,
-then pass data to `render(context)`.
+Compile with the factory, then pass data to `render(context)`.
 The template syntax and rendered component structure are preserved. Performance
 depends on value types, template structure and cache reuse.
 
@@ -459,8 +458,7 @@ gradients still depend on current content and length.
 There is no fixed 16-key limit; the compiler grows its key table. Object components
 such as head/sprite require a receiving platform that supports these objects. Java 21
 and Adventure API are required. The build targets Adventure 5.2.0. The tested 4.26.1
-path preserves that runtime's less strict head-name validation; exact results and
-boundaries are described in [VALIDATION.md](VALIDATION.md).
+path preserves that runtime's less strict head-name validation.
 
 GM also loads on an older Adventure and renders everything that Adventure can
 represent. A template that uses `lang` before Adventure 4.13, shadow colors before 4.18,

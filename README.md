@@ -193,9 +193,74 @@ negative values move the other way. Frames with evenly spaced phases make the co
 
 The phase is static. Without a gradient it does nothing; an invalid number is ignored.
 
----
+#### Translations
 
-### Conditional segments
+```text
+[Diamond](lang:item.minecraft.diamond)
+&6[VIP](lang:myserver.tag.vip) {name}
+[{rank}](lang:myserver.rank.{rank})
+```
+
+`lang` replaces the segment with a translatable component. Each client shows the
+translation for the key in its own language, from the game or a resource pack, so one
+rendered component serves players of every language. The segment's text, with
+placeholders resolved, is the fallback for clients without the key; an empty segment
+has none. The translation takes the formatting of the segment's text; formatting nested
+deeper inside it is not kept. The key may contain placeholders; an empty key leaves the
+segment as ordinary text. Translation arguments are not supported. A segment whose key
+and text are static is built once, during compilation. Templates without `lang` are
+unaffected.
+
+#### Uniform color
+
+```text
+[Text](color:#55ff55)
+[{faction}](color:{relation_color})
+```
+
+`color` accepts Minecraft color names (`red`, `dark_red`, case-insensitive),
+legacy colors (`a`, `&a`, `§a`), hex colors (`#RGB`, `#RRGGBB`, `&#RGB`,
+`&#RRGGBB`, and their `§` variants), and expanded hex (`&x&f&f&5&5&5&5`
+or `§x§f§f§5§5§5§5`). A value must contain exactly one color.
+Color placeholders are resolved at render time. Return the literal color code as the
+placeholder component's text, for example `Component.text("&a")`.
+The color overrides colors throughout the enclosed content, including placeholder
+children, while preserving decorations and events. It does not split text into
+individual characters. An invalid or unresolved color leaves the content unchanged.
+`color` is applied after content actions, including `gradient`, `head`, and `sprite`.
+The first `color` in an action list wins. Placeholder values are literal text,
+not recursively parsed templates. The existing `cacheableOf` render cache also
+covers color placeholders.
+
+#### Dynamic style
+
+```text
+[Text](style:&c&l)
+[Text](style:"red bold italic")
+[{name}](style:{format})
+[Text](style:bold,color:{team_color})
+```
+
+`style` accepts every `color` notation, legacy decorations (`&k`, `&l`, `&m`,
+`&n`, `&o`, also with `§`), and the words `obfuscated`, `bold`, `strikethrough`,
+`underlined` (or `underline`), and `italic`. Words are case-insensitive and
+separated by whitespace. Legacy codes can be adjacent. Values from placeholders
+are parsed at render time as literal formatting values, not message templates.
+
+Only specified properties override the enclosed content, including nested and
+placeholder components. Other properties, including clicks, hover, insertion,
+font and shadow, are retained. Colors keep previously specified decorations,
+as in the regular GikyMessage text syntax. `&r`, `§r`, or `reset` sets white and
+explicitly disables all decorations; subsequent properties can override this.
+Invalid or unresolved values leave the content unchanged; empty styles do nothing.
+
+`style` is applied after content actions and before `color`, regardless of their
+order in the action list. Thus an explicit `color` overrides the color in `style`.
+The first `style` and `color` entries win. An outer formatting action overrides
+specified properties in nested blocks. Static values are parsed during compilation;
+`cacheableOf` reuses its result while all placeholder values remain equal.
+
+#### Conditional segments
 
 ```
 [&7\[{clan}&7\] ](if:{clan}){player}
@@ -213,7 +278,7 @@ last `unless` win. A hidden segment is not rendered at all and leaves nothing be
 put spaces and brackets that belong to the value inside the segment, escaping brackets
 as `\[` and `\]`.
 
-### Transforms
+#### Transforms
 
 ```
 [{player}](transform:smallcaps)
@@ -430,70 +495,3 @@ The build produces `1.0.0-beta` prerelease artifacts in `build/libs`: the librar
 `GikyMessage-1.0.0-beta-sources.jar` and `GikyMessage-1.0.0-beta-javadoc.jar`.
 Public release/publication configuration is prepared separately;
 `publishToMavenLocal` is a local installation.
-
-### Translations
-
-```text
-[Diamond](lang:item.minecraft.diamond)
-&6[VIP](lang:myserver.tag.vip) {name}
-[{rank}](lang:myserver.rank.{rank})
-```
-
-`lang` replaces the segment with a translatable component. Each client shows the
-translation for the key in its own language, from the game or a resource pack, so one
-rendered component serves players of every language. The segment's text, with
-placeholders resolved, is the fallback for clients without the key; an empty segment
-has none. The translation takes the formatting of the segment's text; formatting nested
-deeper inside it is not kept. The key may contain placeholders; an empty key leaves the
-segment as ordinary text. Translation arguments are not supported. A segment whose key
-and text are static is built once, during compilation. Templates without `lang` are
-unaffected.
-
-### Uniform color
-
-```text
-[Text](color:#55ff55)
-[{faction}](color:{relation_color})
-```
-
-`color` accepts Minecraft color names (`red`, `dark_red`, case-insensitive),
-legacy colors (`a`, `&a`, `§a`), hex colors (`#RGB`, `#RRGGBB`, `&#RGB`,
-`&#RRGGBB`, and their `§` variants), and expanded hex (`&x&f&f&5&5&5&5`
-or `§x§f§f§5§5§5§5`). A value must contain exactly one color.
-Color placeholders are resolved at render time. Return the literal color code as the
-placeholder component's text, for example `Component.text("&a")`.
-The color overrides colors throughout the enclosed content, including placeholder
-children, while preserving decorations and events. It does not split text into
-individual characters. An invalid or unresolved color leaves the content unchanged.
-`color` is applied after content actions, including `gradient`, `head`, and `sprite`.
-The first `color` in an action list wins. Placeholder values are literal text,
-not recursively parsed templates. The existing `cacheableOf` render cache also
-covers color placeholders.
-
-### Dynamic style
-
-```text
-[Text](style:&c&l)
-[Text](style:"red bold italic")
-[{name}](style:{format})
-[Text](style:bold,color:{team_color})
-```
-
-`style` accepts every `color` notation, legacy decorations (`&k`, `&l`, `&m`,
-`&n`, `&o`, also with `§`), and the words `obfuscated`, `bold`, `strikethrough`,
-`underlined` (or `underline`), and `italic`. Words are case-insensitive and
-separated by whitespace. Legacy codes can be adjacent. Values from placeholders
-are parsed at render time as literal formatting values, not message templates.
-
-Only specified properties override the enclosed content, including nested and
-placeholder components. Other properties, including clicks, hover, insertion,
-font and shadow, are retained. Colors keep previously specified decorations,
-as in the regular GikyMessage text syntax. `&r`, `§r`, or `reset` sets white and
-explicitly disables all decorations; subsequent properties can override this.
-Invalid or unresolved values leave the content unchanged; empty styles do nothing.
-
-`style` is applied after content actions and before `color`, regardless of their
-order in the action list. Thus an explicit `color` overrides the color in `style`.
-The first `style` and `color` entries win. An outer formatting action overrides
-specified properties in nested blocks. Static values are parsed during compilation;
-`cacheableOf` reuses its result while all placeholder values remain equal.

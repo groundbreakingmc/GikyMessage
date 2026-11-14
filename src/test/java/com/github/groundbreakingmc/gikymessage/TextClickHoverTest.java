@@ -244,6 +244,42 @@ class TextClickHoverTest extends TextTestBase {
         }
 
         @Test
+        @DisplayName("Escapes inside quotes work as they do without quotes")
+        void escapesInsideQuotes() {
+            assertRenders(
+                    Component.text("X").hoverEvent(HoverEvent.showText(Component.text("[1], [2]\nnext"))),
+                    "[X](show:\"\\[1\\], \\[2\\]\\nnext\")"
+            );
+        }
+
+        @Test
+        @DisplayName("A doubled backslash before n is still a line break inside quotes")
+        void doubledBackslashInsideQuotes() {
+            assertRenders(
+                    Component.text("X").hoverEvent(HoverEvent.showText(Component.text("a, b\nc"))),
+                    "[X](show:\"a, b\\\\nc\")"
+            );
+        }
+
+        @Test
+        @DisplayName("Quotes and backslashes take a backslash inside quotes")
+        void quotesAndBackslashesInsideQuotes() {
+            assertRenders(
+                    Component.text("X").clickEvent(ClickEvent.suggestCommand("/say \"Hi, 'all'\" C:\\")),
+                    "[X](suggest:\"/say \\\"Hi, \\'all\\'\\\" C:\\\\\")"
+            );
+        }
+
+        @Test
+        @DisplayName("Other backslashes stay in a quoted command, as they do without quotes")
+        void otherBackslashesStayInQuotedCommand() {
+            assertRenders(
+                    Component.text("X").clickEvent(ClickEvent.runCommand("/say a\\nb, c")),
+                    "[X](run:\"/say a\\nb, c\")"
+            );
+        }
+
+        @Test
         @DisplayName("Italic trigger text + colored hover")
         void italicTriggerColoredHover() {
             assertRenders(

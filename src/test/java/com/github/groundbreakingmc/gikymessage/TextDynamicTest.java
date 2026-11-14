@@ -292,6 +292,16 @@ class TextDynamicTest extends TextTestBase {
         }
 
         @Test
+        @DisplayName("Escaped braces in quoted show value stay text")
+        void escapedBracesInQuotedShow() {
+            assertRenders(
+                    Component.text("Hover").hoverEvent(HoverEvent.showText(Component.text("{player}, Steve"))),
+                    "[Hover](show:'\\{player\\}, {player}')",
+                    "player", "Steve"
+            );
+        }
+
+        @Test
         @DisplayName("Color code + placeholder in show value")
         void colorCodeAndPlaceholderInShow() {
             assertRenders(

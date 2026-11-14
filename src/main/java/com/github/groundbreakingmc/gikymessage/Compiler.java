@@ -768,7 +768,10 @@ final class Compiler {
                         break;
                     }
 
-                    if (character == '\\' && position < actionEnd) {
+                    // Only quotes and backslashes are escaped here; \n, \[ and the rest are kept
+                    // for the value, so they work as they do without quotes.
+                    if (character == '\\' && position < actionEnd
+                            && (source[position] == '"' || source[position] == '\'' || source[position] == '\\')) {
                         final char escapedCharacter = source[position++];
 
                         if (captureValue) {

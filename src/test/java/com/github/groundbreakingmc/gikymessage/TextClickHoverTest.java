@@ -116,6 +116,15 @@ class TextClickHoverTest extends TextTestBase {
                     "[Link](url:https://example.com/search?q=hello&page=1)"
             );
         }
+
+        @Test
+        @DisplayName("run command — quotes inside an unquoted value are kept")
+        void quotesInsideUnquotedCommand() {
+            assertRenders(
+                    Component.text("Say").clickEvent(ClickEvent.runCommand("/say \"hi\"")),
+                    "[Say](run:/say \"hi\")"
+            );
+        }
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -191,6 +200,37 @@ class TextClickHoverTest extends TextTestBase {
             assertRenders(
                     Component.text("X").hoverEvent(HoverEvent.showText(Component.text("Has spaces here"))),
                     "[X](show:'Has spaces here')"
+            );
+        }
+
+        @Test
+        @DisplayName("Apostrophe inside an unquoted hover value")
+        void apostropheInUnquotedHover() {
+            assertRenders(
+                    Component.text("X").hoverEvent(HoverEvent.showText(Component.text("Don't click"))),
+                    "[X](show:Don't click)"
+            );
+        }
+
+        @Test
+        @DisplayName("Apostrophe in a hover value before another action")
+        void apostropheBeforeAnotherAction() {
+            assertRenders(
+                    Component.text("X")
+                            .clickEvent(ClickEvent.runCommand("/spawn"))
+                            .hoverEvent(HoverEvent.showText(Component.text("It's spawn"))),
+                    "[X](show:It's spawn, run:/spawn)"
+            );
+        }
+
+        @Test
+        @DisplayName("Quoted hover value with parentheses")
+        void quotedHoverValueWithParentheses() {
+            assertRenders(
+                    Component.text("X")
+                            .clickEvent(ClickEvent.runCommand("/spawn"))
+                            .hoverEvent(HoverEvent.showText(Component.text("Spawn (safe zone)"))),
+                    "[X](show:'Spawn (safe zone)', run:/spawn)"
             );
         }
 

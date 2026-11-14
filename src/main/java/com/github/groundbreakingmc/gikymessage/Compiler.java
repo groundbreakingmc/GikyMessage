@@ -1725,17 +1725,33 @@ final class Compiler {
         return false;
     }
 
+    // Finds the ) that closes the action list opened at start. The list is read the way its
+    // actions are: a quote opens a quoted value only as the first character of a value, so an
+    // apostrophe inside an unquoted value, as in show:Don't, is ordinary text.
     private static int findClosingParen(char[] src, int start) {
         int pos = start + 1;
         final int len = src.length;
+        boolean inName = true;
+        boolean valueStart = false;
         while (pos < len) {
             final char c = src[pos];
             if (c == ')') return pos;
-            if (c == '"' || c == '\'') {
-                pos++;
-                while (pos < len && src[pos] != c) {
-                    if (src[pos] == '\\') pos++;
+            if (inName) {
+                if (c == ':') {
+                    inName = false;
+                    valueStart = true;
+                }
+            } else if (c == ',') {
+                inName = true;
+                valueStart = false;
+            } else if (valueStart && c != ' ') {
+                valueStart = false;
+                if (c == '"' || c == '\'') {
                     pos++;
+                    while (pos < len && src[pos] != c) {
+                        if (src[pos] == '\\') pos++;
+                        pos++;
+                    }
                 }
             }
             pos++;

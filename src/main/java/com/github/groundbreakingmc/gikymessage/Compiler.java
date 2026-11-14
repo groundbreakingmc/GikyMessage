@@ -6,8 +6,10 @@ import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.*;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 // Compiles templates into tokens and a shared table of placeholder indices.
@@ -44,6 +46,8 @@ final class Compiler {
 
     /** What a segment hidden while compiling is replaced with; it renders nothing. */
     private static final Token EMPTY_SEGMENT = new Token.Constant(Component.empty());
+    /** Children of a branch, whose content is one compiled token. */
+    private static final Token[] NO_CHILDREN = {};
 
     private Compiler() {
     }
@@ -75,21 +79,28 @@ final class Compiler {
     }
 
     private static Token compileToken(String raw, PlaceholderTable placeholders) {
+        return compileToken(raw, placeholders, (short) 0, null, null);
+    }
+
+    // Text that continues inside a group starts in the style of that group: only what differs
+    // from it is styled, and &r cancels it.
+    private static Token compileToken(String raw, PlaceholderTable placeholders,
+                                      short decorations, TextColor color, ShadowColor shadow) {
         if (raw.isEmpty()) return new Token.Plain("", Style.empty());
 
         final char[] src = raw.toCharArray();
         final int len = src.length;
 
-        short curDeco = 0;
-        TextColor curColor = null;
-        ShadowColor curShadow = null;
+        short curDeco = decorations;
+        TextColor curColor = color;
+        ShadowColor curShadow = shadow;
 
         Frame[] stack = null;
         int depth = 0;
 
-        short inhDeco = 0;
-        TextColor inhColor = null;
-        ShadowColor inhShadow = null;
+        short inhDeco = decorations;
+        TextColor inhColor = color;
+        ShadowColor inhShadow = shadow;
 
         final StringBuilder textBuf = new StringBuilder();
         Token[] rootTokens = new Token[8];
@@ -139,6 +150,11 @@ final class Compiler {
                     }
                     case '\\' -> {
                         textBuf.append('\\');
+                        pos += 2;
+                        continue;
+                    }
+                    case '|' -> {
+                        textBuf.append('|');
                         pos += 2;
                         continue;
                     }
@@ -351,7 +367,7 @@ final class Compiler {
                     frame = new Frame();
                     stack[depth] = frame;
                 }
-                frame.reset(curDeco, curColor, curShadow, inhDeco, inhColor, inhShadow);
+                frame.reset(curDeco, curColor, curShadow, inhDeco, inhColor, inhShadow, pos + 1);
                 inhDeco = curDeco;
                 inhColor = curColor;
                 inhShadow = curShadow;
@@ -367,6 +383,7 @@ final class Compiler {
                     pos++;
                     continue;
                 }
+                final int contentEnd = pos;
                 pos++;
 
                 int actStart = -1, actEnd = -1;
@@ -402,7 +419,8 @@ final class Compiler {
                         frame.outerShadow,
                         frame.children, frame.childCount,
                         src, actStart, actEnd, placeholders,
-                        inhDeco, inhColor, inhShadow);
+                        inhDeco, inhColor, inhShadow,
+                        frame.pipe ? frame.contentStart : -1, contentEnd);
 
                 if (depth == 0) {
                     // A group that opens the template must not become the root: everything
@@ -414,6 +432,10 @@ final class Compiler {
                 }
                 continue;
             }
+
+            // A | inside a group may separate branches; whether it does is known once the
+            // group's actions are read, so it is only noted here and kept as text.
+            if (c == '|' && depth > 0) stack[depth - 1].pipe = true;
 
             textBuf.append(c);
             pos++;
@@ -440,7 +462,8 @@ final class Compiler {
                     frame.outerShadow,
                     frame.children, frame.childCount,
                     src, -1, -1, placeholders,
-                    inhDeco, inhColor, inhShadow
+                    inhDeco, inhColor, inhShadow,
+                    -1, -1
             );
         }
 
@@ -507,14 +530,17 @@ final class Compiler {
             PlaceholderTable placeholders,
             short inheritedDecorations,
             TextColor inheritedColor,
-            ShadowColor inheritedShadow
+            ShadowColor inheritedShadow,
+            int branchStart,
+            int branchEnd
     ) {
         final StringBuilder scratch = SCRATCH_BUFFER.get();
         try {
             return buildBracketToken0(
                     innerText, decorations, color, shadow, children, childCount,
                     source, actionStart, actionEnd, placeholders,
-                    inheritedDecorations, inheritedColor, inheritedShadow, scratch
+                    inheritedDecorations, inheritedColor, inheritedShadow,
+                    branchStart, branchEnd, false, scratch
             );
         } finally {
             releaseScratch(scratch);
@@ -535,8 +561,18 @@ final class Compiler {
             short inheritedDecorations,
             TextColor inheritedColor,
             ShadowColor inheritedShadow,
+            // The content of a group that contains a |, or -1; it is split into branches when
+            // the group has conditions.
+            int branchStart,
+            int branchEnd,
+            // Whether this builds one branch of a choice, which decides about it instead.
+            boolean branch,
             StringBuilder scratch
     ) {
+        final short groupDecorations = decorations;
+        final TextColor groupColor = color;
+        final ShadowColor groupShadow = shadow;
+
         decorations = StyleUtils.decorationDelta(
                 decorations,
                 inheritedDecorations
@@ -611,6 +647,9 @@ final class Compiler {
 
         String unlessValue = null;
         boolean unlessDynamic = false;
+
+        // In a group with branches, every if and unless in written order; created only then.
+        List<PendingCondition> branchConditions = null;
 
         int position = actionStart;
 
@@ -921,11 +960,19 @@ final class Compiler {
                 case ACTION_IF -> {
                     ifValue = quoted ? quotedValue : new String(source, valueStart, valueEnd - valueStart);
                     ifDynamic = dynamic;
+                    if (branchStart >= 0) {
+                        if (branchConditions == null) branchConditions = new ArrayList<>(2);
+                        branchConditions.add(new PendingCondition(ifValue, dynamic, false));
+                    }
                 }
 
                 case ACTION_UNLESS -> {
                     unlessValue = quoted ? quotedValue : new String(source, valueStart, valueEnd - valueStart);
                     unlessDynamic = dynamic;
+                    if (branchStart >= 0) {
+                        if (branchConditions == null) branchConditions = new ArrayList<>(2);
+                        branchConditions.add(new PendingCondition(unlessValue, dynamic, true));
+                    }
                 }
 
                 case ACTION_FONT -> {
@@ -1263,13 +1310,99 @@ final class Compiler {
             );
         }
 
+        // A branch is decided by the choice around it.
+        if (branch) return segment;
+
         // Conditions decide about the finished segment, so they apply last.
+        if (branchConditions != null) {
+            return choice(groupDecorations, groupColor, groupShadow, source, actionStart, actionEnd,
+                    placeholders, inheritedDecorations, inheritedColor, inheritedShadow,
+                    branchStart, branchEnd, branchConditions, scratch);
+        }
         final Token.Condition condition = Token.Condition.both(
                 condition(ifValue, ifDynamic, false, placeholders),
                 condition(unlessValue, unlessDynamic, true, placeholders));
         if (condition == null) return segment;
         if (condition.isStatic()) return condition.holds(null, null) ? segment : EMPTY_SEGMENT;
         return new Token.Conditional(segment, condition);
+    }
+
+    /**
+     * Builds a group with branches: its content is split at every | outside nested groups, each
+     * branch is built with the group's actions, and the n-th if or unless decides about the
+     * n-th branch. The first branch without a condition is the fallback; later ones are unused.
+     * Every branch starts in the group's style, as the text of a group without branches does.
+     * A condition without placeholders is decided here, so a branch it rules out is dropped and
+     * one it confirms ends the choice.
+     */
+    private static Token choice(short decorations, TextColor color, ShadowColor shadow, char[] source,
+                                int actionStart, int actionEnd, PlaceholderTable placeholders,
+                                short inheritedDecorations, TextColor inheritedColor, ShadowColor inheritedShadow,
+                                int branchStart, int branchEnd, List<PendingCondition> pending,
+                                StringBuilder scratch) {
+        final List<String> contents = splitBranches(source, branchStart, branchEnd);
+        final int used = Math.min(contents.size(), pending.size() + 1);
+        final Token[] built = new Token[used];
+        for (int index = 0; index < used; index++) {
+            built[index] = buildBracketToken0(
+                    compileToken(contents.get(index), placeholders, decorations, color, shadow),
+                    decorations, color, shadow, NO_CHILDREN, 0, source, actionStart, actionEnd,
+                    placeholders, inheritedDecorations, inheritedColor, inheritedShadow,
+                    -1, -1, true, scratch);
+        }
+        final List<Token.Condition> conditions = new ArrayList<>(used);
+        final List<Token> branches = new ArrayList<>(used);
+        Token fallback = null;
+        for (int index = 0; index < used; index++) {
+            if (index == pending.size()) {
+                fallback = built[index];
+                break;
+            }
+            final PendingCondition next = pending.get(index);
+            final Token.Condition condition = condition(next.value, next.dynamic, next.negated, placeholders);
+            if (condition.isStatic()) {
+                if (!condition.holds(null, null)) continue;
+                fallback = built[index];
+                break;
+            }
+            conditions.add(condition);
+            branches.add(built[index]);
+        }
+        if (conditions.isEmpty()) return fallback != null ? fallback : EMPTY_SEGMENT;
+        return new Token.Choice(conditions.toArray(new Token.Condition[0]), branches.toArray(new Token[0]), fallback);
+    }
+
+    // The source of each branch: the content split at every | outside nested groups, their
+    // actions and placeholders. Escapes are kept, so each branch is compiled as written.
+    private static List<String> splitBranches(char[] source, int start, int end) {
+        final List<String> branches = new ArrayList<>(3);
+        int depth = 0;
+        int branchStart = start;
+        for (int index = start; index < end; index++) {
+            final char character = source[index];
+            if (character == '\\') {
+                index++;
+            } else if (character == '{') {
+                while (index + 1 < end && source[index + 1] != '}') index++;
+            } else if (character == '[') {
+                depth++;
+            } else if (character == ']' && depth > 0) {
+                depth--;
+                if (index + 1 < end && source[index + 1] == '(') {
+                    final int parenEnd = findClosingParen(source, index + 1);
+                    if (parenEnd != -1 && parenEnd < end) index = parenEnd;
+                }
+            } else if (character == '|' && depth == 0) {
+                branches.add(new String(source, branchStart, index - branchStart));
+                branchStart = index + 1;
+            }
+        }
+        branches.add(new String(source, branchStart, end - branchStart));
+        return branches;
+    }
+
+    // An if or unless of a group with branches, compiled once the branches are built.
+    private record PendingCondition(String value, boolean dynamic, boolean negated) {
     }
 
     private static Token transform(Token content, Transforms transforms) {
@@ -1470,7 +1603,8 @@ final class Compiler {
                 || token instanceof Token.StyleContent
                 || token instanceof Token.Translated
                 || token instanceof Token.TransformContent
-                || token instanceof Token.Conditional;
+                || token instanceof Token.Conditional
+                || token instanceof Token.Choice;
     }
 
     private static HoverEvent<?> buildStaticHover(String show) {
@@ -1907,6 +2041,9 @@ final class Compiler {
         private ShadowColor inheritedShadow;
         private Token[] children = new Token[8];
         private int childCount;
+        // Where the group's content starts in the source, and whether it holds a | of its own.
+        private int contentStart;
+        private boolean pipe;
 
         private void reset(
                 short outerDecorations,
@@ -1914,7 +2051,8 @@ final class Compiler {
                 ShadowColor outerShadow,
                 short inheritedDecorations,
                 TextColor inheritedColor,
-                ShadowColor inheritedShadow
+                ShadowColor inheritedShadow,
+                int contentStart
         ) {
             this.outerDecorations = outerDecorations;
             this.outerColor = outerColor;
@@ -1923,6 +2061,8 @@ final class Compiler {
             this.inheritedColor = inheritedColor;
             this.inheritedShadow = inheritedShadow;
             this.childCount = 0;
+            this.contentStart = contentStart;
+            this.pipe = false;
         }
 
         private void add(Token token) {

@@ -643,6 +643,31 @@ interface Token {
         }
     }
 
+    // Shows the first branch whose condition holds, otherwise the fallback, or nothing without
+    // one. Each condition is checked at most once and only the chosen branch is rendered.
+    final class Choice implements Token {
+
+        private final Condition[] conditions;
+        private final Token[] branches;
+        private final Token fallback;
+
+        Choice(Condition[] conditions, Token[] branches, Token fallback) {
+            this.conditions = conditions;
+            this.branches = branches;
+            this.fallback = fallback;
+        }
+
+        @Override
+        public Component render(Object[] placeholders, long[] numbers) {
+            for (int index = 0; index < this.conditions.length; index++) {
+                if (this.conditions[index].holds(placeholders, numbers)) {
+                    return this.branches[index].render(placeholders, numbers);
+                }
+            }
+            return this.fallback != null ? this.fallback.render(placeholders, numbers) : Component.empty();
+        }
+    }
+
     // A condition of if or unless. Values are inspected where they are, so a presence check
     // builds nothing; a comparison builds the text of both sides.
     sealed interface Condition {

@@ -4,6 +4,8 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
@@ -138,6 +140,126 @@ class ConditionalSegmentTest extends TextTestBase {
         // Without placeholders a comparison is decided while compiling.
         assertEquals("", plain(Text.of("[x](if:a==b)").render()));
         assertEquals("x", plain(Text.of("[x](if:a!=b)").render()));
+    }
+
+    @Test
+    void aBranchAfterTheConditionIsShownOtherwise() {
+        final Text<TestValues> text = bound("[&aTeammate|&cEnemy](if:{a}=={b}) {name}");
+        assertEquals("Teammate Steve", plain(text.render(values("a", "K", "b", "K", "name", "Steve"))));
+        assertEquals("Enemy Steve", plain(text.render(values("a", "K", "b", "P", "name", "Steve"))));
+
+        final Text<TestValues> presence = bound("[{clan}|no clan](if:{clan})");
+        assertEquals("Knights", plain(presence.render(values("clan", "Knights"))));
+        assertEquals("no clan", plain(presence.render(values("clan", ""))));
+
+        final Text<TestValues> negated = bound("[A|B](unless:{x})");
+        assertEquals("A", plain(negated.render(values("x", ""))));
+        assertEquals("B", plain(negated.render(values("x", "1"))));
+    }
+
+    @Test
+    void eachConditionDecidesAboutItsBranchInOrder() {
+        final Text<TestValues> text = bound("[A|B|C](if:{x}==1, if:{x}==2)");
+        assertEquals("A", plain(text.render(values("x", "1"))));
+        assertEquals("B", plain(text.render(values("x", "2"))));
+        assertEquals("C", plain(text.render(values("x", "3"))));
+
+        // Without a branch left for "otherwise", nothing is shown.
+        assertEquals("", plain(bound("[A|B](if:{x}, if:{y})").render(values("x", "", "y", ""))));
+        // Branches after the one without a condition are unused.
+        assertEquals("B", plain(bound("[A|B|C](if:{x})").render(values("x", ""))));
+    }
+
+    @Test
+    void aPipeIsTextOutsideConditionalGroupsAndWhenEscaped() {
+        assertEquals("a|b", plain(Text.of("[a|b](color:red)").render()));
+        assertEquals("a|b c", plain(Text.of("[a|b] c").render()));
+        assertEquals("a|b", plain(bound("[a\\|b|c](if:{x})").render(values("x", "1"))));
+        assertEquals("c", plain(bound("[a\\|b|c](if:{x})").render(values("x", ""))));
+    }
+
+    @Test
+    void nestedGroupsKeepTheirOwnPipes() {
+        final Text<TestValues> text = bound("[[x](run:/a|b)|y](if:{c})");
+        final Component shown = text.render(values("c", "1"));
+        assertEquals("x", plain(shown));
+        assertEquals(ClickEvent.runCommand("/a|b"), find(shown, "x").clickEvent());
+        assertEquals("y", plain(text.render(values("c", ""))));
+
+        final Text<TestValues> inner = bound("[[A|B](if:{a}) / C|D](if:{d})");
+        assertEquals("B / C", plain(inner.render(values("a", "", "d", "1"))));
+        assertEquals("D", plain(inner.render(values("a", "", "d", ""))));
+    }
+
+    @Test
+    void staticConditionsDecideAboutBranchesWhileCompiling() {
+        assertEquals("A", plain(Text.of("[A|B](if:yes)").render()));
+        assertEquals("B", plain(Text.of("[A|B](if:\"\")").render()));
+        assertEquals("", plain(Text.of("[A](if:a==b)").render()));
+        assertEquals("A", plain(Text.of("[A](if:a==a)").render()));
+
+        final Text<TestValues> mixed = bound("[A|B|C](if:\"\", if:{x})");
+        assertEquals("B", plain(mixed.render(values("x", "1"))));
+        assertEquals("C", plain(mixed.render(values("x", ""))));
+        assertEquals("A", plain(bound("[A|B|C](if:yes, if:{x})").render(values("x", "1"))));
+    }
+
+    @Test
+    void theGroupsActionsAndStyleApplyToEveryBranch() {
+        final Text<TestValues> text = bound("&a[A|B](if:{x}, run:/cmd)");
+        final Component first = text.render(values("x", "1"));
+        final Component second = text.render(values("x", ""));
+        assertEquals(ClickEvent.runCommand("/cmd"), find(first, "A").clickEvent());
+        assertEquals(ClickEvent.runCommand("/cmd"), find(second, "B").clickEvent());
+        assertEquals(NamedTextColor.GREEN, colorOf(first, "A"));
+        assertEquals(NamedTextColor.GREEN, colorOf(second, "B"));
+    }
+
+    @Test
+    void aBranchStartsInTheStyleOfItsGroup() {
+        // &r cancels the style from outside the group, as it does without branches.
+        final Component branch = bound("&c&l[A&r B|C](if:{x}) D").render(values("x", "1"));
+        final Component group = bound("&c&l[A&r B](if:{x}) D").render(values("x", "1"));
+        for (final String text : new String[]{"A", " B", " D"}) {
+            assertEquals(colorOf(group, text), colorOf(branch, text), text);
+        }
+        assertEquals(NamedTextColor.WHITE, colorOf(branch, " B"));
+        assertEquals(TextDecoration.State.FALSE, find(branch, " B").decoration(TextDecoration.BOLD));
+        assertEquals(NamedTextColor.WHITE, colorOf(bound("&c[A|&rB](if:{x})").render(values("x", "")), "B"));
+    }
+
+    @Test
+    void branchKeysAreBoundInWrittenOrder() {
+        final Text<TestValues> text = bound("[{a}|{b}](if:{c})");
+        assertEquals(List.of("a", "b", "c"), text.keys());
+        final BoundText<TestValues> binding = text.bind(values("a", "A", "b", "B", "c", ""));
+        assertEquals("B", plain(binding.render()));
+        assertSame(binding.render(), binding.render());
+    }
+
+    // The color in effect for the component whose own text is the given one.
+    private static TextColor colorOf(Component component, String content) {
+        return colorOf(component, content, null);
+    }
+
+    private static TextColor colorOf(Component component, String content, TextColor inherited) {
+        final TextColor color = component.color() != null ? component.color() : inherited;
+        if (component instanceof TextComponent text && text.content().equals(content)) return color;
+        for (final Component child : component.children()) {
+            final TextColor found = colorOf(child, content, color);
+            if (found != null) return found;
+        }
+        return null;
+    }
+
+    // The component whose own text is the given one, searched depth first.
+    private static Component find(Component component, String content) {
+        if (component instanceof TextComponent text && text.content().equals(content)) return component;
+        for (final Component child : component.children()) {
+            final Component found = find(child, content);
+            if (found != null) return found;
+        }
+        return null;
     }
 
     @Test

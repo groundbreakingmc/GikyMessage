@@ -1411,12 +1411,52 @@ final class Compiler {
     }
 
     /**
-     * Compiles the value of if or unless: a comparison when it contains {@code ==} or
-     * {@code !=} outside placeholders, otherwise a presence check. Null for no value.
+     * Compiles the value of if or unless: alternatives joined by {@code ||}, each made of parts
+     * joined by {@code &&}, so && binds tighter. Every part is a comparison or a presence check.
+     * Null for no value.
      */
     private static Token.Condition condition(String value, boolean dynamic, boolean negated,
                                              PlaceholderTable placeholders) {
         if (value == null) return null;
+        // unless negates the whole value: !(a || b) is !a && !b, and !(a && b) is !a || !b.
+        Token.Condition result = null;
+        for (final String alternative : splitLogic(value, '|')) {
+            Token.Condition parts = null;
+            for (final String part : splitLogic(alternative, '&')) {
+                final Token.Condition next = comparison(part, dynamic, negated, placeholders);
+                parts = parts == null ? next : negated ? Token.Condition.either(parts, next) : Token.Condition.both(parts, next);
+            }
+            result = result == null ? parts : negated ? Token.Condition.both(result, parts) : Token.Condition.either(result, parts);
+        }
+        return result;
+    }
+
+    // Splits a condition at every && or || outside braces, as the operator character says.
+    private static List<String> splitLogic(String value, char operator) {
+        final List<String> parts = new ArrayList<>(2);
+        int braces = 0;
+        int partStart = 0;
+        for (int index = 0; index + 1 < value.length(); index++) {
+            final char character = value.charAt(index);
+            if (character == '\\') {
+                index++;
+            } else if (character == '{') {
+                braces++;
+            } else if (character == '}') {
+                if (braces > 0) braces--;
+            } else if (braces == 0 && character == operator && value.charAt(index + 1) == operator) {
+                parts.add(value.substring(partStart, index));
+                partStart = index + 2;
+                index++;
+            }
+        }
+        parts.add(value.substring(partStart));
+        return parts;
+    }
+
+    // A comparison when the part contains one outside placeholders, otherwise a presence check.
+    private static Token.Condition comparison(String value, boolean dynamic, boolean negated,
+                                              PlaceholderTable placeholders) {
         final int operator = comparisonOperator(value);
         if (operator < 0) {
             final DynamicValue parts = parts(value, dynamic, placeholders);

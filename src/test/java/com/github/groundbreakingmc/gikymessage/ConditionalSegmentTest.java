@@ -143,6 +143,43 @@ class ConditionalSegmentTest extends TextTestBase {
     }
 
     @Test
+    void andAndOrCombineParts() {
+        final Text<TestValues> both = bound("[x](if:{a} && {b})");
+        assertEquals("x", plain(both.render(values("a", "1", "b", "1"))));
+        assertEquals("", plain(both.render(values("a", "1", "b", ""))));
+
+        final Text<TestValues> either = bound("[x](if:{a} || {b})");
+        assertEquals("x", plain(either.render(values("a", "", "b", "1"))));
+        assertEquals("", plain(either.render(values("a", "", "b", ""))));
+
+        // && binds tighter than ||.
+        final Text<TestValues> mixed = bound("[x](if:{a}==1 || {b}==1 && {c}==1)");
+        assertEquals("x", plain(mixed.render(values("a", "1", "b", "0", "c", "0"))));
+        assertEquals("x", plain(mixed.render(values("a", "0", "b", "1", "c", "1"))));
+        assertEquals("", plain(mixed.render(values("a", "0", "b", "1", "c", "0"))));
+    }
+
+    @Test
+    void unlessNegatesTheWholeCondition() {
+        final Text<TestValues> notBoth = bound("[x](unless:{a} && {b})");
+        assertEquals("", plain(notBoth.render(values("a", "1", "b", "1"))));
+        assertEquals("x", plain(notBoth.render(values("a", "1", "b", ""))));
+
+        final Text<TestValues> neither = bound("[x](unless:{a} || {b})");
+        assertEquals("x", plain(neither.render(values("a", "", "b", ""))));
+        assertEquals("", plain(neither.render(values("a", "", "b", "1"))));
+    }
+
+    @Test
+    void operatorsInsidePlaceholdersAndStaticPartsAreDecidedWhileCompiling() {
+        assertEquals("x", plain(Text.of("[x](if:yes && yes)").render()));
+        assertEquals("", plain(Text.of("[x](if:\"yes && \")").render()));
+        assertEquals("x", plain(Text.of("[x](if:\" || yes\")").render()));
+        assertTrue(Text.of("[x](if:yes || no)").keys().isEmpty());
+        assertEquals("[a|b]", plain(bound("[{a||b}](if:{a||b})").render(values("a||b", "[a|b]"))));
+    }
+
+    @Test
     void aBranchAfterTheConditionIsShownOtherwise() {
         final Text<TestValues> text = bound("[&aTeammate|&cEnemy](if:{a}=={b}) {name}");
         assertEquals("Teammate Steve", plain(text.render(values("a", "K", "b", "K", "name", "Steve"))));

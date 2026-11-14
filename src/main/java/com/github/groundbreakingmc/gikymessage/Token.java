@@ -683,6 +683,11 @@ interface Token {
             if (second == null) return first;
             return new Both(first, second);
         }
+
+        // At least one of the conditions must hold.
+        static Condition either(Condition first, Condition second) {
+            return new Either(first, second);
+        }
     }
 
     // Holds while the value has text, or while it has none when negated. Blank text counts as
@@ -752,6 +757,19 @@ interface Token {
         @Override
         public boolean holds(Object[] placeholders, long[] numbers) {
             return this.first.holds(placeholders, numbers) && this.second.holds(placeholders, numbers);
+        }
+
+        @Override
+        public boolean isStatic() {
+            return this.first.isStatic() && this.second.isStatic();
+        }
+    }
+
+    record Either(Condition first, Condition second) implements Condition {
+
+        @Override
+        public boolean holds(Object[] placeholders, long[] numbers) {
+            return this.first.holds(placeholders, numbers) || this.second.holds(placeholders, numbers);
         }
 
         @Override

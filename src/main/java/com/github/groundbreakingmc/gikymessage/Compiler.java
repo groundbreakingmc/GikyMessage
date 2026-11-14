@@ -1457,25 +1457,28 @@ final class Compiler {
     // A comparison when the part contains one outside placeholders, otherwise a presence check.
     private static Token.Condition comparison(String value, boolean dynamic, boolean negated,
                                               PlaceholderTable placeholders) {
-        final int operator = comparisonOperator(value);
-        if (operator < 0) {
+        final int found = comparisonOperator(value);
+        if (found < 0) {
             final DynamicValue parts = parts(value, dynamic, placeholders);
             return new Token.Presence(parts.staticParts, parts.placeholderIndices, negated);
         }
-        final DynamicValue left = parts(value.substring(0, operator), dynamic, placeholders);
-        final DynamicValue right = parts(value.substring(operator + 2), dynamic, placeholders);
+        final int index = found >>> 3;
+        final byte operator = (byte) (found & 7);
+        final DynamicValue left = parts(value.substring(0, index), dynamic, placeholders);
+        final DynamicValue right = parts(value.substring(index + Token.Comparison.OPERATORS[operator].length()),
+                dynamic, placeholders);
         return new Token.Comparison(left.staticParts, left.placeholderIndices,
-                right.staticParts, right.placeholderIndices, value.charAt(operator) == '=', negated);
+                right.staticParts, right.placeholderIndices, operator, negated);
     }
 
     private static DynamicValue parts(String value, boolean dynamic, PlaceholderTable placeholders) {
         return dynamic ? parseDynamicValue(value, placeholders) : new DynamicValue(new String[]{value}, Token.NO_PH);
     }
 
-    // The index of the first == or != outside braces, or -1.
+    // The first comparison operator outside braces, as its index times 8 plus its code, or -1.
     private static int comparisonOperator(String value) {
         int braces = 0;
-        for (int index = 0; index + 1 < value.length(); index++) {
+        for (int index = 0; index < value.length(); index++) {
             final char character = value.charAt(index);
             if (character == '\\') {
                 index++;
@@ -1483,8 +1486,10 @@ final class Compiler {
                 braces++;
             } else if (character == '}') {
                 if (braces > 0) braces--;
-            } else if (braces == 0 && (character == '=' || character == '!') && value.charAt(index + 1) == '=') {
-                return index;
+            } else if (braces == 0) {
+                for (int operator = 0; operator < Token.Comparison.OPERATORS.length; operator++) {
+                    if (value.startsWith(Token.Comparison.OPERATORS[operator], index)) return index << 3 | operator;
+                }
             }
         }
         return -1;

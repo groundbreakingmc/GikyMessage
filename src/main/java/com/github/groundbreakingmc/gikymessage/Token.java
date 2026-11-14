@@ -733,17 +733,54 @@ interface Token {
         }
     }
 
-    // Holds while both sides have the same text, or different text for !=; negated for unless.
-    // Spaces around a side do not count. Components compare by their plain text.
+    // Compares the text of both sides, negated for unless. Spaces around a side do not count and
+    // components compare by their plain text. When both sides are numbers, such as 7, -12 or
+    // 3.50, they compare as numbers; <, >, <= and >= hold only then.
     record Comparison(String[] leftParts, int[] leftPlaceholders, String[] rightParts, int[] rightPlaceholders,
-                      boolean equal, boolean negated) implements Condition {
+                      byte operator, boolean negated) implements Condition {
+
+        // Operator codes are indices here; at one position the two-character ones are tried first.
+        static final String[] OPERATORS = {"==", "!=", "<=", ">=", "<", ">"};
+        private static final int NOT_NUMBERS = Integer.MIN_VALUE;
 
         @Override
         public boolean holds(Object[] placeholders, long[] numbers) {
             // The left text is copied out before the right one reuses the shared builder.
             final String left = buildText(this.leftParts, this.leftPlaceholders, placeholders, numbers).strip();
             final String right = buildText(this.rightParts, this.rightPlaceholders, placeholders, numbers).strip();
-            return left.equals(right) == this.equal != this.negated;
+            final int order = compareNumbers(left, right);
+            final boolean result = switch (this.operator) {
+                case 0 -> order == NOT_NUMBERS ? left.equals(right) : order == 0;
+                case 1 -> order == NOT_NUMBERS ? !left.equals(right) : order != 0;
+                case 2 -> order != NOT_NUMBERS && order <= 0;
+                case 3 -> order != NOT_NUMBERS && order >= 0;
+                case 4 -> order != NOT_NUMBERS && order < 0;
+                default -> order != NOT_NUMBERS && order > 0;
+            };
+            return result != this.negated;
+        }
+
+        // The sign of left minus right when both are decimal numbers, else NOT_NUMBERS.
+        static int compareNumbers(String left, String right) {
+            if (!isDecimal(left) || !isDecimal(right)) return NOT_NUMBERS;
+            if (left.length() <= 18 && right.length() <= 18 && left.indexOf('.') < 0 && right.indexOf('.') < 0) {
+                return Long.compare(Long.parseLong(left), Long.parseLong(right));
+            }
+            return Integer.signum(new BigDecimal(left).compareTo(new BigDecimal(right)));
+        }
+
+        // An optional sign, digits, and optionally a point with more digits.
+        private static boolean isDecimal(String text) {
+            int index = !text.isEmpty() && (text.charAt(0) == '-' || text.charAt(0) == '+') ? 1 : 0;
+            final int digits = index;
+            while (index < text.length() && text.charAt(index) >= '0' && text.charAt(index) <= '9') index++;
+            if (index == digits) return false;
+            if (index < text.length() && text.charAt(index) == '.') {
+                final int fraction = ++index;
+                while (index < text.length() && text.charAt(index) >= '0' && text.charAt(index) <= '9') index++;
+                if (index == fraction) return false;
+            }
+            return index == text.length();
         }
 
         @Override

@@ -143,6 +143,45 @@ class ConditionalSegmentTest extends TextTestBase {
     }
 
     @Test
+    void numbersCompareAsNumbers() {
+        final Text<TestValues> level = bound("[&6Veteran ](if:{level}>=10){name}");
+        assertEquals("Veteran Steve", plain(level.render(values("level", 10L, "name", "Steve"))));
+        assertEquals("Steve", plain(level.render(values("level", 9L, "name", "Steve"))));
+
+        final Text<TestValues> more = bound("[x](if:{a}>{b})");
+        assertEquals("x", plain(more.render(values("a", "1000.5", "b", 1000L))));
+        assertEquals("", plain(more.render(values("a", "-2", "b", "1.5"))));
+        assertEquals("x", plain(more.render(values("a", "123456789012345678901", "b", "1"))));
+        assertEquals("x", plain(bound("[x](if:{a} < {b})").render(values("a", "-2", "b", "1.5"))));
+        assertEquals("x", plain(bound("[x](if:{a}<=7)").render(values("a", "+7"))));
+
+        // Equal numbers written differently are equal; other text compares as text.
+        final Text<TestValues> equal = bound("[x](if:{a}=={b})");
+        assertEquals("x", plain(equal.render(values("a", "10.0", "b", "10"))));
+        assertEquals("x", plain(equal.render(values("a", "007", "b", 7L))));
+        assertEquals("", plain(equal.render(values("a", "1e3", "b", "1000"))));
+        assertEquals("", plain(bound("[x](if:{a}!={b})").render(values("a", "10.5", "b", "10.50"))));
+    }
+
+    @Test
+    void orderingNeedsNumbersOnBothSides() {
+        assertEquals("", plain(bound("[x](if:{a}>5)").render(values("a", "many"))));
+        assertEquals("", plain(bound("[x](if:{a}<5)").render(values("a", ""))));
+        // unless negates the result, so it shows the segment for text that is no number.
+        assertEquals("x", plain(bound("[x](unless:{a}<5)").render(values("a", "many"))));
+        assertEquals("x", plain(Text.of("[x](if:3<10)").render()));
+        assertTrue(Text.of("[x](if:3<10) [y](if:2>=3)").keys().isEmpty());
+    }
+
+    @Test
+    void numbersChooseBranches() {
+        final Text<TestValues> rank = bound("[&6Gold|&7Silver|&cBronze](if:{points}>=1000, if:{points}>=100)");
+        assertEquals("Gold", plain(rank.render(values("points", 1500L))));
+        assertEquals("Silver", plain(rank.render(values("points", 100L))));
+        assertEquals("Bronze", plain(rank.render(values("points", 99L))));
+    }
+
+    @Test
     void andAndOrCombineParts() {
         final Text<TestValues> both = bound("[x](if:{a} && {b})");
         assertEquals("x", plain(both.render(values("a", "1", "b", "1"))));

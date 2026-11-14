@@ -42,6 +42,9 @@ final class Compiler {
     private static final byte ACTION_UNLESS = 17;
     private static final byte ACTION_TRANSFORM = 18;
 
+    /** What a segment hidden while compiling is replaced with; it renders nothing. */
+    private static final Token EMPTY_SEGMENT = new Token.Constant(Component.empty());
+
     private Compiler() {
     }
 
@@ -1261,8 +1264,12 @@ final class Compiler {
         }
 
         // Conditions decide about the finished segment, so they apply last.
-        final Token shown = condition(segment, ifValue, ifDynamic, false, placeholders);
-        return condition(shown, unlessValue, unlessDynamic, true, placeholders);
+        final Token.Condition condition = Token.Condition.both(
+                condition(ifValue, ifDynamic, false, placeholders),
+                condition(unlessValue, unlessDynamic, true, placeholders));
+        if (condition == null) return segment;
+        if (condition.isStatic()) return condition.holds(null, null) ? segment : EMPTY_SEGMENT;
+        return new Token.Conditional(segment, condition);
     }
 
     private static Token transform(Token content, Transforms transforms) {
@@ -1270,17 +1277,44 @@ final class Compiler {
                 : Token.TransformContent.create(content, transforms.steps(), transforms.limit(), isDynamic(content));
     }
 
-    // A condition without placeholders is decided here; the segment is kept or replaced by nothing.
-    private static Token condition(Token segment, String value, boolean dynamic, boolean negated,
-                                   PlaceholderTable placeholders) {
-        if (value == null) return segment;
-        final DynamicValue parts = dynamic ? parseDynamicValue(value, placeholders)
-                : new DynamicValue(new String[]{value}, Token.NO_PH);
-        if (parts.placeholderIndices.length != 0) {
-            return new Token.Conditional(segment, parts.staticParts, parts.placeholderIndices, negated);
+    /**
+     * Compiles the value of if or unless: a comparison when it contains {@code ==} or
+     * {@code !=} outside placeholders, otherwise a presence check. Null for no value.
+     */
+    private static Token.Condition condition(String value, boolean dynamic, boolean negated,
+                                             PlaceholderTable placeholders) {
+        if (value == null) return null;
+        final int operator = comparisonOperator(value);
+        if (operator < 0) {
+            final DynamicValue parts = parts(value, dynamic, placeholders);
+            return new Token.Presence(parts.staticParts, parts.placeholderIndices, negated);
         }
-        return Token.Conditional.hasText(parts.staticParts) != negated
-                ? segment : new Token.Constant(Component.empty());
+        final DynamicValue left = parts(value.substring(0, operator), dynamic, placeholders);
+        final DynamicValue right = parts(value.substring(operator + 2), dynamic, placeholders);
+        return new Token.Comparison(left.staticParts, left.placeholderIndices,
+                right.staticParts, right.placeholderIndices, value.charAt(operator) == '=', negated);
+    }
+
+    private static DynamicValue parts(String value, boolean dynamic, PlaceholderTable placeholders) {
+        return dynamic ? parseDynamicValue(value, placeholders) : new DynamicValue(new String[]{value}, Token.NO_PH);
+    }
+
+    // The index of the first == or != outside braces, or -1.
+    private static int comparisonOperator(String value) {
+        int braces = 0;
+        for (int index = 0; index + 1 < value.length(); index++) {
+            final char character = value.charAt(index);
+            if (character == '\\') {
+                index++;
+            } else if (character == '{') {
+                braces++;
+            } else if (character == '}') {
+                if (braces > 0) braces--;
+            } else if (braces == 0 && (character == '=' || character == '!') && value.charAt(index + 1) == '=') {
+                return index;
+            }
+        }
+        return -1;
     }
 
     // Any decimal number; a whole cycle of the colors is 1, so only the fraction matters.

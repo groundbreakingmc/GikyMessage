@@ -109,6 +109,38 @@ class ConditionalSegmentTest extends TextTestBase {
     }
 
     @Test
+    void comparisonsHoldWhileBothSidesHaveTheSameText() {
+        final Text<TestValues> text = bound("[&aTeammate ](if:{a}=={b}){name}");
+        assertEquals("Teammate Steve", plain(text.render(values("a", "Knights", "b", "Knights", "name", "Steve"))));
+        assertEquals("Steve", plain(text.render(values("a", "Knights", "b", "Pirates", "name", "Steve"))));
+
+        final Text<TestValues> spaced = bound("[x](if:\"{a} == {b}\")");
+        assertEquals("x", plain(spaced.render(values("a", "1", "b", "1"))));
+        assertEquals("x", plain(spaced.render(values("a", " Knights ", "b", "Knights"))));
+        assertEquals("", plain(spaced.render(values("a", "Kni ghts", "b", "Knights"))));
+
+        final Text<TestValues> different = bound("[x](if:{a}!={b})");
+        assertEquals("x", plain(different.render(values("a", "1", "b", "2"))));
+        assertEquals("", plain(different.render(values("a", "1", "b", "1"))));
+
+        final Text<TestValues> literal = bound("[VIP](if:{group}==vip)");
+        assertEquals("VIP", plain(literal.render(values("group", "vip"))));
+        assertEquals("", plain(literal.render(values("group", "default"))));
+
+        final Text<TestValues> negated = bound("[x](unless:{a}=={b})");
+        assertEquals("", plain(negated.render(values("a", "1", "b", "1"))));
+        assertEquals("x", plain(negated.render(values("a", "1", "b", "2"))));
+
+        // Numbers and components compare by their text.
+        assertEquals("x", plain(bound("[x](if:{a}=={b})").render(values("a", 5L, "b", "5"))));
+        assertEquals("x", plain(bound("[x](if:{a}=={b})").render(values("a", Component.text("A"), "b", "A"))));
+
+        // Without placeholders a comparison is decided while compiling.
+        assertEquals("", plain(Text.of("[x](if:a==b)").render()));
+        assertEquals("x", plain(Text.of("[x](if:a!=b)").render()));
+    }
+
+    @Test
     void conditionKeysAreBoundInOrderAndBindingsReuseResults() {
         final Text<TestValues> text = bound("[{name}](if:{clan}, unless:{hidden})");
         assertEquals(List.of("name", "clan", "hidden"), text.keys());

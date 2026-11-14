@@ -625,30 +625,57 @@ interface Token {
         }
     }
 
-    // Shows its segment only while the condition has text, or only while it has none when
-    // negated. Blank text counts as none. Values are inspected where they are; nothing is
-    // built to decide, and a hidden segment is not rendered at all.
+    // Shows its segment only while its condition holds. A hidden segment is not rendered.
     final class Conditional implements Token {
 
         private final Token segment;
-        private final String[] staticParts;
-        private final int[] placeholderIndices;
-        private final boolean negated;
+        private final Condition condition;
 
-        Conditional(Token segment, String[] staticParts, int[] placeholderIndices, boolean negated) {
+        Conditional(Token segment, Condition condition) {
             this.segment = segment;
-            this.staticParts = staticParts;
-            this.placeholderIndices = placeholderIndices;
-            this.negated = negated;
+            this.condition = condition;
         }
 
         @Override
         public Component render(Object[] placeholders, long[] numbers) {
+            return this.condition.holds(placeholders, numbers)
+                    ? this.segment.render(placeholders, numbers) : Component.empty();
+        }
+    }
+
+    // A condition of if or unless. Values are inspected where they are, so a presence check
+    // builds nothing; a comparison builds the text of both sides.
+    sealed interface Condition {
+
+        boolean holds(Object[] placeholders, long[] numbers);
+
+        // Whether the outcome is known while compiling, because no placeholder takes part.
+        boolean isStatic();
+
+        // Both conditions must hold; either may be null for none.
+        static Condition both(Condition first, Condition second) {
+            if (first == null) return second;
+            if (second == null) return first;
+            return new Both(first, second);
+        }
+    }
+
+    // Holds while the value has text, or while it has none when negated. Blank text counts as
+    // none, and so does a component that holds only formatting.
+    record Presence(String[] staticParts, int[] placeholderIndices, boolean negated) implements Condition {
+
+        @Override
+        public boolean holds(Object[] placeholders, long[] numbers) {
             boolean present = hasText(this.staticParts);
             for (int index = 0; !present && index < this.placeholderIndices.length; index++) {
                 present = valueHasText(placeholders[this.placeholderIndices[index]]);
             }
-            return present != this.negated ? this.segment.render(placeholders, numbers) : Component.empty();
+            return present != this.negated;
+        }
+
+        @Override
+        public boolean isStatic() {
+            return this.placeholderIndices.length == 0;
         }
 
         static boolean hasText(String[] parts) {
@@ -673,6 +700,38 @@ interface Token {
                 if (componentHasText(children.get(index))) return true;
             }
             return false;
+        }
+    }
+
+    // Holds while both sides have the same text, or different text for !=; negated for unless.
+    // Spaces around a side do not count. Components compare by their plain text.
+    record Comparison(String[] leftParts, int[] leftPlaceholders, String[] rightParts, int[] rightPlaceholders,
+                      boolean equal, boolean negated) implements Condition {
+
+        @Override
+        public boolean holds(Object[] placeholders, long[] numbers) {
+            // The left text is copied out before the right one reuses the shared builder.
+            final String left = buildText(this.leftParts, this.leftPlaceholders, placeholders, numbers).strip();
+            final String right = buildText(this.rightParts, this.rightPlaceholders, placeholders, numbers).strip();
+            return left.equals(right) == this.equal != this.negated;
+        }
+
+        @Override
+        public boolean isStatic() {
+            return this.leftPlaceholders.length == 0 && this.rightPlaceholders.length == 0;
+        }
+    }
+
+    record Both(Condition first, Condition second) implements Condition {
+
+        @Override
+        public boolean holds(Object[] placeholders, long[] numbers) {
+            return this.first.holds(placeholders, numbers) && this.second.holds(placeholders, numbers);
+        }
+
+        @Override
+        public boolean isStatic() {
+            return this.first.isStatic() && this.second.isStatic();
         }
     }
 

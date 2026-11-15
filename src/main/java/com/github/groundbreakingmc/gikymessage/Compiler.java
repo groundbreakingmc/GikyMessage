@@ -1473,8 +1473,11 @@ final class Compiler {
         }
         final int index = found >>> 3;
         final byte operator = (byte) (found & 7);
-        final DynamicValue left = parts(value.substring(0, index), dynamic, placeholders);
-        final DynamicValue right = parts(value.substring(index + Token.Comparison.OPERATORS[operator].length()),
+        // Spaces around a side never count. Without them here, fixed text needs no trimming per
+        // render and a side that is one placeholder is read without building its text.
+        final DynamicValue left = parts(value.substring(0, index).strip(), dynamic, placeholders);
+        final DynamicValue right = parts(
+                value.substring(index + Token.Comparison.OPERATORS[operator].length()).strip(),
                 dynamic, placeholders);
         return new Token.Comparison(left.staticParts, left.placeholderIndices,
                 right.staticParts, right.placeholderIndices, operator, negated);

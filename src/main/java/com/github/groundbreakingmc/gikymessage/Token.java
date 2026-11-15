@@ -13,6 +13,7 @@ import java.lang.ref.WeakReference;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicReferenceArray;
 
 // Compiled tokens render from indexed values; static results are built during compilation.
 interface Token {
@@ -504,10 +505,9 @@ interface Token {
         private final Style baseStyle;
         // Fraction of a full color cycle in [0, 1); zero is the plain gradient.
         private final float phase;
-        private volatile Style[] styleCache0;
-        private volatile Style[] styleCache1;
-        private volatile Style[] styleCache2;
-        private volatile Style[] styleCache3;
+        // The styles for the last texts, one per length modulo 16, so names of up to 16
+        // characters, the usual content of a dynamic gradient, never evict each other.
+        private final AtomicReferenceArray<Style[]> styleCache = new AtomicReferenceArray<>(16);
 
         static Token create(Token content, int[] colors, Style baseStyle, boolean dynamic, float phase) {
             if (dynamic) return new GradientContent(content, colors, baseStyle, phase);
@@ -549,22 +549,11 @@ interface Token {
         }
 
         private Style[] styles(int length) {
-            final int slot = (length ^ (length >>> 2)) & 3;
-            Style[] styles = switch (slot) {
-                case 0 -> this.styleCache0;
-                case 1 -> this.styleCache1;
-                case 2 -> this.styleCache2;
-                default -> this.styleCache3;
-            };
-
-            if (styles != null && styles.length == length) return styles;
-
-            styles = gradientStyles(length, this.colors, this.phase);
-            switch (slot) {
-                case 0 -> this.styleCache0 = styles;
-                case 1 -> this.styleCache1 = styles;
-                case 2 -> this.styleCache2 = styles;
-                default -> this.styleCache3 = styles;
+            final int slot = length & 15;
+            Style[] styles = this.styleCache.get(slot);
+            if (styles == null || styles.length != length) {
+                styles = gradientStyles(length, this.colors, this.phase);
+                this.styleCache.set(slot, styles);
             }
             return styles;
         }

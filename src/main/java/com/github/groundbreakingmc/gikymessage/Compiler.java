@@ -158,6 +158,12 @@ final class Compiler {
                         pos += 2;
                         continue;
                     }
+                    // The signs that start a code, shown as they are.
+                    case '&', '#', '$' -> {
+                        textBuf.append(src[pos + 1]);
+                        pos += 2;
+                        continue;
+                    }
                 }
                 textBuf.append(c);
                 pos++;
@@ -1689,6 +1695,7 @@ final class Compiler {
                         || escaped == ']'
                         || escaped == '{'
                         || escaped == '}'
+                        || escaped == '&'
                         || escaped == '\\') {
                     index++;
                 }

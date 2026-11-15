@@ -178,6 +178,16 @@ class TextCombinedTest extends TextTestBase {
         }
 
         @Test
+        @DisplayName("Escaped signs of codes")
+        void escapedCodeSigns() {
+            assertRenders(Component.text("R&D"), "R\\&D");
+            assertRenders(Component.text("&cnot red"), "\\&cnot red");
+            assertRenders(Component.text("$#ff5555 costs $5"), "\\$\\#ff5555 costs \\$5");
+            // An escaped &r is no reset.
+            assertRenders(Component.text("Red &r still red", NamedTextColor.RED), "&cRed \\&r still red");
+        }
+
+        @Test
         @DisplayName("Escaped brackets with color")
         void escapedBracketsWithColor() {
             assertRenders(

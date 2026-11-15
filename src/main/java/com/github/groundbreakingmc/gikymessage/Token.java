@@ -1069,6 +1069,10 @@ interface Token {
             int[] placeholderIndices,
             Object[] placeholders, long[] numbers
     ) {
+        // A side of a comparison may be fixed text; it needs no copy.
+        if (placeholderIndices.length == 0) {
+            return staticParts.length == 0 || staticParts[0] == null ? "" : staticParts[0];
+        }
         if (staticParts.length == 0 && placeholderIndices.length == 1) {
             final int index = placeholderIndices[0];
             final Object value = placeholders[index];

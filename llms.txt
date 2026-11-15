@@ -1,0 +1,423 @@
+# GikyMessage
+
+> GikyMessage is a text format for Minecraft messages on Paper, Velocity and other Adventure
+> platforms. A plugin compiles each string once and renders it into an Adventure component. This
+> file is a complete reference for AI assistants: the syntax, the rules for writing GikyMessage
+> strings, and the rules for converting MiniMessage and legacy `&`/`§` strings to GikyMessage.
+
+Applies to GikyMessage 1.0.0-rc.2. Every GikyMessage example in this file was compiled and rendered
+with that version. Documentation for people:
+https://github.com/groundbreakingmc/GikyMessage/tree/main/wiki
+
+## Rules for the assistant
+
+1. Every message you write must be valid GikyMessage: no MiniMessage tags, `§` codes or JSON may
+   remain.
+2. Keep the visible text exactly: same words, language, punctuation and spaces. Do not translate or
+   rephrase it.
+3. Placeholder keys are defined by the plugin and are case-sensitive. Keep them as they are; never
+   invent keys. Convert other placeholder syntaxes (`<player>`, `%player%`) to `{player}` and say
+   that you did.
+4. In a YAML file, change only the message values; keep keys, comments and structure. Wrap every
+   message in single quotes and write an apostrophe as `''`. Never use double quotes: YAML rejects
+   `\[` inside them.
+5. A list (item lore, multi-line messages) stays a list; convert each line on its own.
+6. When something has no GikyMessage equivalent (section 7.3), convert the rest and tell the user
+   what was dropped or approximated.
+7. Prefer the simplest form: `&` codes for colors, `[...]` only where a scope, an action or a
+   condition is needed.
+8. Check the result against the checklist at the end of this file before answering.
+
+## 1. Codes
+
+| Write | Effect |
+|---|---|
+| `&0`…`&9`, `&a`…`&f` | Named color (table below). Codes are case-insensitive. |
+| `&#RRGGBB`, `#RRGGBB` | Hex color, always six digits. The `&` is optional. |
+| `&l` `&o` `&n` `&m` `&k` | Bold, italic, underlined, strikethrough, obfuscated. |
+| `&r` | Plain text: no color, decorations or shadow. Inside a segment it also cancels the style inherited from outside; the segment's click and hover stay. |
+| `$#RRGGBB`, `$RRGGBB` | Opaque text shadow in that color, always six digits. The `#` is optional. |
+| `$#RRGGBB:AA` | Shadow with alpha after a colon: `00` transparent … `ff` opaque. |
+| `$#000000:00` | No shadow. |
+
+- A color code does NOT end decorations: in `&6&lSkyCraft &7survival` the word "survival" is gray
+  and still bold. End decorations with `&r` or scope them: `[&6&lSkyCraft] &7survival`.
+- A color or shadow lasts until the next color or shadow code, `&r`, or the end of the enclosing
+  `[...]`. A decoration lasts until `&r` or the end of the enclosing `[...]`.
+- `&`, `#` or `$` that does not start a valid code is literal: `Tom & Jerry`, `#1`, `$5`.
+- A hex code is exactly six `0-9a-fA-F` digits and has no shorter form: `&#f80` and `$#f80` are
+  literal text. The text after a code can start with any character: `&#ff8800Bad` is "Bad" in
+  orange and `$#ff5555Bad` is "Bad" with a red shadow. Alpha is read only from a colon and two
+  digits right after a shadow.
+- `#` or `$` followed by six `0-9a-fA-F` characters is always a code, also in the middle of a
+  sentence. To show such text, write `\#123456` or `\$100000`.
+
+| Code | Name | Hex |
+|---|---|---|
+| `&0` | black | `#000000` |
+| `&1` | dark_blue | `#0000aa` |
+| `&2` | dark_green | `#00aa00` |
+| `&3` | dark_aqua | `#00aaaa` |
+| `&4` | dark_red | `#aa0000` |
+| `&5` | dark_purple | `#aa00aa` |
+| `&6` | gold | `#ffaa00` |
+| `&7` | gray | `#aaaaaa` |
+| `&8` | dark_gray | `#555555` |
+| `&9` | blue | `#5555ff` |
+| `&a` | green | `#55ff55` |
+| `&b` | aqua | `#55ffff` |
+| `&c` | red | `#ff5555` |
+| `&d` | light_purple | `#ff55ff` |
+| `&e` | yellow | `#ffff55` |
+| `&f` | white | `#ffffff` |
+
+The names are the ones `color:` and `style:` accept, in any case. `grey` and `dark_grey` are not
+accepted.
+
+## 2. Placeholders
+
+- `{key}` is replaced with the value the plugin supplies for `key`.
+- A key the plugin does not supply stays as the literal text `{key}`.
+- Values are inserted as plain text and never parsed: the value `&cBob` shows as `&cBob`. Only the
+  plugin can supply a formatted value, such as a rank prefix.
+- An empty value renders as nothing, but the spaces around it stay. Hide them with a condition:
+  `[{clan} ](if:{clan}){player}`.
+- `{` without a closing `}` is literal.
+
+## 3. Segments
+
+```text
+[text](action:value, action:value)
+```
+
+- `text` is full GikyMessage: codes, placeholders, nested segments.
+- Codes inside `[...]` end at `]`; the style from before the segment continues after it.
+- `[text]` without `(...)` only scopes style: in `&7Hello, [&f{player}]!` the name is white, and
+  "Hello, " and "!" are gray.
+- A segment inherits the style from outside: in `&c[&lWarning:] restart` the word "Warning:" is red
+  and bold, "restart" is red.
+- `[` always opens a segment. An unclosed `[` closes at the end of the string and is not shown, so
+  `:-[` loses its bracket. A `]` without an open `[` is literal.
+- `(` directly after `]` starts an action list: `[see](here)` shows only "see". To show such text,
+  escape the brackets: `\[see\](here)`.
+- Segments nest. An inner segment's click and hover win for its own text:
+  `[&7Click [&ehere](run:/spawn) &7now](show:&7Tip)`.
+- A segment's `color:`, or a color in its `style:`, applies to everything inside it and overrides
+  colors set inside, nested segments included; `style:reset` overrides every style inside. When the
+  text has several colors, use `&` codes instead of `color:`.
+
+### 3.1 Action list syntax
+
+- Actions are separated by `,`. Spaces around names and values are trimmed; only `suggest` keeps
+  trailing spaces.
+- Action names are lowercase and case-sensitive. Unknown names are ignored.
+- Quote a value that contains `,` or `)`, with `"…"` or `'…'`.
+- A quote opens a quoted value only as the first character of a value. Anywhere else `'` and `"` are
+  ordinary characters, so `show:Don't click` needs no quotes. Inside a quoted value the other kind
+  of quote is ordinary too: `show:"&7It's free, try it"`.
+- Inside quotes `\"` and `\'` give a quote and `\\` gives `\`. Every other backslash stays, so `\n`,
+  `\[` and the other escapes of section 6 work inside quotes as they do without them. A quoted value
+  keeps its leading and trailing spaces.
+- Repeated actions: `color` and `style` use the first occurrence; other actions use the last one,
+  except `if` in a segment with branches (section 4).
+- One click per segment. With several click actions the winner is `run`, then `suggest`, `url`,
+  `copy`, `page`.
+- One content action per segment: `head`, then `sprite`, `lang`, `gradient`.
+
+### 3.2 Actions
+
+| Action | Value | `{key}` in value | Effect |
+|---|---|---|---|
+| `run` | command, e.g. `/spawn` | yes | Click: the player runs the command. |
+| `suggest` | text | yes | Click: puts the text into the chat input. Trailing spaces are kept. |
+| `url` | full address with `https://` or `http://` | yes | Click: opens the link. A fixed invalid address is a load error; an invalid address from a placeholder drops the click. |
+| `copy` | text | yes | Click: copies the text. |
+| `page` | page number, 1 or more | no | Click: turns the book to that page. |
+| `show` | GikyMessage text | yes | Hover tooltip. Codes, placeholders, segments and `\n` work inside. |
+| `insert` | text | no, `{key}` stays literal | Shift-click: inserts the text into the chat input. |
+| `color` | `red`, `c`, `&c`, `#ff5555`, `&#ff5555`, `&x&f&f&5&5&5&5` | yes | Color of the whole segment, overriding colors inside it. An invalid color is ignored. |
+| `style` | words separated by spaces: `bold` `italic` `underlined` (or `underline`) `strikethrough` `obfuscated` `reset`, color names, `&` codes; e.g. `style:"gold bold"` | yes | Style of the whole segment. `reset` means white with every decoration explicitly off; later words apply on top: `style:"reset gray"`. |
+| `gradient` | two or more stops joined by `-`: six-digit hex `#ff5555` or one-letter codes, e.g. `c-9` | no | Colors the characters along the stops. Replaces colors inside the segment, keeps decorations. Names like `red` make the gradient invalid, and it is ignored. |
+| `phase` | number, a full loop is `1` | no | Shifts the gradient's colors along the text; `0` and `1` look the same, negative values move the other way. |
+| `font` | resource key; the namespace defaults to `minecraft` | no | Font: `font:uniform`. |
+| `head` | player name | yes | Replaces the segment with that player's head (Minecraft 1.21.9+). If a name from a placeholder can't belong to a player (spaces, more than 16 characters), the segment's text is shown instead; a fixed invalid name is a load error. |
+| `sprite` | key of a texture in the blocks atlas: `block/stone`; a resource pack's `assets/myserver/textures/block/coin.png` is `myserver:block/coin` | no | Replaces the segment with that texture (Minecraft 1.21.9+). Only the blocks atlas is used; item textures are in a separate atlas since Minecraft 1.21.11. |
+| `lang` | translation key: `item.minecraft.diamond` | yes | Text in each player's game language. The segment text is the fallback for clients without the key (shown on Minecraft 1.19.4+). The style at the start of the segment text applies to the whole translation; codes later inside it are dropped. An empty key leaves plain text. |
+| `if`, `unless` | condition (section 4) | yes | Shows or hides the segment, or picks a branch. |
+| `transform` | steps (section 5) | no | Changes the segment's text. |
+
+## 4. Conditions
+
+- `[{clan} ](if:{clan})` — shown while `{clan}` has text.
+- `[&7no clan](unless:{clan})` — shown while `{clan}` is empty.
+- `[&6VIP ](if:{group}==vip)` and `[&7(away) ](if:{status}!=online)` — compare two values, or a
+  value with fixed text.
+- `[&aonline|&7offline](if:{status}==online)` — branches: the first is shown when the condition
+  holds, the second otherwise.
+- `[&4Owner|&cAdmin|&9Moderator|&7Player](if:{group}==owner, if:{group}==admin, if:{group}==mod)` —
+  the n-th condition decides the n-th branch; the last branch is the fallback.
+- `[&6VIP ](if:{group}==vip || {group}==mvp)` — `||` means or.
+- `[&a\[Claim\]](if:{level}>=10 && {claimed}!=yes, run:/reward claim)` — `&&` means and.
+- `&7Ping: [&a{ping}|&e{ping}|&c{ping}](if:{ping}<100, if:{ping}<250)` — `<`, `>`, `<=`, `>=`
+  compare numbers.
+- `[&6VIP ](if:{vip}, unless:{vanished})` — `if` and `unless` together: both must hold.
+
+Rules:
+- Empty means empty text or only spaces. Numbers, `0` included, count as text. An unknown key
+  renders as `{key}` and counts as text.
+- `==` and `!=` compare the plain text of both sides, colors ignored; spaces around the sides are
+  trimmed; case matters. When both sides are numbers they compare by value: `10.0==10` holds.
+- A number is an optional `+` or `-`, digits, and optionally `.` and more digits. `<`, `>`, `<=`,
+  `>=` hold only when both sides are numbers; empty values, `1,000`, `1.2K` and `1e3` are not
+  numbers.
+- `&&` binds tighter than `||`: `{a} || {b} && {c}` means a, or both b and c. There are no
+  parentheses; nest segments for more complex logic.
+- `unless` negates the whole condition: `unless:{a} || {b}` shows the segment while neither holds.
+- Operators are read from the message only; `&&`, `||` or `==` inside a placeholder's value are
+  plain text.
+- `=` alone is not an operator: `if:{group}=vip` compares nothing and always holds. Write `==`.
+- Without branches, a segment uses only its last `if` and its last `unless`.
+- `|` splits branches only in a segment that has a condition; write `\|` for a literal `|` there.
+  Elsewhere `|` is literal.
+- The segment's other actions apply to whichever branch is shown.
+- A condition without placeholders is decided when the message is loaded.
+- Keep the spaces that belong to an optional part inside its brackets.
+
+## 5. Transforms
+
+`transform:compact`; several steps are separated by spaces: `transform:"smallcaps max:10"`.
+
+| Step | Effect |
+|---|---|
+| `compact` | Every standalone number of 1000 or more is shortened with `K`, `M`, `B`, `T`, one decimal, rounded half up: `1234567` → `1.2M`, `1000` → `1K`, `999999` → `1M`. Digits glued to letters (`Steve1234`) are untouched. |
+| `upper`, `lower` | Upper or lower case. |
+| `smallcaps` | Latin `a`–`z` become small capitals: `Steve` → `ꜱᴛᴇᴠᴇ`. `x` and non-Latin letters stay as they are. |
+| `max:N` | Keeps at most N characters of the whole segment, without an ellipsis. |
+
+Steps run from left to right, `max` always last. Transforms run before `gradient` and `lang`.
+Unknown steps are ignored.
+
+## 6. Escapes
+
+- `\[` `\]` → `[` `]`
+- `\{` `\}` → `{` `}`
+- `\\` → `\`
+- `\n` → line break
+- `\|` → `|`, needed only inside a segment with a condition
+- `\&` `\#` `\$` → `&` `#` `$`, needed where the sign would start a code: `R\&D`, `\#123456`,
+  `\$100000`
+- Any other backslash stays as written: `a\qb` shows `a\qb`.
+- `<` and `>` are plain text.
+
+## 7. Converting from MiniMessage
+
+### 7.1 Procedure
+
+The MiniMessage format itself: https://docs.papermc.io/adventure/minimessage/format/
+
+1. Read the MiniMessage string as nested tags. Unclosed tags end at the end of the string; `<reset>`
+   closes every open tag.
+2. Escape the literal text for GikyMessage: `[` `]` `{` `}` `\` become `\[` `\]` `\{` `\}` `\\`; an
+   `&` directly followed by a letter, a digit or `#` becomes `\&`; a `#` or `$` directly followed by
+   six `0-9a-fA-F` characters becomes `\#` or `\$`; MiniMessage's `\<` becomes `<`.
+3. Tags that are not standard MiniMessage tags are the plugin's placeholders: `<player>` →
+   `{player}`.
+4. Colors and decorations become `&` codes where the tag opens. A closing tag becomes the end of a
+   `[...]` scope: `<red>Error</red> details` → `[&cError] details`. The scope can be left out where
+   the following text sets its own color anyway and no decoration was active.
+5. Click, hover, insert, font, gradient, rainbow, lang, head and sprite tags become actions of a
+   segment around the text they wrap. Tags that wrap the same text become one segment with several
+   actions. Ranges that overlap without nesting are split into several segments.
+6. Convert hover text recursively into a `show:` value. Quote it when it contains `,` or `)` or
+   starts with a quote (section 3.1); inside the quotes write a quote of the same kind as `\"` or
+   `\'`.
+7. Write each result in YAML single quotes.
+
+### 7.2 Tag map
+
+| MiniMessage | GikyMessage |
+|---|---|
+| `<black>` … `<white>`, `<color:red>`, `<colour:red>`, `<c:red>` | `&0` … `&f` by the name table; `<grey>` is `&7`, `<dark_grey>` is `&8` |
+| `<#ff8800>`, `<color:#ff8800>` | `&#ff8800` |
+| `</red>`, `</color>`, `</#ff8800>`, `</bold>` and other closing tags | end of a `[...]` scope |
+| `<bold>`, `<b>` | `&l` |
+| `<italic>`, `<i>`, `<em>` | `&o` |
+| `<underlined>`, `<u>` | `&n` |
+| `<strikethrough>`, `<st>` | `&m` |
+| `<obfuscated>`, `<obf>` | `&k` |
+| `<!bold>`, `<bold:false>`, the same for other decorations | No code. Restructure so the decoration is never on for that text: end it with `]` or with `&r` plus the color again. For item names and lore see section 9. |
+| `<reset>` | `&r`; also end any segment that is open at that point |
+| `<shadow:black>`, `<shadow:#000000>` | `$#000000:40` (MiniMessage's default alpha 0.25 = `40`) |
+| `<shadow:#ff0000:0.5>` | `$#ff0000:80` (alpha × 255 as two hex digits: 0.25 → `40`, 0.5 → `80`, 1 → `ff`) |
+| `<shadow:#ff000080>` | `$#ff0000:80` |
+| `<!shadow>` | `$#000000:00` |
+| `<click:run_command:/spawn>` | `run:/spawn` |
+| `<click:suggest_command:'/msg Steve '>` | `suggest:/msg Steve ` |
+| `<click:open_url:'https://example.com'>` | `url:https://example.com` |
+| `<click:copy_to_clipboard:play.example.com>` | `copy:play.example.com` |
+| `<click:change_page:2>` | `page:2` |
+| `<hover:show_text:'…'>` | `show:…` |
+| `<insert:text>` | `insert:text` |
+| `<font:uniform>`, `<font:minecraft:uniform>` | `font:uniform` |
+| `<newline>`, `<br>` | `\n` |
+| `<gradient:#5e4fa2:#f79459>` | `gradient:#5e4fa2-#f79459` |
+| `<gradient:red:blue>` | `gradient:c-9`: color names become one-letter codes or hex |
+| `<gradient:red>` with one color | `&c` |
+| `<gradient:…:0.5>`, `<rainbow:2>` with a phase | Drop the phase: the scales differ. For animation frames use `phase:` values from 0 to just below 1. |
+| `<rainbow>` | `gradient:#ff0000-#ffff00-#00ff00-#00ffff-#0000ff-#ff00ff` (approximation) |
+| `<rainbow:!>` | the same stops in reverse order |
+| `<transition:…:phase>` | one fixed color `&#RRGGBB`: the color at that phase |
+| `<pride>`, `<pride:flag>` | `gradient:` with the flag's colors (approximation) |
+| `<lang:key>`, `<tr:key>`, `<translate:key>` | `[](lang:key)` |
+| `<lang_or:key:Fallback>` | `[Fallback](lang:key)` |
+| `<head:Steve>` | `[](head:Steve)`; with a placeholder `[{player}](head:{player})` |
+| `<sprite:block/stone>`, `<sprite:blocks:block/stone>` | `[](sprite:block/stone)` |
+| `<player>` and other plugin tags | `{player}` |
+| `\<` | `<` |
+
+### 7.3 No equivalent
+
+Drop these and tell the user: `<hover:show_item:…>`, `<hover:show_entity:…>`, `<key:…>` keybinds,
+`<selector:…>`, `<score:…>`, `<nbt:…>`/`<data:…>`, translation arguments (`<lang:key:arg…>` keeps
+only the key), `<click:show_dialog:…>` and `<click:custom:…>`, `<head:…>` with a UUID, a texture or
+an `outer_layer` argument, `<sprite:…>` from an atlas other than blocks (such as `items`), and
+custom plugin tags that are more than plain placeholders. A plugin can often supply such content as
+a placeholder value instead.
+
+### 7.4 Examples
+
+| MiniMessage | GikyMessage |
+|---|---|
+| `<gray>Hello, <white><player></white>!` | `&7Hello, [&f{player}]!` |
+| `<red><bold>Warning:</bold> the server restarts in <time>` | `&c[&lWarning:] the server restarts in {time}` |
+| `<red><bold>Alert<reset>: restart in <time>` | `&c&lAlert&r: restart in {time}` |
+| `<b>Bold</b> normal <i>italic</i>` | `[&lBold] normal [&oitalic]` |
+| `<gray>[<gold>VIP</gold>] <white><player>` | `&7\[&6VIP&7\] &f{player}` |
+| `<gradient:#55ffff:#5555ff><bold>SkyCraft</bold></gradient> <gray>» <white>Welcome!` | `[&lSkyCraft](gradient:#55ffff-#5555ff) &7» &fWelcome!` |
+| `<click:run_command:/spawn><hover:show_text:'<green>Click to teleport'><gold>[Spawn]</gold></hover></click>` | `[&6\[Spawn\]](run:/spawn, show:&aClick to teleport)` |
+| `<gray>Join our <click:open_url:'https://discord.gg/example'><blue><u>Discord</u></blue></click>!` | `&7Join our [&9&nDiscord](url:https://discord.gg/example)!` |
+| `<hover:show_text:'<gold><player><newline><gray>Rank: <rank>'><player></hover>` | `[{player}](show:&6{player}\n&7Rank: {rank})` |
+| `<hover:show_text:'<gray>Rules: be nice, no spam<newline>No cheats'><yellow>[?]</yellow></hover>` | `[&e\[?\]](show:"&7Rules: be nice, no spam\nNo cheats")` |
+| `<red>Line one<newline><gray>Line two` | `&cLine one\n&7Line two` |
+| `<shadow:black>Shadowed</shadow> text` | `[$#000000:40Shadowed] text` |
+| `<gray>You found <lang_or:item.minecraft.diamond:Diamond>!` | `&7You found [Diamond](lang:item.minecraft.diamond)!` |
+| `<rainbow>Rainbow text</rainbow>` | `[Rainbow text](gradient:#ff0000-#ffff00-#00ff00-#00ffff-#0000ff-#ff00ff)` |
+| `<gray>R&D team` | `&7R\&D team` |
+
+A YAML file before and after:
+
+```yaml
+join: "<gray>[<green>+</green>] <white><player> joined"
+```
+
+```yaml
+join: '&7\[&a+&7\] &f{player} joined'
+```
+
+## 8. Converting from legacy `&` and `§` codes
+
+1. `§` becomes `&`.
+2. Hex colors in other notations become `&#RRGGBB`: `&x&f&f&8&8&0&0` (or with `§`), `<#ff8800>`,
+   `{#ff8800}`. `&#ff8800` and `#ff8800` stay.
+3. In legacy text a color code switches decorations off; in GikyMessage it does not. Where a color
+   code follows an active `&l` `&o` `&n` `&m` or `&k`, put `&r` right before it. A decoration placed
+   directly before a color code had no effect in legacy text; drop it.
+4. Escape literal `[` `]` `{` `}` `\`, and a `#` or `$` followed by six `0-9a-fA-F` characters that
+   is meant as text, such as the price `$100000` (section 6).
+5. Placeholders in other syntaxes become the keys the plugin supplies: `%player%` → `{player}`.
+
+| Legacy | GikyMessage |
+|---|---|
+| `&6&lSkyCraft &7» &fWelcome, %player%!` | `&6&lSkyCraft &r&7» &fWelcome, {player}!` |
+| `§cError: §7unknown command` | `&cError: &7unknown command` |
+| `&x&f&f&8&8&0&0Orange` | `&#ff8800Orange` |
+| `&8[&6VIP&8] &f%player%` | `&8\[&6VIP&8\] &f{player}` |
+| `&l&6Title` | `&6Title` |
+
+## 9. Item names and lore
+
+Minecraft shows item names and lore in italic unless italic is explicitly switched off, and
+GikyMessage has no code that switches it off; `&r` does not. Prefer to let the plugin remove the
+default italic in code with `decorationIfAbsent(TextDecoration.ITALIC, TextDecoration.State.FALSE)`.
+If it must happen in the text, give every run of one color its own segment whose `style:` is `reset`
+plus that color, because `style:reset` turns all decorations off but also overrides colors inside
+the segment:
+
+```text
+[Deals ](style:"reset gray")[+5](style:"reset red")[ damage](style:"reset gray")
+```
+
+## 10. Writing new messages
+
+```text
+&8\[&6Shop&8\] &7You bought &f{amount}x {item} &7for &6{price} coins&7.
+[&a&l\[ACCEPT\]](run:/tpaccept, show:&aAccept the request) [&c&l\[DENY\]](run:/tpdeny, show:&cDeny the request)
+&7Join our [&9&nDiscord](url:https://discord.gg/example, show:&7Open the invite)&7!
+[&e{player}](suggest:/msg {player} , show:&7Send a private message)
+[&7\[{clan}\] ](if:{clan})&f{player}&7: {message}
+&f{friend} [&aonline|&7offline](if:{status}==online)
+&7Balance: &e[{balance}](transform:compact) &7coins
+[&lSkyCraft](gradient:#55ffff-#5555ff)
+&6&lSkyCraft&r\n&7Welcome back, &f{player}&7!
+&7You found a [&bDiamond](lang:item.minecraft.diamond)&7!
+[{player}](head:{player}) &f{player} &7joined the game
+```
+
+- Use only the placeholders the plugin documents.
+- Tell the player what a click does, in a short tooltip.
+- Never expect a placeholder value to carry formatting.
+
+## 11. Plugin code
+
+| MiniMessage API | GikyMessage API |
+|---|---|
+| `MiniMessage.miniMessage().deserialize(s)` on every send | `Text<Void> text = Text.of(s);` once, then `text.render()` on every send |
+| `Placeholder.unparsed("player", name)` | a handler that calls `value.text(name)` |
+| `Placeholder.component("item", component)` | `value.component(component)` |
+| `Placeholder.parsed("prefix", miniMessageString)` | `value.component(miniMessageString, MINI)` with a constant `MINI = MiniMessage.miniMessage()::deserialize` |
+| `Formatter.number("amount", n)` | `value.number(n)` for whole numbers; format other numbers yourself and use `value.text(...)` |
+| custom `TagResolver` tags | placeholders and segments |
+
+```java
+// Once, when the messages are loaded:
+Text<Player> join = Text.of(config.getString("join"), key -> switch (key) {
+    case "player" -> (player, value) -> value.text(player.getName());
+    case "balance" -> (player, value) -> value.number(economy.balance(player));
+    default -> null; // keys the plugin doesn't supply stay as {key}
+});
+
+// Every time the message is sent:
+player.sendMessage(join.render(player));
+```
+
+A compiled `Text` can be kept and shared between threads. `Text.of` throws `TextFormatException` for
+a message that can't work, such as `url:` with a fixed invalid address.
+
+## 12. Version requirements
+
+| Feature | Adventure on the server | Minecraft on the player's side |
+|---|---|---|
+| `lang:` | 4.13+ | 1.19.4+ to show the fallback text |
+| `$#` shadows | 4.18+ | 1.21.4+ |
+| `head:`, `sprite:` | 4.25+ | 1.21.9+ |
+
+On an older Adventure, a message that uses these features fails to load with a
+`TextFormatException`.
+
+## Checklist
+
+- No MiniMessage tags or `§` codes are left.
+- Literal `[` `]` `{` `}` `\` in visible text are escaped; an `&` before a letter, digit or `#`, and
+  a `#` or `$` before six hex characters, are written `\&`, `\#`, `\$` when they are meant as text.
+- Every segment is closed with `]`, and every `(` after `]` has its `)`.
+- Values with `,` or `)` are quoted, and a quote inside them is written `\"` or `\'`.
+- A segment has at most one click action.
+- Gradients use hex or one-letter codes, at least two of them.
+- `color:` and `style:` use `gray` and `dark_gray`, never `grey`.
+- Hex colors and shadows have exactly six digits, and a shadow's alpha follows a colon:
+  `$#000000:80`.
+- Decorations end where the source ended them: `]` or `&r`.
+- Optional parts keep their spaces inside their brackets.
+- Placeholder keys match the plugin's keys exactly.
+- YAML values are in single quotes, with `''` for an apostrophe.
+- Everything dropped or approximated is reported to the user.

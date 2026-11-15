@@ -930,6 +930,8 @@ interface Token {
 
         // One decimal, rounded half up, without a trailing .0; null below 1000.
         private static String compactNumber(String number) {
+            final int digits = number.length() - (number.charAt(0) == '-' ? 1 : 0);
+            if (digits <= 18 && number.indexOf('.') < 0) return compactWhole(Long.parseLong(number));
             BigDecimal value = new BigDecimal(number);
             final boolean negative = value.signum() < 0;
             value = value.abs();
@@ -945,6 +947,27 @@ interface Token {
                 unit++;
             }
             return (negative ? "-" : "") + value.stripTrailingZeros().toPlainString() + UNITS[unit - 1];
+        }
+
+        // The same rounding in long arithmetic, for whole numbers of up to 18 digits.
+        private static String compactWhole(long number) {
+            final long magnitude = Math.abs(number);
+            if (magnitude < 1000) return null;
+            int unit = 1;
+            long scale = 1000;
+            while (unit < UNITS.length && magnitude >= scale * 1000) {
+                scale *= 1000;
+                unit++;
+            }
+            // Tenths of the value in this unit, rounded half up.
+            final long tenth = scale / 10;
+            long tenths = magnitude / tenth + (magnitude % tenth * 2 >= tenth ? 1 : 0);
+            if (tenths >= 10_000 && unit < UNITS.length) {
+                tenths = tenths / 1000 + (tenths % 1000 >= 500 ? 1 : 0);
+                unit++;
+            }
+            final String value = tenths % 10 == 0 ? Long.toString(tenths / 10) : tenths / 10 + "." + tenths % 10;
+            return (number < 0 ? "-" : "") + value + UNITS[unit - 1];
         }
 
         private static boolean isDigit(char character) {

@@ -16,7 +16,6 @@ final class StyleUtils {
     static final int BIT_TRUE = 0b01;
     static final int BIT_FALSE = 0b10;
 
-    private static final int OPAQUE_ALPHA = 0xFF000000;
     private static final TextDecoration[] DECORATIONS = TextDecoration.values();
 
     private static final int COLOR_CACHE_SIZE = 1 << 13;
@@ -305,29 +304,13 @@ final class StyleUtils {
         return rgb;
     }
 
-    // Packs consumed length in the high 32 bits and ARGB in the low 32; -1 means invalid hex.
-    // Eight digits are RRGGBBAA: alpha comes last, as in Adventure's hex strings. Six digits
-    // are opaque. Seven digits are a six-digit color followed by one character of text.
-    static long parseShadowPacked(char[] src, int start) {
-        if (start >= src.length || src[start] != '#') return -1L;
-        int count = 0;
-        long digits = 0;
-        while (count < 8 && start + 1 + count < src.length) {
-            final int digit = hexVal(src[start + 1 + count]);
-            if (digit == -1) break;
-            digits = (digits << 4) | digit;
-            count++;
-        }
-        final int argb;
-        if (count == 8) {
-            argb = (int) ((digits & 0xFF) << 24 | digits >>> 8);
-        } else if (count == 6 || count == 7) {
-            argb = OPAQUE_ALPHA | (int) (count == 7 ? digits >>> 4 : digits);
-            count = 6;
-        } else {
-            return -1L;
-        }
-        return ((long) (count + 1) << 32) | (argb & 0xFFFFFFFFL);
+    // The alpha of a shadow: a colon and two hex digits after its color, as in $#ff5555:80.
+    // Returns -1 for anything else, so the text after a shadow is never read as alpha.
+    static int parseAlpha(char[] src, int start) {
+        if (start + 3 > src.length || src[start] != ':') return -1;
+        final int high = hexVal(src[start + 1]);
+        final int low = hexVal(src[start + 2]);
+        return high == -1 || low == -1 ? -1 : high << 4 | low;
     }
 
     private static void applyDecoration(Style.Builder builder, short decorations, TextDecoration decoration) {

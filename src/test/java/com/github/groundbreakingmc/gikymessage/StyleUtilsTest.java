@@ -17,6 +17,15 @@ class StyleUtilsTest {
     }
 
     @Test
+    void readsAlphaAfterAColon() {
+        assertEquals(0x80, StyleUtils.parseAlpha("x:80y".toCharArray(), 1));
+        assertEquals(0xFF, StyleUtils.parseAlpha(":fF".toCharArray(), 0));
+        for (final String invalid : new String[]{"", ":", ":8", ":8g", "80", "::80"}) {
+            assertEquals(-1, StyleUtils.parseAlpha(invalid.toCharArray(), 0), invalid);
+        }
+    }
+
+    @Test
     void colorValuesHaveNoShortForm() {
         assertEquals(0xFF5555, StyleUtils.parseColor("#ff5555").value());
         assertEquals(0xFF5555, StyleUtils.parseColor("&#FF5555").value());

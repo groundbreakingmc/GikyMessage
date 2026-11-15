@@ -258,8 +258,8 @@ final class Compiler {
                 final char next = src[pos + 1];
 
                 if (next == '#') {
-                    final long packed = StyleUtils.parseShadowPacked(src, pos + 1);
-                    if (packed != -1L) {
+                    final int shadowColor = StyleUtils.parseHex(src, pos + 2);
+                    if (shadowColor != -1) {
                         if (!Platform.SHADOW_COLORS) throw unsupported("Shadow colors", "4.18");
                         // Flush accumulated text before the shadow style changes.
                         final Token shadowFlush = flushText(textBuf, dynStatic, dynPh, dynPhCnt, hasDyn,
@@ -284,8 +284,10 @@ final class Compiler {
                         textBuf.setLength(0);
                         dynPhCnt = 0;
                         hasDyn = false;
-                        curShadow = StyleUtils.shadowColorOf((int) packed);
-                        pos += 1 + (int) (packed >>> 32);
+                        // Opaque unless an alpha follows the color: $#ff5555:80.
+                        final int alpha = StyleUtils.parseAlpha(src, pos + 8);
+                        curShadow = StyleUtils.shadowColorOf((alpha == -1 ? 0xFF : alpha) << 24 | shadowColor);
+                        pos += alpha == -1 ? 8 : 11;
                         continue;
                     }
                 }

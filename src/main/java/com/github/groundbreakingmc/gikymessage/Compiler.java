@@ -1817,150 +1817,17 @@ final class Compiler {
         return arr;
     }
 
+    // Each name sits at the index of its action code.
+    private static final String[] ACTION_NAMES = {
+            null, "run", "suggest", "url", "copy", "insert", "show", "head", "sprite", "page",
+            "gradient", "color", "style", "font", "lang", "phase", "if", "unless", "transform"
+    };
+
     private static byte actionType(char[] source, int offset, int length) {
-        return switch (length) {
-            case 3 -> {
-                final char first = source[offset];
-
-                if (first == 'r'
-                        && source[offset + 1] == 'u'
-                        && source[offset + 2] == 'n') {
-                    yield ACTION_RUN;
-                }
-
-                if (first == 'u'
-                        && source[offset + 1] == 'r'
-                        && source[offset + 2] == 'l') {
-                    yield ACTION_URL;
-                }
-
-                yield ACTION_UNKNOWN;
-            }
-
-            case 4 -> {
-                final char first = source[offset];
-
-                if (first == 'c'
-                        && source[offset + 1] == 'o'
-                        && source[offset + 2] == 'p'
-                        && source[offset + 3] == 'y') {
-                    yield ACTION_COPY;
-                }
-
-                if (first == 's'
-                        && source[offset + 1] == 'h'
-                        && source[offset + 2] == 'o'
-                        && source[offset + 3] == 'w') {
-                    yield ACTION_SHOW;
-                }
-
-                if (first == 'h'
-                        && source[offset + 1] == 'e'
-                        && source[offset + 2] == 'a'
-                        && source[offset + 3] == 'd') {
-                    yield ACTION_HEAD;
-                }
-
-                if (first == 'p'
-                        && source[offset + 1] == 'a'
-                        && source[offset + 2] == 'g'
-                        && source[offset + 3] == 'e') {
-                    yield ACTION_PAGE;
-                }
-
-                if (first == 'f'
-                        && source[offset + 1] == 'o'
-                        && source[offset + 2] == 'n'
-                        && source[offset + 3] == 't') {
-                    yield ACTION_FONT;
-                }
-
-                if (first == 'l'
-                        && source[offset + 1] == 'a'
-                        && source[offset + 2] == 'n'
-                        && source[offset + 3] == 'g') {
-                    yield ACTION_LANG;
-                }
-
-                yield ACTION_UNKNOWN;
-            }
-
-            case 5 -> {
-                if (source[offset] == 'c'
-                        && source[offset + 1] == 'o'
-                        && source[offset + 2] == 'l'
-                        && source[offset + 3] == 'o'
-                        && source[offset + 4] == 'r') {
-                    yield ACTION_COLOR;
-                }
-                if (source[offset] == 's'
-                        && source[offset + 1] == 't'
-                        && source[offset + 2] == 'y'
-                        && source[offset + 3] == 'l'
-                        && source[offset + 4] == 'e') {
-                    yield ACTION_STYLE;
-                }
-                if (regionEquals(source, offset, length, "phase")) {
-                    yield ACTION_PHASE;
-                }
-                yield ACTION_UNKNOWN;
-            }
-
-            case 2 -> regionEquals(source, offset, length, "if") ? ACTION_IF : ACTION_UNKNOWN;
-
-            case 9 -> regionEquals(source, offset, length, "transform") ? ACTION_TRANSFORM : ACTION_UNKNOWN;
-
-            case 6 -> {
-                final char first = source[offset];
-
-                if (regionEquals(source, offset, length, "unless")) {
-                    yield ACTION_UNLESS;
-                }
-
-                if (first == 'i'
-                        && source[offset + 1] == 'n'
-                        && source[offset + 2] == 's'
-                        && source[offset + 3] == 'e'
-                        && source[offset + 4] == 'r'
-                        && source[offset + 5] == 't') {
-                    yield ACTION_INSERT;
-                }
-
-                if (first == 's'
-                        && source[offset + 1] == 'p'
-                        && source[offset + 2] == 'r'
-                        && source[offset + 3] == 'i'
-                        && source[offset + 4] == 't'
-                        && source[offset + 5] == 'e') {
-                    yield ACTION_SPRITE;
-                }
-
-                yield ACTION_UNKNOWN;
-            }
-
-            case 7 -> source[offset] == 's'
-                    && source[offset + 1] == 'u'
-                    && source[offset + 2] == 'g'
-                    && source[offset + 3] == 'g'
-                    && source[offset + 4] == 'e'
-                    && source[offset + 5] == 's'
-                    && source[offset + 6] == 't'
-                    ? ACTION_SUGGEST
-                    : ACTION_UNKNOWN;
-
-            case 8 -> source[offset] == 'g'
-                    && source[offset + 1] == 'r'
-                    && source[offset + 2] == 'a'
-                    && source[offset + 3] == 'd'
-                    && source[offset + 4] == 'i'
-                    && source[offset + 5] == 'e'
-                    && source[offset + 6] == 'n'
-                    && source[offset + 7] == 't'
-                    ? ACTION_GRADIENT
-                    : ACTION_UNKNOWN;
-
-            default -> ACTION_UNKNOWN;
-        };
+        for (byte action = ACTION_RUN; action < ACTION_NAMES.length; action++) {
+            if (regionEquals(source, offset, length, ACTION_NAMES[action])) return action;
+        }
+        return ACTION_UNKNOWN;
     }
 
     private static int parseIntOrMinusOne(char[] source, int start, int end) {

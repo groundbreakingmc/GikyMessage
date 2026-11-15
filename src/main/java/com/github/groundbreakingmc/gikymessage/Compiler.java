@@ -6,6 +6,7 @@ import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.*;
 
+import java.nio.CharBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -922,13 +923,9 @@ final class Compiler {
                     selectedClickValueStart = -1;
                     selectedClickValueEnd = -1;
 
-                    pageValue = quoted
-                            ? parseIntOrMinusOne(scratch)
-                            : parseIntOrMinusOne(
-                            source,
-                            valueStart,
-                            valueEnd
-                    );
+                    pageValue = parseIntOrMinusOne(quoted
+                            ? scratch
+                            : CharBuffer.wrap(source, valueStart, valueEnd - valueStart));
                 }
 
                 case ACTION_SHOW -> {
@@ -1828,58 +1825,6 @@ final class Compiler {
             if (regionEquals(source, offset, length, ACTION_NAMES[action])) return action;
         }
         return ACTION_UNKNOWN;
-    }
-
-    private static int parseIntOrMinusOne(char[] source, int start, int end) {
-        if (start >= end) {
-            return -1;
-        }
-
-        int index = start;
-        boolean negative = false;
-        int limit = -Integer.MAX_VALUE;
-
-        final char first = source[index];
-
-        if (first < '0' || first > '9') {
-            if (first == '-') {
-                negative = true;
-                limit = Integer.MIN_VALUE;
-            } else if (first != '+') {
-                return -1;
-            }
-
-            index++;
-
-            if (index == end) {
-                return -1;
-            }
-        }
-
-        final int multiplyLimit = limit / 10;
-        int result = 0;
-
-        while (index < end) {
-            final int digit = source[index++] - '0';
-
-            if (digit < 0 || digit > 9) {
-                return -1;
-            }
-
-            if (result < multiplyLimit) {
-                return -1;
-            }
-
-            result *= 10;
-
-            if (result < limit + digit) {
-                return -1;
-            }
-
-            result -= digit;
-        }
-
-        return negative ? result : -result;
     }
 
     private static int parseIntOrMinusOne(CharSequence value) {

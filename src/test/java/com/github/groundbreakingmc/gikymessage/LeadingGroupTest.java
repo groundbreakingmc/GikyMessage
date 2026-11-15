@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 /**
  * A group that opens a template applies its actions and inner style to its own text only.
  * It must stay a sibling of what follows: as the root component it would hand its events,
- * colour and decorations down to the rest of the template.
+ * color and decorations down to the rest of the template.
  */
 class LeadingGroupTest extends TextTestBase {
 

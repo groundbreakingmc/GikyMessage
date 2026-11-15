@@ -18,8 +18,8 @@ class TextStyleTest extends TextTestBase {
     @Test
     void acceptsWordsLegacyAndHexWithDecorations() {
         final Style expected = Style.style(NamedTextColor.RED, TextDecoration.BOLD);
-        for (final String value : new String[]{"&c&l", "§c§l", "red bold", "RED BOLD", "#f55 bold",
-                "&#ff5555&l", "§#f55§l", "&x&f&f&5&5&5&5&l", "§x§f§f§5§5§5§5§l"}) {
+        for (final String value : new String[]{"&c&l", "§c§l", "red bold", "RED BOLD", "#ff5555 bold",
+                "&#ff5555&l", "§#ff5555§l", "&x&f&f&5&5&5&5&l", "§x§f§f§5§5§5§5§l"}) {
             assertEquals(expected, StyleUtils.parseStyle(value), value);
             final Component result = bound("[Hello](style:{format})").render((slotKey, slotValue) -> slotValue.component(slotKey.equals("format") ? Component.text(value) : null));
             assertEquals(Component.text("Hello", expected), result);

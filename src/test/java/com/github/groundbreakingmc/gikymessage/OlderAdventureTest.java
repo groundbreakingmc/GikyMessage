@@ -48,7 +48,7 @@ class OlderAdventureTest {
     void shadowColorsAreRejectedWhileCompiling() throws Exception {
         try (IsolatedLibrary library = new IsolatedLibrary(NEWER_TYPES)) {
             assertUnsupported(library, "$#000000&fShadowed", "4.18");
-            assertUnsupported(library, "&a{name} $#fff{health}", "4.18");
+            assertUnsupported(library, "&a{name} $#ffffff{health}", "4.18");
             assertUnsupported(library, "[Hover](show:\"$#000000{name}\")", "4.18");
             // Not a shadow code, so nothing newer is needed.
             assertEquals(Text.of("$5 and $#xyz").render(), library.render(library.compile("$5 and $#xyz")));
@@ -62,7 +62,7 @@ class OlderAdventureTest {
             assertUnsupported(library, "[x](head:{name})", "4.25");
             assertUnsupported(library, "[x](sprite:minecraft:item/diamond)", "4.25");
             // A gradient is the selected content action only where no object is requested.
-            assertUnsupported(library, "[x](gradient:#f00-#00f, head:Steve)", "4.25");
+            assertUnsupported(library, "[x](gradient:#ff0000-#0000ff, head:Steve)", "4.25");
         }
     }
 

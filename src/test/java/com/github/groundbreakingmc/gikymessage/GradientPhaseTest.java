@@ -70,6 +70,11 @@ class GradientPhaseTest extends TextTestBase {
     }
 
     @Test
+    void colorStopsHaveNoShortForm() {
+        assertEquals(Text.of("[ABC]").render(), Text.of("[ABC](gradient:#f00-#00f)").render());
+    }
+
+    @Test
     void lastPhaseWins() {
         assertEquals(Text.of("[ABC](gradient:#ff0000-#0000ff, phase:0.5)").render(),
                 Text.of("[ABC](gradient:#ff0000-#0000ff, phase:0.1, phase:0.5)").render());

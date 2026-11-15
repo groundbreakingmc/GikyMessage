@@ -13,7 +13,7 @@ class TextColorTest extends TextTestBase {
 
     @Test
     void acceptsLiteralColorFormatsWithoutSplittingText() {
-        for (final String value : new String[]{"a", "&a", "§a", "#5f5", "#55ff55", "&#55ff55", "§#5f5",
+        for (final String value : new String[]{"a", "&a", "§a", "#55ff55", "&#55ff55", "§#55ff55",
                 "&x&5&5&f&f&5&5", "§x§5§5§f§f§5§5", "green", "GREEN"}) {
             final Component result = bound("[Hello](color:" + value + ")").render();
             assertEquals("Hello", ((TextComponent) result).content());
@@ -55,7 +55,7 @@ class TextColorTest extends TextTestBase {
 
     @Test
     void rejectsPartialColorsAndFormattingSequences() {
-        for (final String value : new String[]{"&c&l", "#abcxyz", "#12345", "red bold", "&x&1&2&3", ""}) {
+        for (final String value : new String[]{"&c&l", "#abcxyz", "#12345", "#5f5", "red bold", "&x&1&2&3", ""}) {
             assertNull(StyleUtils.parseColor(value), value);
         }
     }

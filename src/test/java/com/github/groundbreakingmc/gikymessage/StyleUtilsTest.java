@@ -3,25 +3,25 @@ package com.github.groundbreakingmc.gikymessage;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 class StyleUtilsTest {
 
     @Test
-    void expandsEveryShortHexColor() {
-        for (int value = 0; value < 4096; value++) {
-            final String hex = String.format("#%03x", value);
-            final int expected = (((value >>> 8) & 15) * 17 << 16)
-                    | (((value >>> 4) & 15) * 17 << 8) | ((value & 15) * 17);
-            assertEquals((4L << 32) | expected, StyleUtils.parseHexPacked(hex.toCharArray(), 0));
+    void readsExactlySixHexDigits() {
+        assertEquals(0xABCDEF, StyleUtils.parseHex("x#AbCdEf0".toCharArray(), 2));
+        assertEquals(0, StyleUtils.parseHex("000000".toCharArray(), 0));
+        for (final String invalid : new String[]{"", "a", "abc", "abcde", "abcdeg", "#abcde"}) {
+            assertEquals(-1, StyleUtils.parseHex(invalid.toCharArray(), 0), invalid);
         }
     }
 
     @Test
-    void preservesHexBoundariesAndOffsets() {
-        assertEquals((7L << 32) | 0xABCDEF, StyleUtils.parseHexPacked("x#AbCdEf0".toCharArray(), 1));
-        assertEquals((4L << 32) | 0xAABBCC, StyleUtils.parseHexPacked("#aBc!".toCharArray(), 0));
-        for (final String invalid : new String[]{"", "#", "#a", "#ab", "#abcd", "#abcde", "#xyz", "abcdef"}) {
-            assertEquals(-1L, StyleUtils.parseHexPacked(invalid.toCharArray(), 0), invalid);
+    void colorValuesHaveNoShortForm() {
+        assertEquals(0xFF5555, StyleUtils.parseColor("#ff5555").value());
+        assertEquals(0xFF5555, StyleUtils.parseColor("&#FF5555").value());
+        for (final String invalid : new String[]{"#f55", "&#f55", "#ff55", "#ff555", "#ff55555"}) {
+            assertNull(StyleUtils.parseColor(invalid), invalid);
         }
     }
 }

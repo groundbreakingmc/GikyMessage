@@ -230,7 +230,7 @@ class BoundTextTest {
     @Test
     void rendererFailureDoesNotLeaveAPartiallyValidCache() throws Exception {
         Context c = new Context();
-        Text<Context> text = compile("[{value}](gradient:#f00-#00f)", false);
+        Text<Context> text = compile("[{value}](gradient:#ff0000-#0000ff)", false);
         c.value = "Steve";
         BoundText<Context> binding = text.bind(c);
         Component good = binding.render();

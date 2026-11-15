@@ -19,7 +19,7 @@ class TextShadowTest extends TextTestBase {
     @Test
     void colorsWithoutAlphaAreOpaque() {
         assertEquals(shadowed("Text", 0xFF000000), Text.of("$#000000Text").render());
-        assertEquals(shadowed("Text", 0xFFFF0000), Text.of("$#f00Text").render());
+        assertEquals(shadowed("Text", 0xFFFF0000), Text.of("$#ff0000Text").render());
         assertEquals(Component.text("Text", Style.style()
                         .color(NamedTextColor.WHITE)
                         .shadowColor(ShadowColor.shadowColor(0xFF112233))
@@ -28,17 +28,14 @@ class TextShadowTest extends TextTestBase {
     }
 
     @Test
-    void alphaComesLastInLongAndShortForms() {
+    void alphaComesLast() {
         assertEquals(shadowed("Text", 0x80000000), Text.of("$#00000080Text").render());
         assertEquals(shadowed("Text", 0x40FF8800), Text.of("$#ff880040Text").render());
-        assertEquals(shadowed("Text", 0x88FF0000), Text.of("$#f008Text").render());
-        assertEquals(shadowed("Text", 0xFF00FF00), Text.of("$#0f0fText").render());
     }
 
     @Test
     void zeroAlphaHidesTheShadow() {
         assertEquals(ShadowColor.none(), Text.of("$#00000000Text").render().style().shadowColor());
-        assertEquals(ShadowColor.none(), Text.of("$#0000Text").render().style().shadowColor());
     }
 
     @Test
@@ -47,8 +44,10 @@ class TextShadowTest extends TextTestBase {
         assertEquals(shadowed("7x", 0xFF123456), Text.of("$#1234567x").render());
         // Nine digits: an eight-digit shadow followed by the ninth.
         assertEquals(shadowed("9", 0x78123456), Text.of("$#123456789").render());
-        // Five digits, or none, are no shadow code at all.
+        // Fewer than six digits, or none, are no shadow code at all.
         assertEquals(Component.text("$#12345 x"), Text.of("$#12345 x").render());
+        assertEquals(Component.text("$#f008 x"), Text.of("$#f008 x").render());
+        assertEquals(Component.text("$#f00 x"), Text.of("$#f00 x").render());
         assertEquals(Component.text("$# x"), Text.of("$# x").render());
         assertEquals(Component.text("$5"), Text.of("$5").render());
     }

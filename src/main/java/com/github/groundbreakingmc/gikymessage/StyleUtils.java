@@ -177,17 +177,12 @@ final class StyleUtils {
 
         final int hexStart = legacy ? start + 1 : start;
         if (value.charAt(hexStart) == '#') {
-            final int digits = end - hexStart - 1;
-            if (digits != 3 && digits != 6) return null;
+            if (end - hexStart != 7) return null;
             int rgb = 0;
             for (int index = hexStart + 1; index < end; index++) {
                 final int digit = hexVal(value.charAt(index));
                 if (digit == -1) return null;
                 rgb = (rgb << 4) | digit;
-            }
-            if (digits == 3) {
-                rgb = (((rgb >>> 8) & 15) * 17 << 16)
-                        | (((rgb >>> 4) & 15) * 17 << 8) | ((rgb & 15) * 17);
             }
             return textColorOf(rgb);
         }
@@ -297,34 +292,22 @@ final class StyleUtils {
         return -1;
     }
 
-    // Packs consumed length in the high 32 bits and RGB in the low 24; -1 means invalid hex.
-    static long parseHexPacked(char[] src, int start) {
-        if (start >= src.length || src[start] != '#') return -1L;
-        int count = 0;
+    // The six hex digits at start as RGB, or -1 when fewer follow. A color has no shorter form,
+    // so its code is always as long and never takes part of the text after it.
+    static int parseHex(char[] src, int start) {
+        if (start + 6 > src.length) return -1;
         int rgb = 0;
-        while (count < 6 && start + 1 + count < src.length) {
-            final int digit = hexVal(src[start + 1 + count]);
-            if (digit == -1) break;
+        for (int index = start; index < start + 6; index++) {
+            final int digit = hexVal(src[index]);
+            if (digit == -1) return -1;
             rgb = (rgb << 4) | digit;
-            count++;
         }
-        if (count == 3) {
-            final int r = (rgb >>> 8) & 0xF;
-            final int g = (rgb >>> 4) & 0xF;
-            final int b = rgb & 0xF;
-            rgb = ((r * 17) << 16) | ((g * 17) << 8) | (b * 17);
-            return ((long) 4 << 32) | (rgb & 0xFFFFFFFFL);
-        }
-        if (count == 6) {
-            return ((long) 7 << 32) | (rgb & 0xFFFFFFFFL);
-        }
-        return -1L;
+        return rgb;
     }
 
     // Packs consumed length in the high 32 bits and ARGB in the low 32; -1 means invalid hex.
-    // Eight digits are RRGGBBAA and four are RGBA: alpha comes last, as in Adventure's hex
-    // strings. Six and three digits are opaque. Seven digits keep their earlier meaning, a
-    // six-digit color followed by one character of text.
+    // Eight digits are RRGGBBAA: alpha comes last, as in Adventure's hex strings. Six digits
+    // are opaque. Seven digits are a six-digit color followed by one character of text.
     static long parseShadowPacked(char[] src, int start) {
         if (start >= src.length || src[start] != '#') return -1L;
         int count = 0;
@@ -341,21 +324,10 @@ final class StyleUtils {
         } else if (count == 6 || count == 7) {
             argb = OPAQUE_ALPHA | (int) (count == 7 ? digits >>> 4 : digits);
             count = 6;
-        } else if (count == 4) {
-            argb = expand((int) (digits & 0xF)) << 24 | expand((int) (digits >>> 12 & 0xF)) << 16
-                    | expand((int) (digits >>> 8 & 0xF)) << 8 | expand((int) (digits >>> 4 & 0xF));
-        } else if (count == 3) {
-            argb = OPAQUE_ALPHA | expand((int) (digits >>> 8 & 0xF)) << 16
-                    | expand((int) (digits >>> 4 & 0xF)) << 8 | expand((int) (digits & 0xF));
         } else {
             return -1L;
         }
         return ((long) (count + 1) << 32) | (argb & 0xFFFFFFFFL);
-    }
-
-    // One hex digit of a short form stands for two equal digits.
-    private static int expand(int digit) {
-        return digit * 17;
     }
 
     private static void applyDecoration(Style.Builder builder, short decorations, TextDecoration decoration) {

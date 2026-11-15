@@ -317,9 +317,11 @@ class TextPlainTest extends TextTestBase {
         }
 
         @Test
-        @DisplayName("3-digit shorthand (#f55 == #ff5555)")
-        void threeDigitShorthand() {
-            assertRenders(Component.text("Short", TextColor.color(0xff5555)), "&#f55Short");
+        @DisplayName("A code takes exactly six digits")
+        void exactlySixDigits() {
+            assertRenders(Component.text("Bad", TextColor.color(0xff8800)), "&#ff8800Bad");
+            assertRenders(Component.text("&#f55Short"), "&#f55Short");
+            assertRenders(Component.text("&#ff555 x"), "&#ff555 x");
         }
 
         @Test

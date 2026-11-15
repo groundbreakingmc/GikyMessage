@@ -169,12 +169,10 @@ final class Compiler {
                 final char next = src[pos + 1];
                 final char code = Character.toLowerCase(next);
                 final TextColor legacyColor = StyleUtils.fromLegacyCode(next);
-                final long packedColor = next == '#'
-                        ? StyleUtils.parseHexPacked(src, pos + 1)
-                        : -1L;
+                final int hexColor = next == '#' ? StyleUtils.parseHex(src, pos + 2) : -1;
 
                 // Flush only for valid codes, preserving the accumulated text's previous style.
-                final boolean willChangeColor = legacyColor != null || packedColor != -1L;
+                final boolean willChangeColor = legacyColor != null || hexColor != -1;
                 final boolean willChangeDeco = code == 'l' || code == 'o' || code == 'n'
                         || code == 'm' || code == 'k' || code == 'r';
 
@@ -203,9 +201,9 @@ final class Compiler {
                     hasDyn = false;
                 }
 
-                if (packedColor != -1L) {
-                    curColor = StyleUtils.textColorOf((int) packedColor);
-                    pos += 1 + (int) (packedColor >>> 32);
+                if (hexColor != -1) {
+                    curColor = StyleUtils.textColorOf(hexColor);
+                    pos += 8;
                     continue;
                 }
 
@@ -1784,10 +1782,10 @@ final class Compiler {
             if (i >= len) return null;
 
             if (src[i] == '#') {
-                final long packed = StyleUtils.parseHexPacked(src, i);
-                if (packed == -1L) return null;
-                colors[ci++] = (int) packed;
-                i += (int) (packed >>> 32);
+                final int rgb = StyleUtils.parseHex(src, i + 1);
+                if (rgb == -1) return null;
+                colors[ci++] = rgb;
+                i += 7;
             } else {
                 final TextColor legacy = StyleUtils.fromLegacyCode(src[i]);
                 if (legacy == null) return null;

@@ -70,7 +70,7 @@ final class Compiler {
     private static boolean isPlainText(String raw) {
         for (int index = 0; index < raw.length(); index++) {
             switch (raw.charAt(index)) {
-                case '&', '$', '[', '{', '\\' -> {
+                case '&', '#', '$', '[', '{', '\\' -> {
                     return false;
                 }
             }
@@ -170,12 +170,15 @@ final class Compiler {
                 continue;
             }
 
-            // Color / decoration codes: &
-            if (c == '&' && pos + 1 < len) {
-                final char next = src[pos + 1];
+            // Color / decoration codes: &, and a hex color alone: #rrggbb
+            final boolean bareHex = c == '#';
+            if (bareHex || c == '&' && pos + 1 < len) {
+                // A color alone is read as & followed by it.
+                final char next = bareHex ? '#' : src[pos + 1];
+                final int digits = bareHex ? pos + 1 : pos + 2;
                 final char code = Character.toLowerCase(next);
                 final TextColor legacyColor = StyleUtils.fromLegacyCode(next);
-                final int hexColor = next == '#' ? StyleUtils.parseHex(src, pos + 2) : -1;
+                final int hexColor = next == '#' ? StyleUtils.parseHex(src, digits) : -1;
 
                 // Flush only for valid codes, preserving the accumulated text's previous style.
                 final boolean willChangeColor = legacyColor != null || hexColor != -1;
@@ -209,7 +212,7 @@ final class Compiler {
 
                 if (hexColor != -1) {
                     curColor = StyleUtils.textColorOf(hexColor);
-                    pos += 8;
+                    pos = digits + 6;
                     continue;
                 }
 
@@ -259,43 +262,40 @@ final class Compiler {
                 continue;
             }
 
-            // Shadow color: $
+            // Shadow color: $ or $# and six digits
             if (c == '$' && pos + 1 < len) {
-                final char next = src[pos + 1];
-
-                if (next == '#') {
-                    final int shadowColor = StyleUtils.parseHex(src, pos + 2);
-                    if (shadowColor != -1) {
-                        if (!Platform.SHADOW_COLORS) throw unsupported("Shadow colors", "4.18");
-                        // Flush accumulated text before the shadow style changes.
-                        final Token shadowFlush = flushText(textBuf, dynStatic, dynPh, dynPhCnt, hasDyn,
-                                curDeco, curColor, curShadow, inhDeco, inhColor, inhShadow);
-                        if (shadowFlush != null) {
-                            if (depth == 0) {
-                                if (rootTokenCnt == 0 && shadowFlush instanceof Token.Plain) {
-                                    if (curDeco != 0 || curColor != null || curShadow != null) {
-                                        canHoistRootStyle = !hasRootResetAhead(src, pos);
-                                    }
-                                    if (canHoistRootStyle) {
-                                        inhDeco = curDeco;
-                                        inhColor = curColor;
-                                        inhShadow = curShadow;
-                                    }
+                final int digits = src[pos + 1] == '#' ? pos + 2 : pos + 1;
+                final int shadowColor = StyleUtils.parseHex(src, digits);
+                if (shadowColor != -1) {
+                    if (!Platform.SHADOW_COLORS) throw unsupported("Shadow colors", "4.18");
+                    // Flush accumulated text before the shadow style changes.
+                    final Token shadowFlush = flushText(textBuf, dynStatic, dynPh, dynPhCnt, hasDyn,
+                            curDeco, curColor, curShadow, inhDeco, inhColor, inhShadow);
+                    if (shadowFlush != null) {
+                        if (depth == 0) {
+                            if (rootTokenCnt == 0 && shadowFlush instanceof Token.Plain) {
+                                if (curDeco != 0 || curColor != null || curShadow != null) {
+                                    canHoistRootStyle = !hasRootResetAhead(src, pos);
                                 }
-                                rootTokens = pushToken(rootTokens, rootTokenCnt++, shadowFlush);
-                            } else {
-                                stack[depth - 1].add(shadowFlush);
+                                if (canHoistRootStyle) {
+                                    inhDeco = curDeco;
+                                    inhColor = curColor;
+                                    inhShadow = curShadow;
+                                }
                             }
+                            rootTokens = pushToken(rootTokens, rootTokenCnt++, shadowFlush);
+                        } else {
+                            stack[depth - 1].add(shadowFlush);
                         }
-                        textBuf.setLength(0);
-                        dynPhCnt = 0;
-                        hasDyn = false;
-                        // Opaque unless an alpha follows the color: $#ff5555:80.
-                        final int alpha = StyleUtils.parseAlpha(src, pos + 8);
-                        curShadow = StyleUtils.shadowColorOf((alpha == -1 ? 0xFF : alpha) << 24 | shadowColor);
-                        pos += alpha == -1 ? 8 : 11;
-                        continue;
                     }
+                    textBuf.setLength(0);
+                    dynPhCnt = 0;
+                    hasDyn = false;
+                    // Opaque unless an alpha follows the color: $#ff5555:80.
+                    final int alpha = StyleUtils.parseAlpha(src, digits + 6);
+                    curShadow = StyleUtils.shadowColorOf((alpha == -1 ? 0xFF : alpha) << 24 | shadowColor);
+                    pos = digits + (alpha == -1 ? 6 : 9);
+                    continue;
                 }
 
                 textBuf.append(c);

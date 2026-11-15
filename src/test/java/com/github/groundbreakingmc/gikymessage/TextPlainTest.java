@@ -325,6 +325,31 @@ class TextPlainTest extends TextTestBase {
         }
 
         @Test
+        @DisplayName("A color without & in front")
+        void colorAlone() {
+            assertRenders(Component.text("Hex", TextColor.color(0xff5555)), "#ff5555Hex");
+            assertRenders(Component.text("Bad", TextColor.color(0xff8800)), "#FF8800Bad");
+            assertRenders(
+                    Component.text("Gray ", NamedTextColor.GRAY)
+                            .append(Component.text("orange", TextColor.color(0xff8800))),
+                    "&7Gray #ff8800orange"
+            );
+        }
+
+        @Test
+        @DisplayName("# without six digits after it is text")
+        void hashWithoutSixDigits() {
+            assertRenders(Component.text("#1 of #12345, #abcxyz and #"), "#1 of #12345, #abcxyz and #");
+            assertRenders(Component.text("&#12 #{id}"), "&#12 #{id}", "none", "");
+        }
+
+        @Test
+        @DisplayName("An escaped # is text")
+        void escapedHash() {
+            assertRenders(Component.text("Ticket #123456"), "Ticket \\#123456");
+        }
+
+        @Test
         @DisplayName("Hex color with bold decoration")
         void hexWithBold() {
             assertRenders(

@@ -62,6 +62,16 @@ class TextShadowTest extends TextTestBase {
     }
 
     @Test
+    void theHashIsOptional() {
+        assertEquals(shadowed("Text", 0xFFFF5555), Text.of("$ff5555Text").render());
+        assertEquals(shadowed("Text", 0x80000000), Text.of("$000000:80Text").render());
+        assertEquals(shadowed("0 coins", 0xFF100000), Text.of("$1000000 coins").render());
+        // Fewer than six digits are no code, and a backslash keeps six of them as text.
+        assertEquals(Component.text("$99999 and $5"), Text.of("$99999 and $5").render());
+        assertEquals(Component.text("$100000"), Text.of("\\$100000").render());
+    }
+
+    @Test
     void textColorsTakeNoAlpha() {
         assertEquals(Component.text("80X", TextColor.color(0xFF0000)), Text.of("&#ff000080X").render());
         assertEquals(Component.text(":80X", TextColor.color(0xFF0000)), Text.of("&#ff0000:80X").render());

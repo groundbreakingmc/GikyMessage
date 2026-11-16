@@ -16,3 +16,9 @@ GikyMessage turns short strings like `[&a&nSpawn](run:/spawn)` into Minecraft ch
 | [Translations](translations.md) | Text in each player's own game language |
 | [Transforms](transforms.md) | `1234567` → `1.2M`, UPPER CASE, ꜱᴍᴀʟʟ ᴄᴀᴘꜱ, length limits |
 | [Escaping](escapes.md) | Writing `[`, `{` and `\` as plain text, line breaks, quotes in YAML |
+
+## Practice
+
+- **[Recipes](recipes.md)** — ready-to-copy messages: chat format, join messages, teleport requests,
+  shop, help menu and more.
+- **[Troubleshooting](troubleshooting.md)** — answers to "why does my message look like this?".

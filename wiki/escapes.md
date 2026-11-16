@@ -74,4 +74,4 @@ vote: '&7Don''t forget to vote today!'
 
 ---
 
-[← Transforms](transforms.md) · [Documentation](README.md)
+[← Transforms](transforms.md) · [Documentation](README.md) · [Recipes →](recipes.md)

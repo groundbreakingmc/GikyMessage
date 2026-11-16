@@ -1,6 +1,6 @@
 # Placeholders
 
-[← Documentation](README.md)
+**English** · [Русский](ru/placeholders.md) · [← Documentation](README.md)
 
 A placeholder is a name in curly braces, like `{player}`. When the plugin sends the message, it puts
 the current value in its place:

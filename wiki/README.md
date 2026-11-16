@@ -1,6 +1,6 @@
 # GikyMessage documentation
 
-[← Back to the project](../README.md)
+**English** · [Русский](ru/README.md) · [← Back to the project](../README.md)
 
 GikyMessage turns short strings like `[&a&nSpawn](run:/spawn)` into Minecraft chat components. The
 documentation has two halves: the **format**, for anyone who writes messages, and the **Java API**,

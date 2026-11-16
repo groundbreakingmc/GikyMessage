@@ -1,6 +1,6 @@
 # Recipes
 
-[← Documentation](README.md)
+**English** · [Русский](ru/recipes.md) · [← Documentation](README.md)
 
 Ready-made messages for common situations. Copy one, change the colors and words, and check which
 placeholders your plugin actually provides: the names below are examples.

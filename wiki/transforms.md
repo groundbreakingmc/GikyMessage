@@ -1,6 +1,6 @@
 # Transforms
 
-[← Documentation](README.md)
+**English** · [Русский](ru/transforms.md) · [← Documentation](README.md)
 
 `transform:` changes the text of a [segment](segments.md) right before it's shown — mostly useful
 for values that come from placeholders, which you can't edit yourself:

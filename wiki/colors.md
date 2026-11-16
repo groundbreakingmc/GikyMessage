@@ -1,6 +1,6 @@
 # Colors and styles
 
-[← Documentation](README.md)
+**English** · [Русский](ru/colors.md) · [← Documentation](README.md)
 
 Put `&` and a code in front of the text. A **color** lasts until the next color; a **style** such as
 bold lasts until `&r`.

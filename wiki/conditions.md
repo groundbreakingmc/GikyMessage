@@ -1,6 +1,6 @@
 # Conditions
 
-[← Documentation](README.md)
+**English** · [Русский](ru/conditions.md) · [← Documentation](README.md)
 
 Conditions show a [segment](segments.md) only in some cases: a clan tag only for players in a clan,
 a VIP badge only for VIPs, "online" or "offline" depending on the status.

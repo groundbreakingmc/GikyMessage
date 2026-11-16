@@ -1,6 +1,6 @@
 # Quick start: your first message
 
-[← Documentation](README.md)
+**English** · [Русский](ru/quick-start.md) · [← Documentation](README.md)
 
 In about five minutes you'll build this welcome message step by step, and pick up most of the format
 along the way:

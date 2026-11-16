@@ -12,6 +12,8 @@ that stay readable in a config file. GikyMessage turns them into
 [![Java 21](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)](#installation)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
+**English** · [Русский](README_RU.md)
+
 </div>
 
 <p align="center">

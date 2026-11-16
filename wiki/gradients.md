@@ -1,6 +1,6 @@
 # Gradients
 
-[← Documentation](README.md)
+**English** · [Русский](ru/gradients.md) · [← Documentation](README.md)
 
 A gradient fills a [segment](segments.md) with colors that blend smoothly from one to the next,
 letter by letter:

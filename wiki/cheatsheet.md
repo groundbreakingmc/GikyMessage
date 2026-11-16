@@ -1,6 +1,6 @@
 # Cheat sheet
 
-[← Documentation](README.md)
+**English** · [Русский](ru/cheatsheet.md) · [← Documentation](README.md)
 
 The whole format on one page. Each heading links to the full page.
 

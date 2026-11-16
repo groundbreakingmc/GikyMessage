@@ -1,6 +1,6 @@
 # Translations
 
-[← Documentation](README.md)
+**English** · [Русский](ru/translations.md) · [← Documentation](README.md)
 
 `lang:` makes a [segment](segments.md) appear in each player's own game language. The server sends a
 translation key, and every player's game looks it up in the language they play in:

@@ -1,6 +1,6 @@
 # Java API
 
-[← Documentation](README.md)
+**English** · [Русский](ru/java-api.md) · [← Documentation](README.md)
 
 **On this page:** [a complete example](#a-complete-example) · [reporting
 values](#reporting-values) · [your own contexts](#contexts-other-than-a-player) · [rendering

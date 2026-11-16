@@ -1,6 +1,6 @@
 # Troubleshooting
 
-[← Documentation](README.md)
+**English** · [Русский](ru/troubleshooting.md) · [← Documentation](README.md)
 
 Find the symptom, then the cause and the fix.
 

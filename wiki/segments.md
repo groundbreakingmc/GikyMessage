@@ -1,6 +1,6 @@
 # Segments: clicks, tooltips and more
 
-[← Documentation](README.md)
+**English** · [Русский](ru/segments.md) · [← Documentation](README.md)
 
 A segment is a part of the message in square brackets. The parentheses right after it list what that
 part does:

@@ -1,6 +1,6 @@
 # Escaping and quotes
 
-[← Documentation](README.md)
+**English** · [Русский](ru/escapes.md) · [← Documentation](README.md)
 
 A few characters have a job in the format: `[` and `]` make [segments](segments.md), `{` and `}`
 make [placeholders](placeholders.md). To show them as plain text, put a backslash in front:

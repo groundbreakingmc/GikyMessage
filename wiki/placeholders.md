@@ -113,8 +113,9 @@ static final Function<String, Component> LEGACY =
 case "prefix" -> (player, value) -> value.component(prefixOf(player), LEGACY);
 ```
 
-Keep the parser in a constant, as above. A binding parses the string again only when the string or
-the parser changes, and a new lambda on every call would count as a new parser.
+Keep the parser in a constant, as above. A
+[binding](java-api.md#the-same-player-again-and-again-bind) parses the string again only when the
+string or the parser changes, and a new lambda on every call would count as a new parser.
 
 ---
 

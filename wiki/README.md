@@ -2,7 +2,9 @@
 
 [← Back to the project](../README.md)
 
-GikyMessage turns short strings like `[&a&nSpawn](run:/spawn)` into Minecraft chat components.
+GikyMessage turns short strings like `[&a&nSpawn](run:/spawn)` into Minecraft chat components. The
+documentation has two halves: the **format**, for anyone who writes messages, and the **Java API**,
+for plugin developers.
 
 ## Start here
 
@@ -29,3 +31,8 @@ GikyMessage turns short strings like `[&a&nSpawn](run:/spawn)` into Minecraft ch
 - **[Recipes](recipes.md)** — ready-to-copy messages: chat format, join messages, teleport requests,
   shop, help menu and more.
 - **[Troubleshooting](troubleshooting.md)** — answers to "why does my message look like this?".
+
+## For developers
+
+- **[Java API](java-api.md)** — compiling and rendering, reporting values, bindings for frequent
+  updates, threads, errors and version requirements.

@@ -4,6 +4,13 @@
 
 GikyMessage turns short strings like `[&a&nSpawn](run:/spawn)` into Minecraft chat components.
 
+## Start here
+
+- **[Quick start](quick-start.md)** — build your first colored, clickable message in five minutes.
+- **[Cheat sheet](cheatsheet.md)** — the whole format on one page.
+- **[llms.txt](../llms.txt)** — the whole format in one file for AI assistants, with the rules for
+  converting MiniMessage and `&` codes.
+
 ## The format
 
 | Page | What it covers |

@@ -150,4 +150,4 @@ case "team_color" -> (player, value) -> value.text(teamOf(player).colorCode()); 
 
 ---
 
-[Documentation](README.md) · [Placeholders →](placeholders.md)
+[← Quick start](quick-start.md) · [Documentation](README.md) · [Placeholders →](placeholders.md)

@@ -267,4 +267,7 @@ dependencies {
 }
 ```
 
+Maven, Groovy and how to bundle the library into your plugin's jar:
+[Installation](../README.md#installation).
+
 To build it yourself, run `./gradlew build`: it runs the tests and puts the jar into `build/libs`.

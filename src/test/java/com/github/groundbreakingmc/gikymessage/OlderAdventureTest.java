@@ -50,8 +50,21 @@ class OlderAdventureTest {
             assertUnsupported(library, "$#000000&fShadowed", "4.18");
             assertUnsupported(library, "&a{name} $#ffffff{health}", "4.18");
             assertUnsupported(library, "[Hover](show:\"$#000000{name}\")", "4.18");
+            assertUnsupported(library, "[Text](style:\"gold $#000000\")", "4.18");
+            assertUnsupported(library, "[Text](shadow:#000000)", "4.18");
             // Not a shadow code, so nothing newer is needed.
             assertEquals(Text.of("$5 and $#xyz").render(), library.render(library.compile("$5 and $#xyz")));
+        }
+    }
+
+    @Test
+    void aShadowFromAPlaceholderIsLeftOut() throws Exception {
+        try (IsolatedLibrary library = new IsolatedLibrary(NEWER_TYPES)) {
+            // The style comes from the placeholder's key: everything but the shadow is applied.
+            assertEquals(Text.of("[x](style:\"gold bold\")").render(),
+                    library.render(library.compileBound("[x](style:\"{gold} $#000000 {bold}\")", false)));
+            assertEquals(Text.of("x").render(), library.render(library.compileBound("[x](shadow:{name})", false)));
+            assertEquals(Text.of("[x](style:reset)").render(), library.render(library.compile("[x](style:reset)")));
         }
     }
 

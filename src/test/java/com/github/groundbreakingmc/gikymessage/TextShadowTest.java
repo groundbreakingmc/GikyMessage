@@ -6,6 +6,7 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.ShadowColor;
 import net.kyori.adventure.text.format.Style;
 import net.kyori.adventure.text.format.TextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -82,6 +83,89 @@ class TextShadowTest extends TextTestBase {
         final Component rendered = bound("$#000000:80{name} &cand more").render((key, value) -> value.text("Steve"));
         assertEquals("Steve and more", MM.stripTags(MM.serialize(rendered)));
         assertEveryTextShadowed(rendered, null, ShadowColor.shadowColor(0x80000000));
+    }
+
+    @Test
+    void styleTakesAShadow() {
+        assertEquals(shadowed("Text", 0xFF000000), Text.of("[Text](style:$#000000)").render().compact());
+        assertEquals(Component.text("Text", Style.style()
+                        .color(NamedTextColor.GOLD)
+                        .decorate(TextDecoration.BOLD)
+                        .shadowColor(ShadowColor.shadowColor(0x80112233))
+                        .build()),
+                Text.of("[Text](style:\"gold $#112233:80 bold\")").render().compact());
+        assertEquals(Component.text("Text", Style.style()
+                        .color(NamedTextColor.GOLD)
+                        .shadowColor(ShadowColor.shadowColor(0xFFFF5555))
+                        .decorate(TextDecoration.BOLD)
+                        .build()),
+                Text.of("[Text](style:&6$ff5555&l)").render().compact());
+    }
+
+    @Test
+    void styleFromAPlaceholderTakesAShadow() {
+        final Component rendered = bound("[Text](style:{format})")
+                .render((key, value) -> value.text("red $#000000:40"))
+                .compact();
+        assertEquals(Component.text("Text", Style.style()
+                .color(NamedTextColor.RED)
+                .shadowColor(ShadowColor.shadowColor(0x40000000))
+                .build()), rendered);
+    }
+
+    @Test
+    void aBrokenShadowMakesTheStyleInvalid() {
+        for (final String style : new String[]{"$#00000", "$#000000:8", "$#000000x", "red $", "$#xyzxyz"}) {
+            assertEquals(Component.text("Text"), bound("[Text](style:{format})")
+                    .render((key, value) -> value.text(style)).compact(), style);
+        }
+    }
+
+    @Test
+    void resetInAStyleRemovesTheShadow() {
+        assertEquals(Component.text("Text", Style.style()
+                        .color(NamedTextColor.WHITE)
+                        .decoration(TextDecoration.BOLD, false)
+                        .decoration(TextDecoration.ITALIC, false)
+                        .decoration(TextDecoration.UNDERLINED, false)
+                        .decoration(TextDecoration.STRIKETHROUGH, false)
+                        .decoration(TextDecoration.OBFUSCATED, false)
+                        .build()),
+                Text.of("[$#ff0000Text](style:reset)").render().compact());
+        // A shadow after reset is kept.
+        assertEquals(ShadowColor.shadowColor(0xFF000000),
+                Text.of("[$#ff0000Text](style:\"reset $#000000\")").render().compact().style().shadowColor());
+        assertEquals(null, bound("[$#ff0000Text](style:{format})")
+                .render((key, value) -> value.text("reset")).compact().style().shadowColor());
+    }
+
+    @Test
+    void shadowTakesTheFormsOfText() {
+        for (final String shadow : new String[]{"$#112233:80", "$112233:80", "#112233:80", "112233:80"}) {
+            assertEquals(shadowed("Text", 0x80112233), Text.of("[Text](shadow:" + shadow + ")").render().compact(), shadow);
+        }
+        assertEquals(shadowed("Text", 0xFF112233), Text.of("[Text](shadow:#112233)").render().compact());
+        assertEquals(ShadowColor.none(), Text.of("[Text](shadow:none)").render().compact().style().shadowColor());
+    }
+
+    @Test
+    void shadowFromAPlaceholder() {
+        assertEquals(shadowed("Text", 0x40000000), bound("[Text](shadow:{format})")
+                .render((key, value) -> value.text("#000000:40")).compact());
+        for (final String broken : new String[]{"", "red", "#00000", "#000000:8", "#000000x", "$$000000"}) {
+            assertEquals(Component.text("Text"), bound("[Text](shadow:{format})")
+                    .render((key, value) -> value.text(broken)).compact(), broken);
+        }
+    }
+
+    @Test
+    void shadowOverridesTheShadowOfAStyle() {
+        assertEquals(Component.text("Text", Style.style()
+                        .color(NamedTextColor.GOLD)
+                        .shadowColor(ShadowColor.shadowColor(0xFF0000FF))
+                        .build()),
+                Text.of("[Text](style:\"gold $#ff0000\",shadow:#0000ff)").render().compact());
+        assertEquals(shadowed("Text", 0xFF0000FF), Text.of("[$#ff0000Text](shadow:#0000ff)").render().compact());
     }
 
     private static void assertEveryTextShadowed(Component component, ShadowColor inherited, ShadowColor expected) {

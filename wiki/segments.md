@@ -205,7 +205,7 @@ The font name is fixed text; placeholders don't work here.
 | `head:name` | Shows a player's head | ✅ | [↑](#player-heads-and-sprites) |
 | `sprite:key` | Shows a texture | — | [↑](#player-heads-and-sprites) |
 | `font:key` | Uses another font | — | [↑](#fonts) |
-| `color:…`, `style:…` | Colors the segment | ✅ | [Colors](colors.md#coloring-one-part-color-and-style) |
+| `color:…`, `style:…`, `shadow:…` | Colors the segment | ✅ | [Colors](colors.md#coloring-one-part-color-and-style) |
 | `gradient:…`, `phase:…` | Fills it with a gradient | — | [Gradients](gradients.md) |
 | `if:…`, `unless:…` | Shows it only when a condition holds | ✅ | [Conditions](conditions.md) |
 | `lang:key` | Translates it to each player's language | ✅ | [Translations](translations.md) |

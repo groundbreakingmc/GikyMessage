@@ -130,15 +130,29 @@ as `&` codes, but the value can come from a placeholder, for example a team colo
 
 `color:` takes one color in any form: `red`, `c`, `&c`, `#ff5555` or `&#ff5555`. `style:` takes
 several values separated by spaces: colors, the words `bold`, `italic`, `underlined`,
-`strikethrough`, `obfuscated` and `reset`, or `&` codes:
+`strikethrough`, `obfuscated` and `reset`, `&` codes, or a [shadow](#text-shadow) such as
+`$#000000:80`:
 
 ```text
 [Event starts now!](style:"gold bold")
 [Event starts now!](style:&6&l)
+[Event starts now!](style:"gold $#000000:80")
 ```
 
+`shadow:` sets only the shadow, so its placeholder needs no `$`. It takes a shadow as text writes
+it, with or without `$` and `#`, such as `#ff5555` or `$#ff5555:80`, or `none` for no shadow:
+
+```text
+[{player}](shadow:{team_shadow})
+[Event starts now!](shadow:#000000:80)
+```
+
+`reset` in `style:` resets the shadow as well. Where the server has no shadow colors, a shadow from
+a placeholder is left out and the rest of the style still applies.
+
 If the value isn't valid — for example, the placeholder is empty — the text keeps the colors it
-already had. When a segment has both, `color` wins over the color in `style`.
+already had. When a segment has several, `color` wins over the color in `style`, and `shadow` over
+its shadow.
 
 ## For developers
 

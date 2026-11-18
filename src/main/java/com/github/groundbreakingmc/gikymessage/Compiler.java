@@ -44,6 +44,7 @@ final class Compiler {
     private static final byte ACTION_IF = 16;
     private static final byte ACTION_UNLESS = 17;
     private static final byte ACTION_TRANSFORM = 18;
+    private static final byte ACTION_SHADOW = 19;
 
     /** What a segment hidden while compiling is replaced with; it renders nothing. */
     private static final Token EMPTY_SEGMENT = new Token.Constant(Component.empty());
@@ -627,6 +628,9 @@ final class Compiler {
         String colorValue = null;
         boolean colorDynamic = false;
 
+        String shadowValue = null;
+        boolean shadowDynamic = false;
+
         boolean hasShow = false;
         boolean showDynamic = false;
 
@@ -720,6 +724,8 @@ final class Compiler {
 
                 case ACTION_STYLE -> styleValue == null;
 
+                case ACTION_SHADOW -> shadowValue == null;
+
                 case ACTION_SUGGEST -> selectedClickPriority >= 1;
 
                 case ACTION_URL -> selectedClickPriority >= 2;
@@ -743,7 +749,7 @@ final class Compiler {
                         ACTION_URL,
                         ACTION_COPY,
                         ACTION_SHOW,
-                        ACTION_HEAD, ACTION_COLOR, ACTION_STYLE, ACTION_LANG,
+                        ACTION_HEAD, ACTION_COLOR, ACTION_STYLE, ACTION_SHADOW, ACTION_LANG,
                         ACTION_IF, ACTION_UNLESS -> true;
 
                 default -> false;
@@ -1037,6 +1043,11 @@ final class Compiler {
                     colorDynamic = dynamic;
                 }
 
+                case ACTION_SHADOW -> {
+                    shadowValue = quoted ? quotedValue : new String(source, valueStart, valueEnd - valueStart);
+                    shadowDynamic = dynamic;
+                }
+
                 case ACTION_LANG -> {
                     selectedContentPriority = 2;
                     selectedContentType = ACTION_LANG;
@@ -1243,6 +1254,10 @@ final class Compiler {
                         value.placeholderIndices, null, true);
             } else {
                 final Style value = StyleUtils.parseStyle(styleValue);
+                // Only a shadow puts a $ into a valid style.
+                if (value != null && !Platform.SHADOW_COLORS && styleValue.indexOf('$') >= 0) {
+                    throw unsupported("Shadow colors", "4.18");
+                }
                 if (value != null && !value.isEmpty()) {
                     contentToken = Token.StyleContent.create(contentToken, Token.NO_PARTS,
                             Token.NO_PH, value, isDynamic(contentToken));
@@ -1261,6 +1276,22 @@ final class Compiler {
                     contentToken = Token.ColorContent.create(contentToken, Token.NO_PARTS,
                             Token.NO_PH, value, isDynamic(contentToken));
                 }
+            }
+        }
+
+        // Applied last, so it overrides a shadow from style, as color overrides its color.
+        if (shadowValue != null) {
+            if (shadowDynamic) {
+                // Without shadow colors a shadow from a placeholder is left out, like an invalid one.
+                if (Platform.SHADOW_COLORS) {
+                    final DynamicValue value = parseDynamicValue(shadowValue, placeholders);
+                    contentToken = Token.ShadowContent.create(contentToken, value.staticParts,
+                            value.placeholderIndices, null, true);
+                }
+            } else if (StyleUtils.isShadow(shadowValue)) {
+                if (!Platform.SHADOW_COLORS) throw unsupported("Shadow colors", "4.18");
+                contentToken = Token.ShadowContent.create(contentToken, Token.NO_PARTS,
+                        Token.NO_PH, StyleUtils.parseShadow(shadowValue), isDynamic(contentToken));
             }
         }
 
@@ -1817,7 +1848,8 @@ final class Compiler {
     // Each name sits at the index of its action code.
     private static final String[] ACTION_NAMES = {
             null, "run", "suggest", "url", "copy", "insert", "show", "head", "sprite", "page",
-            "gradient", "color", "style", "font", "lang", "phase", "if", "unless", "transform"
+            "gradient", "color", "style", "font", "lang", "phase", "if", "unless", "transform",
+            "shadow"
     };
 
     private static byte actionType(char[] source, int offset, int length) {

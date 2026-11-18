@@ -5,6 +5,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
+import net.kyori.adventure.text.format.ShadowColor;
 import net.kyori.adventure.text.format.Style;
 import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.object.ObjectContents;
@@ -452,6 +453,53 @@ interface Token {
         }
     }
 
+    // Sets the shadow color of a segment, like ColorContent its color. Created only where the
+    // platform has shadow colors.
+    final class ShadowContent implements Token {
+
+        private final Token content;
+        private final String[] staticParts;
+        private final int[] placeholderIndices;
+        private final ShadowColor shadow;
+
+        static Token create(Token content, String[] staticParts, int[] placeholderIndices,
+                            ShadowColor shadow, boolean dynamic) {
+            return dynamic ? new ShadowContent(content, staticParts, placeholderIndices, shadow)
+                    : new Constant(applyShadow(content.render(null, null), shadow));
+        }
+
+        private ShadowContent(Token content, String[] staticParts, int[] placeholderIndices,
+                              ShadowColor shadow) {
+            this.content = content;
+            this.staticParts = staticParts;
+            this.placeholderIndices = placeholderIndices;
+            this.shadow = shadow;
+        }
+
+        @Override
+        public Component render(Object[] placeholders, long[] numbers) {
+            final Component rendered = this.content.render(placeholders, numbers);
+            final ShadowColor resolved = this.placeholderIndices.length == 0 ? this.shadow
+                    : StyleUtils.parseShadow(buildText(this.staticParts, this.placeholderIndices, placeholders, numbers));
+            return resolved == null ? rendered : applyShadow(rendered, resolved);
+        }
+    }
+
+    private static Component applyShadow(Component component, ShadowColor shadow) {
+        final List<Component> children = component.children();
+        final Component shadowed = component.style(StyleUtils.withShadow(component.style(), shadow));
+        if (children.isEmpty()) return shadowed;
+        final ChildBuffer buffer = acquireChildren(children.size());
+        try {
+            for (int index = 0; index < children.size(); index++) {
+                buffer.setComponent(index, applyShadow(children.get(index), shadow));
+            }
+            return shadowed.children(buffer);
+        } finally {
+            releaseChildren(buffer);
+        }
+    }
+
     // Overrides specified visual properties, retaining events and other styles.
     final class StyleContent implements Token {
 
@@ -484,13 +532,21 @@ interface Token {
     }
 
     private static Component applyStyle(Component component, Style style) {
+        // reset in a style resets the shadow: the segment's own shadows are removed.
+        return StyleUtils.resetsShadow(style)
+                ? applyStyle(component, StyleUtils.withoutShadow(style), true)
+                : applyStyle(component, style, false);
+    }
+
+    private static Component applyStyle(Component component, Style style, boolean removeShadows) {
         final List<Component> children = component.children();
-        final Component styled = component.style(component.style().merge(style));
+        final Style own = removeShadows ? StyleUtils.withoutShadow(component.style()) : component.style();
+        final Component styled = component.style(own.merge(style));
         if (children.isEmpty()) return styled;
         final ChildBuffer buffer = acquireChildren(children.size());
         try {
             for (int index = 0; index < children.size(); index++) {
-                buffer.setComponent(index, applyStyle(children.get(index), style));
+                buffer.setComponent(index, applyStyle(children.get(index), style, removeShadows));
             }
             return styled.children(buffer);
         } finally {

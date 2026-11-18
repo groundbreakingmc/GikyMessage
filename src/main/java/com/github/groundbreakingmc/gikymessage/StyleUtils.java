@@ -188,9 +188,13 @@ final class StyleUtils {
         return NamedTextColor.NAMES.value(value.substring(start, end).toLowerCase(java.util.Locale.ROOT));
     }
 
-    // Returns null for invalid formatting; empty input produces an empty style.
+    // Returns null for invalid formatting; empty input produces an empty style. A shadow, written
+    // as in text ($#ff5555 or $#ff5555:80), is left out where the platform has no shadow colors:
+    // a style from a placeholder cannot fail, and the compiler rejects a fixed one there. reset
+    // also resets the shadow, marked with Shadows.RESET for applyStyle.
     static Style parseStyle(String value) {
         TextColor color = null;
+        ShadowColor shadowColor = null;
         short decorations = 0;
         int index = 0;
         while (index < value.length()) {
@@ -202,6 +206,18 @@ final class StyleUtils {
             final char first = value.charAt(index);
             TextDecoration decoration = null;
             boolean reset = false;
+            if (first == '$') {
+                final char[] chars = value.toCharArray();
+                final int digits = start + 1 < chars.length && chars[start + 1] == '#' ? start + 2 : start + 1;
+                final int rgb = parseHex(chars, digits);
+                if (rgb == -1) return null;
+                final int alpha = parseAlpha(chars, digits + 6);
+                index = digits + (alpha == -1 ? 6 : 9);
+                if (index < chars.length && !Character.isWhitespace(chars[index])
+                        && chars[index] != '&' && chars[index] != '§') return null;
+                if (Platform.SHADOW_COLORS) shadowColor = shadowColorOf((alpha == -1 ? 0xFF : alpha) << 24 | rgb);
+                continue;
+            }
             if (first == '&' || first == '§') {
                 if (++index == value.length()) return null;
                 final char code = Character.toLowerCase(value.charAt(index++));
@@ -238,6 +254,8 @@ final class StyleUtils {
 
             if (reset) {
                 color = NamedTextColor.WHITE;
+                // Like &r in text; applyStyle removes the segment's own shadows on seeing it.
+                if (Platform.SHADOW_COLORS) shadowColor = Shadows.RESET;
                 for (final TextDecoration entry : DECORATIONS) {
                     decorations = withDecoration(decorations, entry, BIT_FALSE);
                 }
@@ -249,7 +267,45 @@ final class StyleUtils {
                 color = parsed;
             }
         }
-        return create(color, null, decorations);
+        return create(color, shadowColor, decorations);
+    }
+
+    // A shadow as shadow: takes it: none, or as in text with or without $ and #, such as
+    // $#ff5555, #ff5555:80 or ff5555.
+    static boolean isShadow(String value) {
+        if (value.equals("none")) return true;
+        final char[] chars = value.toCharArray();
+        int digits = 0;
+        if (digits < chars.length && chars[digits] == '$') digits++;
+        if (digits < chars.length && chars[digits] == '#') digits++;
+        if (parseHex(chars, digits) == -1) return false;
+        final int end = digits + 6;
+        return end == chars.length || end + 3 == chars.length && parseAlpha(chars, end) != -1;
+    }
+
+    // The shadow of a value isShadow accepts, or null for any other; needs shadow colors.
+    static ShadowColor parseShadow(String value) {
+        if (!isShadow(value)) return null;
+        if (value.equals("none")) return ShadowColor.none();
+        final char[] chars = value.toCharArray();
+        int digits = 0;
+        if (chars[digits] == '$') digits++;
+        if (chars[digits] == '#') digits++;
+        final int alpha = parseAlpha(chars, digits + 6);
+        return shadowColorOf((alpha == -1 ? 0xFF : alpha) << 24 | parseHex(chars, digits));
+    }
+
+    // Whether a parsed style resets the shadow; then withoutShadow gives the rest of it.
+    static boolean resetsShadow(Style style) {
+        return Platform.SHADOW_COLORS && Shadows.resets(style);
+    }
+
+    static Style withoutShadow(Style style) {
+        return Shadows.with(style, null);
+    }
+
+    static Style withShadow(Style style, ShadowColor shadowColor) {
+        return Shadows.with(style, shadowColor);
     }
 
     static TextColor fromLegacyCode(char code) {
@@ -327,8 +383,20 @@ final class StyleUtils {
     // first shadow, and the compiler rejects shadows the platform lacks before that.
     private static final class Shadows {
 
+        // Never rendered: applyStyle replaces it by removing shadows. Compared by identity, so
+        // a transparent shadow someone writes is never taken for it.
+        private static final ShadowColor RESET = ShadowColor.shadowColor(0x00FFFFFF);
+
         private static void apply(Style.Builder builder, ShadowColor shadowColor) {
             builder.shadowColor(shadowColor);
+        }
+
+        private static boolean resets(Style style) {
+            return style.shadowColor() == RESET;
+        }
+
+        private static Style with(Style style, ShadowColor shadowColor) {
+            return style.shadowColor(shadowColor);
         }
     }
 }

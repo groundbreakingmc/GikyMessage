@@ -14,8 +14,9 @@ The whole format on one page. Each heading links to the full page.
 | `&r` | Reset to plain text |
 | `$#000000`, `$#000000:80`, `$#000000:00` | Shadow color, with transparency, no shadow *(1.21.4+)* |
 
-A color doesn't end bold or italic — use `&r`, or put the styled part in brackets:
-`[&6&lTitle] &7rest`.
+A color code ends styles and the shadow, so write the color first: `&6&l` is bold gold,
+`&f$#ff5555` is white with a red shadow. `&r` resets to plain text; brackets keep a style inside
+them: `&a[&lTitle] rest`.
 
 `#` or `$` followed by six hex digits is always a code. To show such text, as in a ticket number or
 a price, put a backslash in front: `\#123456`, `\$100000`.

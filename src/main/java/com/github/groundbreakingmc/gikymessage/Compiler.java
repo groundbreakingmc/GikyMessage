@@ -197,7 +197,7 @@ final class Compiler {
                         if (depth == 0) {
                             if (rootTokenCnt == 0 && styleFlush instanceof Token.Plain) {
                                 if (curDeco != 0 || curColor != null || curShadow != null) {
-                                    canHoistRootStyle = !hasRootResetAhead(src, pos);
+                                    canHoistRootStyle = !hasRootResetAhead(src, pos, curShadow != null);
                                 }
                                 if (canHoistRootStyle) {
                                     inhDeco = curDeco;
@@ -215,15 +215,13 @@ final class Compiler {
                     hasDyn = false;
                 }
 
-                if (hexColor != -1) {
-                    curColor = StyleUtils.textColorOf(hexColor);
-                    pos = digits + 6;
-                    continue;
-                }
-
-                if (legacyColor != null) {
-                    curColor = legacyColor;
-                    pos += 2;
+                // A color starts plain text in that color, as classic codes do: styles and the
+                // shadow end with it.
+                if (hexColor != -1 || legacyColor != null) {
+                    curColor = hexColor != -1 ? StyleUtils.textColorOf(hexColor) : legacyColor;
+                    curDeco = StyleUtils.resetDecorations(inhDeco);
+                    curShadow = inhShadow == null ? null : ShadowColor.none();
+                    pos = hexColor != -1 ? digits + 6 : pos + 2;
                     continue;
                 }
 
@@ -280,7 +278,7 @@ final class Compiler {
                         if (depth == 0) {
                             if (rootTokenCnt == 0 && shadowFlush instanceof Token.Plain) {
                                 if (curDeco != 0 || curColor != null || curShadow != null) {
-                                    canHoistRootStyle = !hasRootResetAhead(src, pos);
+                                    canHoistRootStyle = !hasRootResetAhead(src, pos, curShadow != null);
                                 }
                                 if (canHoistRootStyle) {
                                     inhDeco = curDeco;
@@ -351,7 +349,7 @@ final class Compiler {
                     if (depth == 0) {
                         if (rootTokenCnt == 0 && accumulated instanceof Token.Plain) {
                             if (curDeco != 0 || curColor != null || curShadow != null) {
-                                canHoistRootStyle = !hasRootResetAhead(src, pos);
+                                canHoistRootStyle = !hasRootResetAhead(src, pos, curShadow != null);
                             }
                             if (canHoistRootStyle) {
                                 inhDeco = curDeco;
@@ -1717,7 +1715,9 @@ final class Compiler {
     }
 
     // Finds a root-level reset, ignoring escapes, placeholders, nested groups, and actions.
-    private static boolean hasRootResetAhead(char[] src, int start) {
+    // Whether the root text ahead has &r, or with colorsReset any color code, which ends a
+    // shadow as well.
+    private static boolean hasRootResetAhead(char[] src, int start, boolean colorsReset) {
         int bracketDepth = 0;
 
         for (int index = start; index < src.length; index++) {
@@ -1764,6 +1764,11 @@ final class Compiler {
                     && index + 1 < src.length) {
                 final char code = src[index + 1];
                 if (code == 'r' || code == 'R') return true;
+                if (colorsReset && (StyleUtils.fromLegacyCode(code) != null
+                        || code == '#' && StyleUtils.parseHex(src, index + 2) != -1)) return true;
+            }
+            if (bracketDepth == 0 && colorsReset && character == '#' && StyleUtils.parseHex(src, index + 1) != -1) {
+                return true;
             }
         }
 

@@ -4,7 +4,8 @@
 
 Find the symptom, then the cause and the fix.
 
-- **Formatting:** [everything after a word is bold](#everything-after-a-word-is-bold) · [a hex color
+- **Formatting:** [a style or shadow disappears after a
+  color](#a-style-or-a-shadow-disappears-after-a-color) · [a hex color
   shows up as text](#a-hex-color-shows-up-as-text) · [a gradient doesn't
   appear](#a-gradient-doesnt-appear) · [a custom shadow isn't
   visible](#a-custom-shadow-isnt-visible)
@@ -21,12 +22,13 @@ Find the symptom, then the cause and the fix.
 
 ---
 
-### Everything after a word is bold
+### A style or a shadow disappears after a color
 
-**Cause:** a new color doesn't switch bold (or any other style) off.
+**Cause:** a color code ends bold, italic, every other style and the custom shadow. In
+`&l&6SkyCraft` the `&6` ends the bold before any text.
 
-**Fix:** end the style with `&r`, or put the styled part in brackets: `[&6&lSkyCraft] &7survival`
-instead of `&6&lSkyCraft &7survival`. [More](colors.md#turning-a-style-off).
+**Fix:** write the color first and the style or shadow after it: `&6&lSkyCraft`,
+`&f$#ff5555SkyCraft`. [More](colors.md#turning-a-style-off).
 
 ### A hex color shows up as text
 
@@ -44,10 +46,11 @@ as text.
 
 ### A custom shadow isn't visible
 
-**Cause:** the player's game is older than 1.21.4, or the shadow code doesn't have exactly six
-digits.
+**Cause:** the player's game is older than 1.21.4, the shadow code doesn't have exactly six
+digits, or a color code comes after the shadow code and ends it.
 
-**Fix:** write six digits after `$#`, and the transparency after a colon: `$#000000:80`.
+**Fix:** write six digits after `$#`, and the transparency after a colon: `$#000000:80`. Put the
+shadow after the color: `&f$#000000:80Text`, not `$#000000:80&fText`.
 [More](colors.md#text-shadow).
 
 ---

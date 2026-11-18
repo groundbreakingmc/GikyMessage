@@ -25,7 +25,18 @@ class TextShadowTest extends TextTestBase {
                         .color(NamedTextColor.WHITE)
                         .shadowColor(ShadowColor.shadowColor(0xFF112233))
                         .build()),
-                Text.of("$#112233&fText").render());
+                Text.of("&f$#112233Text").render());
+    }
+
+    @Test
+    void aColorEndsTheShadow() {
+        assertEquals(Component.text("Text", NamedTextColor.WHITE), Text.of("$#112233&fText").render().compact());
+        // After the color, the text has the usual shadow again, not a transparent one.
+        assertEquals(Component.text()
+                        .append(Component.text("A ", Style.style().shadowColor(ShadowColor.shadowColor(0xFF112233)).build()))
+                        .append(Component.text("B", NamedTextColor.RED))
+                        .build().compact(),
+                Text.of("$#112233A &cB").render().compact());
     }
 
     @Test
@@ -79,8 +90,8 @@ class TextShadowTest extends TextTestBase {
     }
 
     @Test
-    void alphaShadowCoversPlaceholdersAndLaterColors() {
-        final Component rendered = bound("$#000000:80{name} &cand more").render((key, value) -> value.text("Steve"));
+    void alphaShadowCoversPlaceholders() {
+        final Component rendered = bound("$#000000:80{name} and more").render((key, value) -> value.text("Steve"));
         assertEquals("Steve and more", MM.stripTags(MM.serialize(rendered)));
         assertEveryTextShadowed(rendered, null, ShadowColor.shadowColor(0x80000000));
     }

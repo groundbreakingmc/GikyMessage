@@ -26,23 +26,22 @@ For any other color, use a hex code such as `&#ff8800`.
 
 ## 2. Make a word bold — and stop it in time
 
-`&l` makes text bold. Bold stays on until a reset, `&r`, and a new color does **not** switch it off.
-That's the most common surprise for people used to other plugins:
+`&l` makes text bold. Put it after the color: a new color ends bold, so the green after the name is
+regular again:
 
 ```text
 &aWelcome to &6&lSkyCraft&a, have fun!
 ```
 
-![', have fun!' came out bold too](images/en/qs-bold-wrong.svg)
+![Only SkyCraft is bold; the rest is green and regular](images/en/qs-bold.svg)
 
-The rest of the line became bold as well. There's a neat fix: square brackets keep a style inside
-them.
+Write the color first, `&6&l`: in `&l&6` the color would end the bold right away. Square brackets do
+the same job and are handy when the rest of the line has no color code of its own: a style written
+inside them stays inside them.
 
 ```text
 &aWelcome to [&6&lSkyCraft], have fun!
 ```
-
-![Only SkyCraft is bold; the rest is green and regular](images/en/qs-bold.svg)
 
 After the closing bracket the text is green and regular again. Brackets have another job too, as
 you'll see in step 4.

@@ -68,15 +68,15 @@ for example in a ticket number. Put a backslash in front to show it: `\#123456`.
 
 ![Bold, italic, underlined, strikethrough and obfuscated text](images/en/colors-styles.svg)
 
-Styles add up: `&l&n` is bold and underlined, and the order of codes doesn't matter, so `&l&c` and
-`&c&l` both give bold red.
+Styles add up: `&l&n` is bold and underlined. Write the color first and the styles after it: a color
+code ends styles, so `&c&l` gives bold red, while `&l&c` gives plain red.
 
 ## Turning a style off
 
-A new color doesn't end bold, italic or any other style. [Classic `§`
-codes](https://minecraft.wiki/w/Formatting_codes#Java_Edition), and many plugins that copy them,
-behave differently, so it's worth remembering. End a style with `&r`, or keep it inside square
-brackets:
+A color code ends bold, italic and every other style, as [classic `§`
+codes](https://minecraft.wiki/w/Formatting_codes#Java_Edition) do. That's true for `&0`–`&f`,
+`&#rrggbb` and a bare `#rrggbb`: the text after them is regular, in the new color. To end a style
+without a new color, use `&r`, or keep the style inside square brackets:
 
 ```text
 &f&lSkyCraft &7— survival server
@@ -84,12 +84,12 @@ brackets:
 [&f&lSkyCraft] &7— survival server
 ```
 
-![First line: everything is bold. Second and third lines: only SkyCraft is
-bold](images/en/colors-reset.svg)
+![All three lines look the same: only SkyCraft is bold](images/en/colors-reset.svg)
 
-In the first line everything after `&l` is bold, gray part included. The second line resets after
-the name. The third one keeps the style inside the brackets, which is often shorter, because after
-`]` the text continues in the color and style it had before `[`.
+In the first line `&7` ends the bold. In the second `&r` ends it and resets the text to plain white,
+then `&7` makes it gray. The third one keeps the style inside the brackets: after `]` the text
+continues in the color and style it had before `[`. That's handy when the text after the styled part
+has no color code of its own, as in `&a[&lSkyCraft] welcomes you`.
 
 ## Text shadow
 
@@ -97,7 +97,7 @@ Minecraft draws a darker copy of the text under it. `$#` and six hex digits set 
 shadow. The `#` is optional here, so `$ff5555` is the same code:
 
 ```text
-$#ff5555&fRed shadow   $#5555ff:80&fHalf-transparent blue   $#000000:00&fNo shadow
+&f$#ff5555Red shadow   &f$#5555ff:80Half-transparent blue   &f$#000000:00No shadow
 ```
 
 ![White text with a red shadow, a half-transparent blue shadow and no
@@ -108,6 +108,10 @@ shadow](images/en/colors-shadow.svg)
 | `$#RRGGBB`, `$RRGGBB` | Fully visible, in that color |
 | `$#RRGGBB:AA` | The two digits after the colon are transparency: `00` invisible, `80` half, `ff` fully visible |
 | `$#000000:00` | No shadow at all |
+
+Write the shadow after the color, like a style: a color code ends the custom shadow. So
+`&f$#ff5555Text` is white with a red shadow, while `$#ff5555&fText` has the usual shadow. `&r` ends
+it too.
 
 A `$` followed by six digits is a shadow even where you mean a price. Put a backslash in front to
 show it as text: `\$100000`.

@@ -73,12 +73,11 @@ class TextPlainTest extends TextTestBase {
         }
 
         @Test
-        @DisplayName("Bold then color (reversed code order)")
-        void boldThenColor() {
-            // &l before &c — order of codes must not matter for the final style
+        @DisplayName("A color ends the styles before it")
+        void colorEndsStyles() {
             assertRenders(
-                    Component.text("Bold red", NamedTextColor.RED, TextDecoration.BOLD),
-                    "&l&cBold red"
+                    Component.text("Red", NamedTextColor.RED),
+                    "&l&cRed"
             );
         }
 
@@ -284,19 +283,19 @@ class TextPlainTest extends TextTestBase {
         }
 
         @Test
-        @DisplayName("Bold before color (reversed order)")
+        @DisplayName("Bold before a color ends with it")
         void boldBeforeColor() {
             assertRenders(
-                    Component.text("x", NamedTextColor.RED, TextDecoration.BOLD),
+                    Component.text("x", NamedTextColor.RED),
                     "&l&cx"
             );
         }
 
         @Test
-        @DisplayName("Italic before hex color (reversed order)")
+        @DisplayName("Italic before a color ends with it")
         void italicBeforeColor() {
             assertRenders(
-                    Component.text("x", NamedTextColor.RED, TextDecoration.ITALIC),
+                    Component.text("x", NamedTextColor.RED),
                     "&o&cx"
             );
         }
@@ -359,10 +358,10 @@ class TextPlainTest extends TextTestBase {
         }
 
         @Test
-        @DisplayName("Bold before hex color (reversed order)")
+        @DisplayName("Bold before a hex color ends with it")
         void boldBeforeHex() {
             assertRenders(
-                    Component.text("Bold hex", TextColor.color(0x55ff55), TextDecoration.BOLD),
+                    Component.text("Bold hex", TextColor.color(0x55ff55)),
                     "&l&#55ff55Bold hex"
             );
         }
@@ -377,10 +376,10 @@ class TextPlainTest extends TextTestBase {
         }
 
         @Test
-        @DisplayName("Hex color with italic decoration")
+        @DisplayName("Italic before a hex color ends with it")
         void italicBeforeHex() {
             assertRenders(
-                    Component.text("Italic hex", TextColor.color(0xaa00ff), TextDecoration.ITALIC),
+                    Component.text("Italic hex", TextColor.color(0xaa00ff)),
                     "&o&#aa00ffItalic hex"
             );
         }

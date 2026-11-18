@@ -248,7 +248,7 @@ clear `TextFormatException` if the server's Adventure is older:
 | Feature | Adventure on the server | Minecraft on the player's side |
 |---|---|---|
 | [`lang:` translations](translations.md) | 4.13 or newer | 1.19.4 or newer for the backup text |
-| [`$#` shadow colors](colors.md#text-shadow) | 4.18 or newer | 1.21.4 or newer |
+| [`$#` shadow colors](colors.md#text-shadow), `shadow:`, `force-shadow:` | 4.18 or newer | 1.21.4 or newer |
 | [`head:` and `sprite:`](segments.md#player-heads-and-sprites) | 4.25 or newer | 1.21.9 or newer |
 
 ## Adding it to a project

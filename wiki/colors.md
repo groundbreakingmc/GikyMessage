@@ -119,8 +119,8 @@ show it as text: `\$100000`.
 
 ## Coloring one part: `color` and `style`
 
-[Segments](segments.md) can set the color and style of their text with an action. It does the same
-as `&` codes, but the value can come from a placeholder, for example a team color:
+[Segments](segments.md) can set the color and style of their text with an action. The value can come
+from a placeholder, for example a team color:
 
 ```text
 [{player}](color:{team_color}) &7joined the game
@@ -147,12 +147,36 @@ it, with or without `$` and `#`, such as `#ff5555` or `$#ff5555:80`, or `none` f
 [Event starts now!](shadow:#000000:80)
 ```
 
-`reset` in `style:` resets the shadow as well. Where the server has no shadow colors, a shadow from
-a placeholder is left out and the rest of the style still applies.
+These actions only fill what the segment's own text leaves unset. They replace the look the segment
+gets from codes before it, but codes inside the segment and the colors of parts that placeholders
+insert, such as a colored prefix or a highlighted mention, stay as they are:
 
-If the value isn't valid — for example, the placeholder is empty — the text keeps the colors it
-already had. When a segment has several, `color` wins over the color in `style`, and `shadow` over
-its shadow.
+```text
+&7[{message}](style:gold)   the message is gold, not gray
+&a[&bText](color:red)       Text stays aqua
+```
+
+`reset` in `style:` resets the shadow as well. If the value isn't valid — for example, the
+placeholder is empty — the segment keeps the look it had before it. When a segment has several,
+`color` wins over the color in `style`, and `shadow` over its shadow.
+
+### Overriding everything: `force-color`, `force-style`, `force-shadow`
+
+To give the whole segment one look no matter what's inside, use the forced versions. They take the
+same values as `color:`, `style:` and `shadow:`, and override codes inside the segment and the parts
+that placeholders insert:
+
+```text
+[&bText](force-color:red)                       Text is red
+[{prefix} {player}](force-style:"gray italic")  all gray and italic, the colored prefix too
+```
+
+A forced action wins over a plain one: `[Text](color:red, force-color:blue)` is blue.
+`force-style:reset` also removes every shadow inside the segment.
+
+Shadow actions need Adventure 4.18 or newer, like [shadow codes](#text-shadow). Where the server has
+no shadow colors, a fixed shadow makes the message fail to load with an error, and a shadow from a
+placeholder is left out while the rest of the style still applies.
 
 ## For developers
 

@@ -308,6 +308,10 @@ final class StyleUtils {
         return Shadows.with(style, shadowColor);
     }
 
+    static boolean hasShadow(Style style) {
+        return Shadows.of(style) != null;
+    }
+
     static TextColor fromLegacyCode(char code) {
         return switch (Character.toLowerCase(code)) {
             case '0' -> NamedTextColor.BLACK;
@@ -389,6 +393,10 @@ final class StyleUtils {
 
         private static void apply(Style.Builder builder, ShadowColor shadowColor) {
             builder.shadowColor(shadowColor);
+        }
+
+        private static ShadowColor of(Style style) {
+            return style.shadowColor();
         }
 
         private static boolean resets(Style style) {

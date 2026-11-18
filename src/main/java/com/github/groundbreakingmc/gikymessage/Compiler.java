@@ -45,6 +45,9 @@ final class Compiler {
     private static final byte ACTION_UNLESS = 17;
     private static final byte ACTION_TRANSFORM = 18;
     private static final byte ACTION_SHADOW = 19;
+    private static final byte ACTION_FORCE_COLOR = 20;
+    private static final byte ACTION_FORCE_STYLE = 21;
+    private static final byte ACTION_FORCE_SHADOW = 22;
 
     /** What a segment hidden while compiling is replaced with; it renders nothing. */
     private static final Token EMPTY_SEGMENT = new Token.Constant(Component.empty());
@@ -631,6 +634,15 @@ final class Compiler {
         String shadowValue = null;
         boolean shadowDynamic = false;
 
+        String forceColorValue = null;
+        boolean forceColorDynamic = false;
+
+        String forceStyleValue = null;
+        boolean forceStyleDynamic = false;
+
+        String forceShadowValue = null;
+        boolean forceShadowDynamic = false;
+
         boolean hasShow = false;
         boolean showDynamic = false;
 
@@ -726,6 +738,12 @@ final class Compiler {
 
                 case ACTION_SHADOW -> shadowValue == null;
 
+                case ACTION_FORCE_COLOR -> forceColorValue == null;
+
+                case ACTION_FORCE_STYLE -> forceStyleValue == null;
+
+                case ACTION_FORCE_SHADOW -> forceShadowValue == null;
+
                 case ACTION_SUGGEST -> selectedClickPriority >= 1;
 
                 case ACTION_URL -> selectedClickPriority >= 2;
@@ -749,7 +767,8 @@ final class Compiler {
                         ACTION_URL,
                         ACTION_COPY,
                         ACTION_SHOW,
-                        ACTION_HEAD, ACTION_COLOR, ACTION_STYLE, ACTION_SHADOW, ACTION_LANG,
+                        ACTION_HEAD, ACTION_COLOR, ACTION_STYLE, ACTION_SHADOW, ACTION_FORCE_COLOR,
+                        ACTION_FORCE_STYLE, ACTION_FORCE_SHADOW, ACTION_LANG,
                         ACTION_IF, ACTION_UNLESS -> true;
 
                 default -> false;
@@ -1048,6 +1067,21 @@ final class Compiler {
                     shadowDynamic = dynamic;
                 }
 
+                case ACTION_FORCE_COLOR -> {
+                    forceColorValue = quoted ? quotedValue : new String(source, valueStart, valueEnd - valueStart);
+                    forceColorDynamic = dynamic;
+                }
+
+                case ACTION_FORCE_STYLE -> {
+                    forceStyleValue = quoted ? quotedValue : new String(source, valueStart, valueEnd - valueStart);
+                    forceStyleDynamic = dynamic;
+                }
+
+                case ACTION_FORCE_SHADOW -> {
+                    forceShadowValue = quoted ? quotedValue : new String(source, valueStart, valueEnd - valueStart);
+                    forceShadowDynamic = dynamic;
+                }
+
                 case ACTION_LANG -> {
                     selectedContentPriority = 2;
                     selectedContentType = ACTION_LANG;
@@ -1150,11 +1184,16 @@ final class Compiler {
                         ? buildStaticHover(showText)
                         : null;
 
+        // The look the segment has from the text before it. With color, style or shadow it only
+        // fills what those leave unset, so the content is built without it.
+        final boolean ownLook = colorValue != null || styleValue != null || shadowValue != null;
+        final Style outerLook = ownLook ? StyleUtils.create(color, shadow, decorations) : Style.empty();
+
         // Keep metadata on the content root; dynamic actions replace only their own events.
         final Style contentStyle = StyleUtils.create(
-                color,
-                shadow,
-                decorations,
+                ownLook ? null : color,
+                ownLook ? null : shadow,
+                ownLook ? 0 : decorations,
                 staticClick,
                 staticHover,
                 insertionValue,
@@ -1247,53 +1286,18 @@ final class Compiler {
             }
         }
 
-        if (styleValue != null) {
-            if (styleDynamic) {
-                final DynamicValue value = parseDynamicValue(styleValue, placeholders);
-                contentToken = Token.StyleContent.create(contentToken, value.staticParts,
-                        value.placeholderIndices, null, true);
-            } else {
-                final Style value = StyleUtils.parseStyle(styleValue);
-                // Only a shadow puts a $ into a valid style.
-                if (value != null && !Platform.SHADOW_COLORS && styleValue.indexOf('$') >= 0) {
-                    throw unsupported("Shadow colors", "4.18");
-                }
-                if (value != null && !value.isEmpty()) {
-                    contentToken = Token.StyleContent.create(contentToken, Token.NO_PARTS,
-                            Token.NO_PH, value, isDynamic(contentToken));
-                }
-            }
+        // color and shadow fill only what the segment's text leaves unset, so they go first and
+        // style fills the rest. The forced ones override everything, the most specific last.
+        contentToken = withShadow(contentToken, shadowValue, shadowDynamic, false, placeholders);
+        contentToken = withColor(contentToken, colorValue, colorDynamic, false, placeholders);
+        contentToken = withStyle(contentToken, styleValue, styleDynamic, false, placeholders);
+        if (!outerLook.isEmpty()) {
+            contentToken = Token.StyleContent.create(contentToken, Token.NO_PARTS, Token.NO_PH, outerLook, false,
+                    isDynamic(contentToken));
         }
-
-        if (colorValue != null) {
-            if (colorDynamic) {
-                final DynamicValue value = parseDynamicValue(colorValue, placeholders);
-                contentToken = Token.ColorContent.create(contentToken, value.staticParts,
-                        value.placeholderIndices, null, true);
-            } else {
-                final TextColor value = StyleUtils.parseColor(colorValue);
-                if (value != null) {
-                    contentToken = Token.ColorContent.create(contentToken, Token.NO_PARTS,
-                            Token.NO_PH, value, isDynamic(contentToken));
-                }
-            }
-        }
-
-        // Applied last, so it overrides a shadow from style, as color overrides its color.
-        if (shadowValue != null) {
-            if (shadowDynamic) {
-                // Without shadow colors a shadow from a placeholder is left out, like an invalid one.
-                if (Platform.SHADOW_COLORS) {
-                    final DynamicValue value = parseDynamicValue(shadowValue, placeholders);
-                    contentToken = Token.ShadowContent.create(contentToken, value.staticParts,
-                            value.placeholderIndices, null, true);
-                }
-            } else if (StyleUtils.isShadow(shadowValue)) {
-                if (!Platform.SHADOW_COLORS) throw unsupported("Shadow colors", "4.18");
-                contentToken = Token.ShadowContent.create(contentToken, Token.NO_PARTS,
-                        Token.NO_PH, StyleUtils.parseShadow(shadowValue), isDynamic(contentToken));
-            }
-        }
+        contentToken = withStyle(contentToken, forceStyleValue, forceStyleDynamic, true, placeholders);
+        contentToken = withColor(contentToken, forceColorValue, forceColorDynamic, true, placeholders);
+        contentToken = withShadow(contentToken, forceShadowValue, forceShadowDynamic, true, placeholders);
 
         final Token segment;
         if (!clickDynamic && !showDynamic) {
@@ -1769,6 +1773,50 @@ final class Compiler {
     // Finds the ) that closes the action list opened at start. The list is read the way its
     // actions are: a quote opens a quoted value only as the first character of a value, so an
     // apostrophe inside an unquoted value, as in show:Don't, is ordinary text.
+    // The token with a style, color or shadow action applied; an invalid fixed value is ignored.
+    private static Token withStyle(Token content, String raw, boolean dynamic, boolean force,
+                                   PlaceholderTable placeholders) {
+        if (raw == null) return content;
+        if (dynamic) {
+            final DynamicValue value = parseDynamicValue(raw, placeholders);
+            return Token.StyleContent.create(content, value.staticParts, value.placeholderIndices, null, force, true);
+        }
+        final Style value = StyleUtils.parseStyle(raw);
+        // Only a shadow puts a $ into a valid style.
+        if (value != null && !Platform.SHADOW_COLORS && raw.indexOf('$') >= 0) {
+            throw unsupported("Shadow colors", "4.18");
+        }
+        if (value == null || value.isEmpty()) return content;
+        return Token.StyleContent.create(content, Token.NO_PARTS, Token.NO_PH, value, force, isDynamic(content));
+    }
+
+    private static Token withColor(Token content, String raw, boolean dynamic, boolean force,
+                                   PlaceholderTable placeholders) {
+        if (raw == null) return content;
+        if (dynamic) {
+            final DynamicValue value = parseDynamicValue(raw, placeholders);
+            return Token.ColorContent.create(content, value.staticParts, value.placeholderIndices, null, force, true);
+        }
+        final TextColor value = StyleUtils.parseColor(raw);
+        if (value == null) return content;
+        return Token.ColorContent.create(content, Token.NO_PARTS, Token.NO_PH, value, force, isDynamic(content));
+    }
+
+    private static Token withShadow(Token content, String raw, boolean dynamic, boolean force,
+                                    PlaceholderTable placeholders) {
+        if (raw == null) return content;
+        if (dynamic) {
+            // Without shadow colors a shadow from a placeholder is left out, like an invalid one.
+            if (!Platform.SHADOW_COLORS) return content;
+            final DynamicValue value = parseDynamicValue(raw, placeholders);
+            return Token.ShadowContent.create(content, value.staticParts, value.placeholderIndices, null, force, true);
+        }
+        if (!StyleUtils.isShadow(raw)) return content;
+        if (!Platform.SHADOW_COLORS) throw unsupported("Shadow colors", "4.18");
+        return Token.ShadowContent.create(content, Token.NO_PARTS, Token.NO_PH, StyleUtils.parseShadow(raw), force,
+                isDynamic(content));
+    }
+
     private static int findClosingParen(char[] src, int start) {
         int pos = start + 1;
         final int len = src.length;
@@ -1849,7 +1897,7 @@ final class Compiler {
     private static final String[] ACTION_NAMES = {
             null, "run", "suggest", "url", "copy", "insert", "show", "head", "sprite", "page",
             "gradient", "color", "style", "font", "lang", "phase", "if", "unless", "transform",
-            "shadow"
+            "shadow", "force-color", "force-style", "force-shadow"
     };
 
     private static byte actionType(char[] source, int offset, int length) {

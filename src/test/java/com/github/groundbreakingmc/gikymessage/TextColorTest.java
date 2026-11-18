@@ -38,7 +38,7 @@ class TextColorTest extends TextTestBase {
                 .decorate(TextDecoration.BOLD)
                 .clickEvent(ClickEvent.runCommand("/team"))
                 .append(Component.text("!", NamedTextColor.BLUE));
-        final Component result = bound("[{name}](color:{relation})")
+        final Component result = bound("[{name}](force-color:{relation})")
                 .render((slotKey, slotValue) -> slotValue.component(
                         slotKey.equals("name") ? name : slotKey.equals("relation") ? Component.text("&a") : null));
         assertEquals(name.color(NamedTextColor.GREEN)
@@ -74,7 +74,7 @@ class TextColorTest extends TextTestBase {
 
     @Test
     void colorCanModifyGradientAndDoesNotEscapeItsBlock() {
-        final Component result = bound("&b[AB](gradient:c-e,color:green)C").render();
+        final Component result = bound("&b[AB](gradient:c-e,force-color:green)C").render();
         assertEquals(Component.empty().append(Component.text("AB", NamedTextColor.GREEN))
                 .append(Component.text("C", NamedTextColor.AQUA)), result.compact());
     }

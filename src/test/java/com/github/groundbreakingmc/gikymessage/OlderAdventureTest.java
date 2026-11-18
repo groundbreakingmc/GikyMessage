@@ -52,6 +52,7 @@ class OlderAdventureTest {
             assertUnsupported(library, "[Hover](show:\"$#000000{name}\")", "4.18");
             assertUnsupported(library, "[Text](style:\"gold $#000000\")", "4.18");
             assertUnsupported(library, "[Text](shadow:#000000)", "4.18");
+            assertUnsupported(library, "[Text](force-shadow:#000000)", "4.18");
             // Not a shadow code, so nothing newer is needed.
             assertEquals(Text.of("$5 and $#xyz").render(), library.render(library.compile("$5 and $#xyz")));
         }

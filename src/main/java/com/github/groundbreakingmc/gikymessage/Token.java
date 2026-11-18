@@ -407,26 +407,29 @@ interface Token {
         }
     }
 
-    // Overrides colors throughout the component tree without splitting text.
+    // The color of a segment: with force throughout its component tree, otherwise only where
+    // the segment's text has no color of its own.
     final class ColorContent implements Token {
 
         private final Token content;
         private final String[] staticParts;
         private final int[] placeholderIndices;
         private final TextColor color;
+        private final boolean force;
 
         static Token create(Token content, String[] staticParts, int[] placeholderIndices,
-                            TextColor color, boolean dynamic) {
-            return dynamic ? new ColorContent(content, staticParts, placeholderIndices, color)
-                    : new Constant(applyColor(content.render(null, null), color));
+                            TextColor color, boolean force, boolean dynamic) {
+            return dynamic ? new ColorContent(content, staticParts, placeholderIndices, color, force)
+                    : new Constant(applyColor(content.render(null, null), color, force));
         }
 
         private ColorContent(Token content, String[] staticParts, int[] placeholderIndices,
-                             TextColor color) {
+                             TextColor color, boolean force) {
             this.content = content;
             this.staticParts = staticParts;
             this.placeholderIndices = placeholderIndices;
             this.color = color;
+            this.force = force;
         }
 
         @Override
@@ -434,18 +437,19 @@ interface Token {
             final Component rendered = this.content.render(placeholders, numbers);
             final TextColor resolved = this.placeholderIndices.length == 0 ? this.color
                     : StyleUtils.parseColor(buildText(this.staticParts, this.placeholderIndices, placeholders, numbers));
-            return resolved == null ? rendered : applyColor(rendered, resolved);
+            return resolved == null ? rendered : applyColor(rendered, resolved, this.force);
         }
     }
 
-    private static Component applyColor(Component component, TextColor color) {
+    private static Component applyColor(Component component, TextColor color, boolean force) {
+        if (!force) return component.color() == null ? component.color(color) : component;
         final List<Component> children = component.children();
         final Component colored = component.color(color);
         if (children.isEmpty()) return colored;
         final ChildBuffer buffer = acquireChildren(children.size());
         try {
             for (int index = 0; index < children.size(); index++) {
-                buffer.setComponent(index, applyColor(children.get(index), color));
+                buffer.setComponent(index, applyColor(children.get(index), color, true));
             }
             return colored.children(buffer);
         } finally {
@@ -453,7 +457,7 @@ interface Token {
         }
     }
 
-    // Sets the shadow color of a segment, like ColorContent its color. Created only where the
+    // The shadow of a segment, applied like ColorContent its color. Created only where the
     // platform has shadow colors.
     final class ShadowContent implements Token {
 
@@ -461,19 +465,21 @@ interface Token {
         private final String[] staticParts;
         private final int[] placeholderIndices;
         private final ShadowColor shadow;
+        private final boolean force;
 
         static Token create(Token content, String[] staticParts, int[] placeholderIndices,
-                            ShadowColor shadow, boolean dynamic) {
-            return dynamic ? new ShadowContent(content, staticParts, placeholderIndices, shadow)
-                    : new Constant(applyShadow(content.render(null, null), shadow));
+                            ShadowColor shadow, boolean force, boolean dynamic) {
+            return dynamic ? new ShadowContent(content, staticParts, placeholderIndices, shadow, force)
+                    : new Constant(applyShadow(content.render(null, null), shadow, force));
         }
 
         private ShadowContent(Token content, String[] staticParts, int[] placeholderIndices,
-                              ShadowColor shadow) {
+                              ShadowColor shadow, boolean force) {
             this.content = content;
             this.staticParts = staticParts;
             this.placeholderIndices = placeholderIndices;
             this.shadow = shadow;
+            this.force = force;
         }
 
         @Override
@@ -481,18 +487,22 @@ interface Token {
             final Component rendered = this.content.render(placeholders, numbers);
             final ShadowColor resolved = this.placeholderIndices.length == 0 ? this.shadow
                     : StyleUtils.parseShadow(buildText(this.staticParts, this.placeholderIndices, placeholders, numbers));
-            return resolved == null ? rendered : applyShadow(rendered, resolved);
+            return resolved == null ? rendered : applyShadow(rendered, resolved, this.force);
         }
     }
 
-    private static Component applyShadow(Component component, ShadowColor shadow) {
+    private static Component applyShadow(Component component, ShadowColor shadow, boolean force) {
+        if (!force) {
+            return StyleUtils.hasShadow(component.style())
+                    ? component : component.style(StyleUtils.withShadow(component.style(), shadow));
+        }
         final List<Component> children = component.children();
         final Component shadowed = component.style(StyleUtils.withShadow(component.style(), shadow));
         if (children.isEmpty()) return shadowed;
         final ChildBuffer buffer = acquireChildren(children.size());
         try {
             for (int index = 0; index < children.size(); index++) {
-                buffer.setComponent(index, applyShadow(children.get(index), shadow));
+                buffer.setComponent(index, applyShadow(children.get(index), shadow, true));
             }
             return shadowed.children(buffer);
         } finally {
@@ -500,26 +510,29 @@ interface Token {
         }
     }
 
-    // Overrides specified visual properties, retaining events and other styles.
+    // The color, styles and shadow of a segment, applied like ColorContent its color; events and
+    // other properties are kept.
     final class StyleContent implements Token {
 
         private final Token content;
         private final String[] staticParts;
         private final int[] placeholderIndices;
         private final Style style;
+        private final boolean force;
 
         static Token create(Token content, String[] staticParts, int[] placeholderIndices,
-                            Style style, boolean dynamic) {
-            return dynamic ? new StyleContent(content, staticParts, placeholderIndices, style)
-                    : new Constant(applyStyle(content.render(null, null), style));
+                            Style style, boolean force, boolean dynamic) {
+            return dynamic ? new StyleContent(content, staticParts, placeholderIndices, style, force)
+                    : new Constant(applyStyle(content.render(null, null), style, force));
         }
 
         private StyleContent(Token content, String[] staticParts, int[] placeholderIndices,
-                             Style style) {
+                             Style style, boolean force) {
             this.content = content;
             this.staticParts = staticParts;
             this.placeholderIndices = placeholderIndices;
             this.style = style;
+            this.force = force;
         }
 
         @Override
@@ -527,18 +540,21 @@ interface Token {
             final Component rendered = this.content.render(placeholders, numbers);
             final Style resolved = this.placeholderIndices.length == 0 ? this.style
                     : StyleUtils.parseStyle(buildText(this.staticParts, this.placeholderIndices, placeholders, numbers));
-            return resolved == null || resolved.isEmpty() ? rendered : applyStyle(rendered, resolved);
+            return resolved == null || resolved.isEmpty() ? rendered : applyStyle(rendered, resolved, this.force);
         }
     }
 
-    private static Component applyStyle(Component component, Style style) {
-        // reset in a style resets the shadow: the segment's own shadows are removed.
-        return StyleUtils.resetsShadow(style)
-                ? applyStyle(component, StyleUtils.withoutShadow(style), true)
-                : applyStyle(component, style, false);
+    private static Component applyStyle(Component component, Style style, boolean force) {
+        final boolean resetsShadow = StyleUtils.resetsShadow(style);
+        final Style applied = resetsShadow ? StyleUtils.withoutShadow(style) : style;
+        if (!force) {
+            return component.style(component.style().merge(applied, Style.Merge.Strategy.IF_ABSENT_ON_TARGET));
+        }
+        // reset in a forced style removes every shadow of the segment.
+        return forceStyle(component, applied, resetsShadow);
     }
 
-    private static Component applyStyle(Component component, Style style, boolean removeShadows) {
+    private static Component forceStyle(Component component, Style style, boolean removeShadows) {
         final List<Component> children = component.children();
         final Style own = removeShadows ? StyleUtils.withoutShadow(component.style()) : component.style();
         final Component styled = component.style(own.merge(style));
@@ -546,7 +562,7 @@ interface Token {
         final ChildBuffer buffer = acquireChildren(children.size());
         try {
             for (int index = 0; index < children.size(); index++) {
-                buffer.setComponent(index, applyStyle(children.get(index), style, removeShadows));
+                buffer.setComponent(index, forceStyle(children.get(index), style, removeShadows));
             }
             return styled.children(buffer);
         } finally {

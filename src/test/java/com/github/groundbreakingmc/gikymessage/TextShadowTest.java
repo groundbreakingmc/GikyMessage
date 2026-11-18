@@ -131,11 +131,11 @@ class TextShadowTest extends TextTestBase {
                         .decoration(TextDecoration.STRIKETHROUGH, false)
                         .decoration(TextDecoration.OBFUSCATED, false)
                         .build()),
-                Text.of("[$#ff0000Text](style:reset)").render().compact());
+                Text.of("[$#ff0000Text](force-style:reset)").render().compact());
         // A shadow after reset is kept.
         assertEquals(ShadowColor.shadowColor(0xFF000000),
-                Text.of("[$#ff0000Text](style:\"reset $#000000\")").render().compact().style().shadowColor());
-        assertEquals(null, bound("[$#ff0000Text](style:{format})")
+                Text.of("[$#ff0000Text](force-style:\"reset $#000000\")").render().compact().style().shadowColor());
+        assertEquals(null, bound("[$#ff0000Text](force-style:{format})")
                 .render((key, value) -> value.text("reset")).compact().style().shadowColor());
     }
 
@@ -165,7 +165,7 @@ class TextShadowTest extends TextTestBase {
                         .shadowColor(ShadowColor.shadowColor(0xFF0000FF))
                         .build()),
                 Text.of("[Text](style:\"gold $#ff0000\",shadow:#0000ff)").render().compact());
-        assertEquals(shadowed("Text", 0xFF0000FF), Text.of("[$#ff0000Text](shadow:#0000ff)").render().compact());
+        assertEquals(shadowed("Text", 0xFF0000FF), Text.of("[$#ff0000Text](force-shadow:#0000ff)").render().compact());
     }
 
     private static void assertEveryTextShadowed(Component component, ShadowColor inherited, ShadowColor expected) {

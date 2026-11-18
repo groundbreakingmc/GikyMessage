@@ -63,7 +63,7 @@ class TextStyleTest extends TextTestBase {
                 .font(Key.key("minecraft:uniform"))
                 .shadowColor(ShadowColor.shadowColor(0xff112233))
                 .append(Component.text("!", NamedTextColor.GREEN));
-        final Component actual = bound("[{name}](style:{format})")
+        final Component actual = bound("[{name}](force-style:{format})")
                 .render((slotKey, slotValue) -> slotValue.component(
                         slotKey.equals("name") ? name : slotKey.equals("format") ? Component.text("&c&l") : null));
         final Component expected = name.color(NamedTextColor.RED).decorate(TextDecoration.BOLD)

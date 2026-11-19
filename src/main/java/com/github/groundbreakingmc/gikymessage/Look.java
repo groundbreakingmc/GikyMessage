@@ -51,7 +51,7 @@ final class Look {
         return switch (kind) {
             case COLOR -> StyleUtils.parseColorLook(value, phase);
             case SHADOW -> StyleUtils.parseShadowLook(value, phase);
-            default -> StyleUtils.parseStyleLook(value);
+            default -> StyleUtils.parseStyleLook(value, phase);
         };
     }
 

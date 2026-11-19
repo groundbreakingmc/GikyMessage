@@ -27,7 +27,7 @@ class OlderAdventureTest {
                 "Hello",
                 "&aHello &b&lWorld&r!",
                 "&#ff8800{name} &7&o({health})",
-                "[{name}](color:#ff5555-#5555ff) [static](force-color:a-b)",
+                "[{name}](color:#ff5555-#5555ff) [static](force-color:a-b) [{name}](style:\"c-e bold\")",
                 "[{name}](color:red) [{health}](style:\"gold bold\")",
                 "[Click](run:\"/msg {name}\", show:\"&aHi {name}\", insert:text)",
                 "[Page](page:2) [Copy](copy:{name}) [Link](url:https://example.com)",
@@ -54,6 +54,7 @@ class OlderAdventureTest {
             assertUnsupported(library, "[Text](shadow:#000000)", "4.18");
             assertUnsupported(library, "[Text](force-shadow:#000000)", "4.18");
             assertUnsupported(library, "[Text](shadow:#000000-#333333)", "4.18");
+            assertUnsupported(library, "[Text](style:\"c-e $#000000:80-#333333\")", "4.18");
             // Not a shadow code, so nothing newer is needed.
             assertEquals(Text.of("$5 and $#xyz").render(), library.render(library.compile("$5 and $#xyz")));
         }
@@ -66,6 +67,9 @@ class OlderAdventureTest {
             assertEquals(Text.of("[x](style:\"gold bold\")").render(),
                     library.render(library.compileBound("[x](style:\"{gold} $#000000 {bold}\")", false)));
             assertEquals(Text.of("x").render(), library.render(library.compileBound("[x](shadow:{name})", false)));
+            // The same for a shadow gradient: the color gradient of the style stays.
+            assertEquals(Text.of("[xy](style:\"c-e bold\")").render(),
+                    library.render(library.compileBound("[xy](style:\"{c-e} $#000000-#333333 {bold}\")", false)));
             assertEquals(Text.of("[x](style:reset)").render(), library.render(library.compile("[x](style:reset)")));
         }
     }

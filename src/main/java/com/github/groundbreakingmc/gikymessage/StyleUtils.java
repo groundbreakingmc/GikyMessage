@@ -214,58 +214,53 @@ final class StyleUtils {
                 : new Look(value, Style.empty(), null, new Look.Gradient(stops, true, phase));
     }
 
-    // A style value. Returns null for invalid formatting; empty input produces an empty look. A
-    // shadow, written as in text ($#ff5555 or $#ff5555:80), is left out where the platform has no
-    // shadow colors: a style from a placeholder cannot fail, and the compiler rejects a fixed one
-    // there. reset also resets the shadow, marked with Shadows.RESET for applyStyle.
-    static Look parseStyleLook(String value) {
+    // A style value. Returns null for invalid formatting; empty input produces an empty look.
+    // Colors and shadows may be gradients, and the last of each wins. A shadow, written as in
+    // text ($#ff5555 or $#ff5555:80), is left out where the platform has no shadow colors: a style
+    // from a placeholder cannot fail, and the compiler rejects a fixed one there. reset also
+    // resets the shadow, marked with Shadows.RESET for applyStyle.
+    static Look parseStyleLook(String value, float phase) {
+        final char[] chars = value.toCharArray();
         TextColor color = null;
+        int[] colorStops = null;
         ShadowColor shadowColor = null;
+        int[] shadowStops = null;
         short decorations = 0;
         int index = 0;
-        while (index < value.length()) {
-            if (Character.isWhitespace(value.charAt(index))) {
+        while (index < chars.length) {
+            final int start = index;
+            final char first = chars[start];
+            if (Character.isWhitespace(first)) {
                 index++;
                 continue;
             }
-            final int start = index;
-            final char first = value.charAt(index);
-            TextDecoration decoration = null;
-            boolean reset = false;
             if (first == '$') {
-                final char[] chars = value.toCharArray();
-                final int digits = start + 1 < chars.length && chars[start + 1] == '#' ? start + 2 : start + 1;
-                final int rgb = parseHex(chars, digits);
-                if (rgb == -1) return null;
-                final int alpha = parseAlpha(chars, digits + 6);
-                index = digits + (alpha == -1 ? 6 : 9);
-                if (index < chars.length && !Character.isWhitespace(chars[index])
+                index = shadowsEnd(chars, start);
+                // A shadow ends at a space or a code.
+                if (index == -1 || index < chars.length && !Character.isWhitespace(chars[index])
                         && chars[index] != '&' && chars[index] != '§') return null;
-                if (Platform.SHADOW_COLORS) shadowColor = shadowColorOf((alpha == -1 ? 0xFF : alpha) << 24 | rgb);
+                final int[] stops = shadowValues(chars, start, index);
+                shadowStops = stops.length == 1 ? null : stops;
+                if (Platform.SHADOW_COLORS) shadowColor = stops.length == 1 ? shadowColorOf(stops[0]) : null;
                 continue;
             }
+
+            index = partEnd(chars, start);
+            if (index == -1) return null;
+            final TextDecoration decoration;
+            final boolean reset;
             if (first == '&' || first == '§') {
-                if (++index == value.length()) return null;
-                final char code = Character.toLowerCase(value.charAt(index++));
-                if (code == 'x') {
-                    index = start + 14;
-                    if (index > value.length()) return null;
-                } else if (code == '#') {
-                    while (index < value.length() && isHexChar(value.charAt(index))) index++;
-                } else {
-                    decoration = switch (code) {
-                        case 'k' -> TextDecoration.OBFUSCATED;
-                        case 'l' -> TextDecoration.BOLD;
-                        case 'm' -> TextDecoration.STRIKETHROUGH;
-                        case 'n' -> TextDecoration.UNDERLINED;
-                        case 'o' -> TextDecoration.ITALIC;
-                        default -> null;
-                    };
-                    reset = code == 'r';
-                }
+                final char code = Character.toLowerCase(chars[start + 1]);
+                decoration = switch (code) {
+                    case 'k' -> TextDecoration.OBFUSCATED;
+                    case 'l' -> TextDecoration.BOLD;
+                    case 'm' -> TextDecoration.STRIKETHROUGH;
+                    case 'n' -> TextDecoration.UNDERLINED;
+                    case 'o' -> TextDecoration.ITALIC;
+                    default -> null;
+                };
+                reset = code == 'r';
             } else {
-                while (index < value.length() && !Character.isWhitespace(value.charAt(index))
-                        && value.charAt(index) != '&' && value.charAt(index) != '§') index++;
                 final String name = value.substring(start, index).toLowerCase(java.util.Locale.ROOT);
                 decoration = switch (name) {
                     case "bold" -> TextDecoration.BOLD;
@@ -280,6 +275,8 @@ final class StyleUtils {
 
             if (reset) {
                 color = NamedTextColor.WHITE;
+                colorStops = null;
+                shadowStops = null;
                 // Like &r in text; applyStyle removes the segment's own shadows on seeing it.
                 if (Platform.SHADOW_COLORS) shadowColor = Shadows.RESET;
                 for (final TextDecoration entry : DECORATIONS) {
@@ -288,12 +285,40 @@ final class StyleUtils {
             } else if (decoration != null) {
                 decorations = withDecoration(decorations, decoration, BIT_TRUE);
             } else {
+                // A color, or colors joined by -.
+                while (index < chars.length && chars[index] == '-') {
+                    index = partEnd(chars, index + 1);
+                    if (index == -1) return null;
+                }
                 final TextColor parsed = parseColor(value, start, index);
-                if (parsed == null) return null;
+                colorStops = parsed == null ? colorStops(value, start, index) : null;
+                if (parsed == null && colorStops == null) return null;
                 color = parsed;
             }
         }
-        return new Look(value, create(color, shadowColor, decorations), null, null);
+        final Look.Gradient colors = colorStops == null ? null : new Look.Gradient(colorStops, false, phase);
+        final Look.Gradient shadows = shadowStops == null || !Platform.SHADOW_COLORS
+                ? null : new Look.Gradient(shadowStops, true, phase);
+        return new Look(value, create(color, shadowColor, decorations), colors, shadows);
+    }
+
+    // The end of one part of a style at index: a code such as &l, &c or &#ff5555, or a word,
+    // which ends at a space, a code or a -. Returns -1 for a & with nothing after it.
+    private static int partEnd(char[] chars, int index) {
+        if (index < chars.length && (chars[index] == '&' || chars[index] == '§')) {
+            if (index + 1 == chars.length) return -1;
+            final char code = Character.toLowerCase(chars[index + 1]);
+            if (code == 'x') return index + 14 <= chars.length ? index + 14 : -1;
+            int end = index + 2;
+            if (code == '#') {
+                while (end < chars.length && isHexChar(chars[end])) end++;
+            }
+            return end;
+        }
+        int end = index;
+        while (end < chars.length && !Character.isWhitespace(chars[end])
+                && chars[end] != '&' && chars[end] != '§' && chars[end] != '-') end++;
+        return end;
     }
 
     // Two or more colors joined by - between start and end, as RGB; null for any other text.

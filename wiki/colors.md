@@ -134,8 +134,9 @@ from a placeholder, for example a team color:
 
 `color:` takes one color in any form: `red`, `c`, `&c`, `#ff5555` or `&#ff5555`, or a
 [gradient](gradients.md): colors joined by `-`, such as `#ff5555-#5555ff`. `style:` takes several
-values separated by spaces: colors, the words `bold`, `italic`, `underlined`, `strikethrough`,
-`obfuscated` and `reset`, `&` codes, or a [shadow](#text-shadow) such as `$#000000:80`:
+values separated by spaces: colors and gradients, the words `bold`, `italic`, `underlined`,
+`strikethrough`, `obfuscated` and `reset`, `&` codes, or a [shadow](#text-shadow) such as
+`$#000000:80`:
 
 ```text
 [Event starts now!](style:"gold bold")

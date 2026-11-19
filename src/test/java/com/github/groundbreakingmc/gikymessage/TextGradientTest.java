@@ -6,16 +6,18 @@ import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.ShadowColor;
 import net.kyori.adventure.text.format.TextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
- * Gradients in {@code color} and {@code shadow}, and their forced forms: a value of colors
- * joined by {@code -} is spread over the characters of the segment.
+ * Gradients in {@code color}, {@code shadow} and {@code style}, and their forced forms: a value
+ * of colors joined by {@code -} is spread over the characters of the segment.
  */
 class TextGradientTest extends TextTestBase {
 
@@ -156,8 +158,39 @@ class TextGradientTest extends TextTestBase {
     }
 
     @Test
-    void aColorGradientWinsOverTheColorOfStyle() {
-        assertEquals(List.of(RED, BLUE), colors(Text.of("[AB](style:green, color:#ff0000-#0000ff)").render()));
+    void styleTakesAColorAndAShadowGradient() {
+        final Component rendered = Text.of("[ABC](style:\"#ff0000-#0000ff bold $#000000-#0000ff\")").render();
+        assertEquals(List.of(RED, PURPLE, BLUE), colors(rendered));
+        assertEquals(List.of(BLACK_SHADOW, NAVY_SHADOW, BLUE_SHADOW), shadows(rendered));
+        assertEquals(TextDecoration.State.TRUE, rendered.decoration(TextDecoration.BOLD));
+        assertEquals(rendered, render("[ABC](style:{format})", "#ff0000-#0000ff bold $#000000-#0000ff"));
+        // Codes may follow each other without spaces.
+        assertEquals(Text.of("[ABC](style:\"c-e bold\")").render(), Text.of("[ABC](style:&c-&e&l)").render());
+    }
+
+    @Test
+    void invalidGradientsInAStyleMakeItInvalid() {
+        for (final String value : new String[]{"c-", "-c", "c--e", "c-bold", "bold-italic", "c-&l", "$#000000-",
+                "$#000000-red", "#f00-#00f"}) {
+            assertNull(Look.parse(Look.STYLE, value, 0f), value);
+            assertEquals(Component.text("Text"), render("[Text](style:{format})", value).compact(), value);
+        }
+    }
+
+    @Test
+    void theLastColorOfAStyleWins() {
+        assertEquals(Component.text("AB", NamedTextColor.GREEN), Text.of("[AB](style:\"c-e green\")").render());
+        assertEquals(List.of(0xFF5555, 0xFFFF55), values(Text.of("[AB](style:\"green c-e\")").render()));
+    }
+
+    @Test
+    void colorAndShadowWinOverTheGradientsOfStyle() {
+        assertEquals(Component.text("AB", NamedTextColor.GREEN).decorate(TextDecoration.BOLD),
+                Text.of("[AB](style:\"c-e bold\", color:green)").render().compact());
+        assertEquals(Text.of("[AB](shadow:#0000ff)").render(),
+                Text.of("[AB](style:\"$#000000-#333333\", shadow:#0000ff)").render());
+        assertEquals(List.of(RED, BLUE),
+                colors(Text.of("[AB](style:green, color:#ff0000-#0000ff)").render()));
     }
 
     @Test
@@ -183,6 +216,9 @@ class TextGradientTest extends TextTestBase {
         assertEquals(List.of(BLUE, PURPLE, RED), colors(Text.of("[ABC](color:#ff0000-#0000ff, phase:0.5)").render()));
         assertEquals(List.of(BLUE_SHADOW, NAVY_SHADOW, BLACK_SHADOW),
                 shadows(Text.of("[ABC](shadow:#000000-#0000ff, phase:0.5)").render()));
+        final Component styled = render("[ABC](style:{format}, phase:0.5)", "#ff0000-#0000ff $#000000-#0000ff");
+        assertEquals(List.of(BLUE, PURPLE, RED), colors(styled));
+        assertEquals(List.of(BLUE_SHADOW, NAVY_SHADOW, BLACK_SHADOW), shadows(styled));
     }
 
     @Test

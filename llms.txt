@@ -136,7 +136,7 @@ accepted.
 | `show` | GikyMessage text | yes | Hover tooltip. Codes, placeholders, segments and `\n` work inside. |
 | `insert` | text | no, `{key}` stays literal | Shift-click: inserts the text into the chat input. |
 | `color` | `red`, `c`, `&c`, `#ff5555`, `&#ff5555`, `&x&f&f&5&5&5&5`, or a gradient: two or more of them joined by `-` without spaces, e.g. `#ff5555-#5555ff` or `red-blue` | yes | Color of the whole segment, overriding colors inside it. A gradient colors the characters along its colors and keeps decorations. An invalid value is ignored. |
-| `style` | words separated by spaces: `bold` `italic` `underlined` (or `underline`) `strikethrough` `obfuscated` `reset`, color names, `&` codes; e.g. `style:"gold bold"` | yes | Style of the whole segment. `reset` means white with every decoration explicitly off; later words apply on top: `style:"reset gray"`. |
+| `style` | words separated by spaces: `bold` `italic` `underlined` (or `underline`) `strikethrough` `obfuscated` `reset`, color names, `&` codes, gradients such as `c-e`; e.g. `style:"gold bold"` | yes | Style of the whole segment. `reset` means white with every decoration explicitly off; later words apply on top: `style:"reset gray"`. |
 | `phase` | number, a full loop is `1` | no | Shifts the colors of the segment's gradients along the text; `0` and `1` look the same, negative values move the other way. |
 | `font` | resource key; the namespace defaults to `minecraft` | no | Font: `font:uniform`. |
 | `head` | player name | yes | Replaces the segment with that player's head (Minecraft 1.21.9+). If a name from a placeholder can't belong to a player (spaces, more than 16 characters), the segment's text is shown instead; a fixed invalid name is a load error. |

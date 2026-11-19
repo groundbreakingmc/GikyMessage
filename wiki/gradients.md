@@ -38,6 +38,16 @@ gradient goes on after them. `force-color:` colors every letter:
 [Welcome to &eSkyCraft](force-color:#55ffff-#5555ff)   the whole line is a gradient
 ```
 
+## Gradients in `style:`
+
+The color in `style:` can be a gradient as well:
+
+```text
+[Event starts now!](style:"#ff5555-#ffaa00 bold")
+```
+
+When a segment has both, `color:` wins over the color in `style:`.
+
 ## Shadow gradients
 
 `shadow:` takes a gradient of [shadows](colors.md#text-shadow) the same way. Each shadow is written
@@ -46,6 +56,12 @@ as in `shadow:`, with or without `$` and `#`, and may have a transparency after 
 ```text
 [&fSkyCraft](shadow:#ff5555-#5555ff)
 [&fSkyCraft](shadow:#000000:80-#333333:40)
+```
+
+In `style:` a shadow starts with `$`, so a shadow gradient there does too:
+
+```text
+[SkyCraft](style:"#55ffff-#5555ff $#000000-#333333")
 ```
 
 Letters with a shadow of their own keep it; `force-shadow:` covers every letter. Shadow gradients

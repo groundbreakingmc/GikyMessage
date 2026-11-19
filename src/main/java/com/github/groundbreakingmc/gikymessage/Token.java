@@ -118,8 +118,8 @@ interface Token {
 
     final class DynChildren implements Token {
 
-        private final String text;
-        private final Style style;
+        // The root without children; each render only attaches them.
+        private final TextComponent base;
         private final Token[] children;
         private final int childCount;
 
@@ -129,24 +129,19 @@ interface Token {
                 Token[] children,
                 int childCount
         ) {
-            this.text = text;
-            this.style = style;
+            this.base = Component.text(text, style);
             this.children = children;
             this.childCount = childCount;
         }
 
         @Override
         public Component render(Object[] placeholders, long[] numbers) {
-            return this.renderChildren(placeholders, numbers);
-        }
-
-        private Component renderChildren(Object[] placeholders, long[] numbers) {
             final ChildBuffer rendered = acquireChildren(this.childCount);
             try {
                 for (int index = 0; index < this.childCount; index++) {
                     rendered.setComponent(index, this.children[index].render(placeholders, numbers));
                 }
-                return textComponent(this.text, this.style, rendered);
+                return this.base.children(rendered);
             } finally {
                 releaseChildren(rendered);
             }

@@ -122,7 +122,7 @@ accepted.
   except `if` in a segment with branches (section 4).
 - One click per segment. With several click actions the winner is `run`, then `suggest`, `url`,
   `copy`, `page`.
-- One content action per segment: `head`, then `sprite`, `lang`, `gradient`.
+- One content action per segment: `head`, then `sprite`, `lang`.
 
 ### 3.2 Actions
 
@@ -135,10 +135,9 @@ accepted.
 | `page` | page number, 1 or more | no | Click: turns the book to that page. |
 | `show` | GikyMessage text | yes | Hover tooltip. Codes, placeholders, segments and `\n` work inside. |
 | `insert` | text | no, `{key}` stays literal | Shift-click: inserts the text into the chat input. |
-| `color` | `red`, `c`, `&c`, `#ff5555`, `&#ff5555`, `&x&f&f&5&5&5&5` | yes | Color of the whole segment, overriding colors inside it. An invalid color is ignored. |
+| `color` | `red`, `c`, `&c`, `#ff5555`, `&#ff5555`, `&x&f&f&5&5&5&5`, or a gradient: two or more of them joined by `-` without spaces, e.g. `#ff5555-#5555ff` or `red-blue` | yes | Color of the whole segment, overriding colors inside it. A gradient colors the characters along its colors and keeps decorations. An invalid value is ignored. |
 | `style` | words separated by spaces: `bold` `italic` `underlined` (or `underline`) `strikethrough` `obfuscated` `reset`, color names, `&` codes; e.g. `style:"gold bold"` | yes | Style of the whole segment. `reset` means white with every decoration explicitly off; later words apply on top: `style:"reset gray"`. |
-| `gradient` | two or more stops joined by `-`: six-digit hex `#ff5555` or one-letter codes, e.g. `c-9` | no | Colors the characters along the stops. Replaces colors inside the segment, keeps decorations. Names like `red` make the gradient invalid, and it is ignored. |
-| `phase` | number, a full loop is `1` | no | Shifts the gradient's colors along the text; `0` and `1` look the same, negative values move the other way. |
+| `phase` | number, a full loop is `1` | no | Shifts the colors of the segment's gradients along the text; `0` and `1` look the same, negative values move the other way. |
 | `font` | resource key; the namespace defaults to `minecraft` | no | Font: `font:uniform`. |
 | `head` | player name | yes | Replaces the segment with that player's head (Minecraft 1.21.9+). If a name from a placeholder can't belong to a player (spaces, more than 16 characters), the segment's text is shown instead; a fixed invalid name is a load error. |
 | `sprite` | key of a texture in the blocks atlas: `block/stone`; a resource pack's `assets/myserver/textures/block/coin.png` is `myserver:block/coin` | no | Replaces the segment with that texture (Minecraft 1.21.9+). Only the blocks atlas is used; item textures are in a separate atlas since Minecraft 1.21.11. |
@@ -194,7 +193,7 @@ Rules:
 | `smallcaps` | Latin `a`–`z` become small capitals: `Steve` → `ꜱᴛᴇᴠᴇ`. `x` and non-Latin letters stay as they are. |
 | `max:N` | Keeps at most N characters of the whole segment, without an ellipsis. |
 
-Steps run from left to right, `max` always last. Transforms run before `gradient` and `lang`.
+Steps run from left to right, `max` always last. Transforms run before gradients and `lang`.
 Unknown steps are ignored.
 
 ## 6. Escapes
@@ -260,14 +259,14 @@ The MiniMessage format itself: https://docs.papermc.io/adventure/minimessage/for
 | `<insert:text>` | `insert:text` |
 | `<font:uniform>`, `<font:minecraft:uniform>` | `font:uniform` |
 | `<newline>`, `<br>` | `\n` |
-| `<gradient:#5e4fa2:#f79459>` | `gradient:#5e4fa2-#f79459` |
-| `<gradient:red:blue>` | `gradient:c-9`: color names become one-letter codes or hex |
+| `<gradient:#5e4fa2:#f79459>` | `color:#5e4fa2-#f79459` |
+| `<gradient:red:blue>` | `color:red-blue`, names by the name table |
 | `<gradient:red>` with one color | `&c` |
 | `<gradient:…:0.5>`, `<rainbow:2>` with a phase | Drop the phase: the scales differ. For animation frames use `phase:` values from 0 to just below 1. |
-| `<rainbow>` | `gradient:#ff0000-#ffff00-#00ff00-#00ffff-#0000ff-#ff00ff` (approximation) |
+| `<rainbow>` | `color:#ff0000-#ffff00-#00ff00-#00ffff-#0000ff-#ff00ff` (approximation) |
 | `<rainbow:!>` | the same stops in reverse order |
 | `<transition:…:phase>` | one fixed color `&#RRGGBB`: the color at that phase |
-| `<pride>`, `<pride:flag>` | `gradient:` with the flag's colors (approximation) |
+| `<pride>`, `<pride:flag>` | `color:` with the flag's colors joined by `-` (approximation) |
 | `<lang:key>`, `<tr:key>`, `<translate:key>` | `[](lang:key)` |
 | `<lang_or:key:Fallback>` | `[Fallback](lang:key)` |
 | `<head:Steve>` | `[](head:Steve)`; with a placeholder `[{player}](head:{player})` |
@@ -293,7 +292,7 @@ a placeholder value instead.
 | `<red><bold>Alert<reset>: restart in <time>` | `&c&lAlert&r: restart in {time}` |
 | `<b>Bold</b> normal <i>italic</i>` | `[&lBold] normal [&oitalic]` |
 | `<gray>[<gold>VIP</gold>] <white><player>` | `&7\[&6VIP&7\] &f{player}` |
-| `<gradient:#55ffff:#5555ff><bold>SkyCraft</bold></gradient> <gray>» <white>Welcome!` | `[&lSkyCraft](gradient:#55ffff-#5555ff) &7» &fWelcome!` |
+| `<gradient:#55ffff:#5555ff><bold>SkyCraft</bold></gradient> <gray>» <white>Welcome!` | `[&lSkyCraft](color:#55ffff-#5555ff) &7» &fWelcome!` |
 | `<click:run_command:/spawn><hover:show_text:'<green>Click to teleport'><gold>[Spawn]</gold></hover></click>` | `[&6\[Spawn\]](run:/spawn, show:&aClick to teleport)` |
 | `<gray>Join our <click:open_url:'https://discord.gg/example'><blue><u>Discord</u></blue></click>!` | `&7Join our [&9&nDiscord](url:https://discord.gg/example)!` |
 | `<hover:show_text:'<gold><player><newline><gray>Rank: <rank>'><player></hover>` | `[{player}](show:&6{player}\n&7Rank: {rank})` |
@@ -301,7 +300,7 @@ a placeholder value instead.
 | `<red>Line one<newline><gray>Line two` | `&cLine one\n&7Line two` |
 | `<shadow:black>Shadowed</shadow> text` | `[$#000000:40Shadowed] text` |
 | `<gray>You found <lang_or:item.minecraft.diamond:Diamond>!` | `&7You found [Diamond](lang:item.minecraft.diamond)!` |
-| `<rainbow>Rainbow text</rainbow>` | `[Rainbow text](gradient:#ff0000-#ffff00-#00ff00-#00ffff-#0000ff-#ff00ff)` |
+| `<rainbow>Rainbow text</rainbow>` | `[Rainbow text](color:#ff0000-#ffff00-#00ff00-#00ffff-#0000ff-#ff00ff)` |
 | `<gray>R&D team` | `&7R\&D team` |
 
 A YAML file before and after:
@@ -357,7 +356,7 @@ the segment:
 [&7\[{clan}\] ](if:{clan})&f{player}&7: {message}
 &f{friend} [&aonline|&7offline](if:{status}==online)
 &7Balance: &e[{balance}](transform:compact) &7coins
-[&lSkyCraft](gradient:#55ffff-#5555ff)
+[&lSkyCraft](color:#55ffff-#5555ff)
 &6&lSkyCraft&r\n&7Welcome back, &f{player}&7!
 &7You found a [&bDiamond](lang:item.minecraft.diamond)&7!
 [{player}](head:{player}) &f{player} &7joined the game
@@ -412,7 +411,7 @@ On an older Adventure, a message that uses these features fails to load with a
 - Every segment is closed with `]`, and every `(` after `]` has its `)`.
 - Values with `,` or `)` are quoted, and a quote inside them is written `\"` or `\'`.
 - A segment has at most one click action.
-- Gradients use hex or one-letter codes, at least two of them.
+- Gradients have at least two colors joined by `-`, with no spaces around it.
 - `color:` and `style:` use `gray` and `dark_gray`, never `grey`.
 - Hex colors and shadows have exactly six digits, and a shadow's alpha follows a colon:
   `$#000000:80`.

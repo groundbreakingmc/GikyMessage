@@ -32,51 +32,51 @@ class GradientPhaseTest extends TextTestBase {
 
     @Test
     void zeroPhaseIsThePlainGradientAndWholeCyclesChangeNothing() {
-        final Component plain = Text.of("[Hello](gradient:#ff0000-#00ff00-#0000ff)").render();
-        assertEquals(plain, Text.of("[Hello](gradient:#ff0000-#00ff00-#0000ff, phase:0)").render());
-        assertEquals(plain, Text.of("[Hello](gradient:#ff0000-#00ff00-#0000ff, phase:1)").render());
-        assertEquals(plain, Text.of("[Hello](gradient:#ff0000-#00ff00-#0000ff, phase:-2)").render());
+        final Component plain = Text.of("[Hello](color:#ff0000-#00ff00-#0000ff)").render();
+        assertEquals(plain, Text.of("[Hello](color:#ff0000-#00ff00-#0000ff, phase:0)").render());
+        assertEquals(plain, Text.of("[Hello](color:#ff0000-#00ff00-#0000ff, phase:1)").render());
+        assertEquals(plain, Text.of("[Hello](color:#ff0000-#00ff00-#0000ff, phase:-2)").render());
     }
 
     @Test
     void phaseMovesTheColorsAlongTheLoop() {
-        assertEquals(List.of(RED, PURPLE, BLUE), colors(Text.of("[ABC](gradient:#ff0000-#0000ff)").render()));
+        assertEquals(List.of(RED, PURPLE, BLUE), colors(Text.of("[ABC](color:#ff0000-#0000ff)").render()));
         // Half of the loop red -> blue -> red: the text now runs from blue back to red.
-        assertEquals(List.of(BLUE, PURPLE, RED), colors(Text.of("[ABC](gradient:#ff0000-#0000ff, phase:0.5)").render()));
-        assertEquals(List.of(PURPLE, BLUE, PURPLE), colors(Text.of("[ABC](gradient:#ff0000-#0000ff, phase:0.25)").render()));
+        assertEquals(List.of(BLUE, PURPLE, RED), colors(Text.of("[ABC](color:#ff0000-#0000ff, phase:0.5)").render()));
+        assertEquals(List.of(PURPLE, BLUE, PURPLE), colors(Text.of("[ABC](color:#ff0000-#0000ff, phase:0.25)").render()));
     }
 
     @Test
     void negativePhasesMoveTheOtherWay() {
-        assertEquals(colors(Text.of("[ABCDE](gradient:#ff0000-#00ff00-#0000ff, phase:0.75)").render()),
-                colors(Text.of("[ABCDE](gradient:#ff0000-#00ff00-#0000ff, phase:-0.25)").render()));
-        assertEquals(colors(Text.of("[ABCDE](gradient:#ff0000-#00ff00-#0000ff, phase:0.4)").render()),
-                colors(Text.of("[ABCDE](gradient:#ff0000-#00ff00-#0000ff, phase:\"1.4\")").render()));
+        assertEquals(colors(Text.of("[ABCDE](color:#ff0000-#00ff00-#0000ff, phase:0.75)").render()),
+                colors(Text.of("[ABCDE](color:#ff0000-#00ff00-#0000ff, phase:-0.25)").render()));
+        assertEquals(colors(Text.of("[ABCDE](color:#ff0000-#00ff00-#0000ff, phase:0.4)").render()),
+                colors(Text.of("[ABCDE](color:#ff0000-#00ff00-#0000ff, phase:\"1.4\")").render()));
     }
 
     @Test
     void placeholderContentUsesThePhase() {
-        final Component rendered = bound("[{name}](gradient:#ff0000-#0000ff, phase:0.5)")
+        final Component rendered = bound("[{name}](color:#ff0000-#0000ff, phase:0.5)")
                 .render((key, value) -> value.text("ABC"));
         assertEquals(List.of(BLUE, PURPLE, RED), colors(rendered));
     }
 
     @Test
     void invalidPhaseIsIgnoredAndAPhaseWithoutGradientDoesNothing() {
-        final Component plain = Text.of("[ABC](gradient:#ff0000-#0000ff)").render();
-        assertEquals(plain, Text.of("[ABC](gradient:#ff0000-#0000ff, phase:half)").render());
-        assertEquals(plain, Text.of("[ABC](gradient:#ff0000-#0000ff, phase:1e5)").render());
+        final Component plain = Text.of("[ABC](color:#ff0000-#0000ff)").render();
+        assertEquals(plain, Text.of("[ABC](color:#ff0000-#0000ff, phase:half)").render());
+        assertEquals(plain, Text.of("[ABC](color:#ff0000-#0000ff, phase:1e5)").render());
         assertEquals(Text.of("[ABC]").render(), Text.of("[ABC](phase:0.5)").render());
     }
 
     @Test
     void colorStopsHaveNoShortForm() {
-        assertEquals(Text.of("[ABC]").render(), Text.of("[ABC](gradient:#f00-#00f)").render());
+        assertEquals(Text.of("[ABC]").render(), Text.of("[ABC](color:#f00-#00f)").render());
     }
 
     @Test
     void lastPhaseWins() {
-        assertEquals(Text.of("[ABC](gradient:#ff0000-#0000ff, phase:0.5)").render(),
-                Text.of("[ABC](gradient:#ff0000-#0000ff, phase:0.1, phase:0.5)").render());
+        assertEquals(Text.of("[ABC](color:#ff0000-#0000ff, phase:0.5)").render(),
+                Text.of("[ABC](color:#ff0000-#0000ff, phase:0.1, phase:0.5)").render());
     }
 }

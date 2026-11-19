@@ -5,6 +5,7 @@ import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.*;
 
+import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 
 final class StyleUtils {
@@ -188,11 +189,35 @@ final class StyleUtils {
         return NamedTextColor.NAMES.value(value.substring(start, end).toLowerCase(java.util.Locale.ROOT));
     }
 
-    // Returns null for invalid formatting; empty input produces an empty style. A shadow, written
-    // as in text ($#ff5555 or $#ff5555:80), is left out where the platform has no shadow colors:
-    // a style from a placeholder cannot fail, and the compiler rejects a fixed one there. reset
-    // also resets the shadow, marked with Shadows.RESET for applyStyle.
-    static Style parseStyle(String value) {
+    // A color value: one color, or two or more joined by -, such as #ff5555-#5555ff or c-e.
+    // Returns null for any other text.
+    static Look parseColorLook(String value, float phase) {
+        final TextColor color = parseColor(value);
+        if (color != null) return new Look(value, Style.style(color), null);
+        final int[] stops = colorStops(value, 0, value.length());
+        return stops == null ? null : new Look(value, Style.empty(), new Look.Gradient(stops, phase));
+    }
+
+    // A shadow value: none, or a shadow as in text with or without $ and #, such as $#ff5555,
+    // #ff5555:80 or ff5555. Returns null for any other text. Where the platform has no shadow
+    // colors, a valid value gives an empty look: the compiler rejects a fixed one there.
+    static Look parseShadowLook(String value) {
+        if (value.equals("none")) {
+            return new Look(value, Platform.SHADOW_COLORS ? Shadows.noneStyle() : Style.empty(), null);
+        }
+        final char[] chars = value.toCharArray();
+        if (shadowEnd(chars, 0) != chars.length) return null;
+        if (!Platform.SHADOW_COLORS) return new Look(value, Style.empty(), null);
+        final int digits = shadowDigits(chars, 0);
+        final int alpha = parseAlpha(chars, digits + 6);
+        return new Look(value, shadowStyle((alpha == -1 ? 0xFF : alpha) << 24 | parseHex(chars, digits)), null);
+    }
+
+    // A style value. Returns null for invalid formatting; empty input produces an empty look. A
+    // shadow, written as in text ($#ff5555 or $#ff5555:80), is left out where the platform has no
+    // shadow colors: a style from a placeholder cannot fail, and the compiler rejects a fixed one
+    // there. reset also resets the shadow, marked with Shadows.RESET for applyStyle.
+    static Look parseStyleLook(String value) {
         TextColor color = null;
         ShadowColor shadowColor = null;
         short decorations = 0;
@@ -267,32 +292,42 @@ final class StyleUtils {
                 color = parsed;
             }
         }
-        return create(color, shadowColor, decorations);
+        return new Look(value, create(color, shadowColor, decorations), null);
     }
 
-    // A shadow as shadow: takes it: none, or as in text with or without $ and #, such as
-    // $#ff5555, #ff5555:80 or ff5555.
-    static boolean isShadow(String value) {
-        if (value.equals("none")) return true;
-        final char[] chars = value.toCharArray();
-        int digits = 0;
-        if (digits < chars.length && chars[digits] == '$') digits++;
-        if (digits < chars.length && chars[digits] == '#') digits++;
-        if (parseHex(chars, digits) == -1) return false;
-        final int end = digits + 6;
-        return end == chars.length || end + 3 == chars.length && parseAlpha(chars, end) != -1;
+    // Two or more colors joined by - between start and end, as RGB; null for any other text.
+    private static int[] colorStops(String value, int start, int end) {
+        int[] stops = new int[2];
+        int count = 0;
+        int stopStart = start;
+        for (int index = start; index <= end; index++) {
+            if (index < end && value.charAt(index) != '-') continue;
+            final TextColor color = parseColor(value, stopStart, index);
+            if (color == null) return null;
+            if (count == stops.length) stops = Arrays.copyOf(stops, count << 1);
+            stops[count++] = color.value();
+            stopStart = index + 1;
+        }
+        if (count < 2) return null;
+        return count == stops.length ? stops : Arrays.copyOf(stops, count);
     }
 
-    // The shadow of a value isShadow accepts, or null for any other; needs shadow colors.
-    static ShadowColor parseShadow(String value) {
-        if (!isShadow(value)) return null;
-        if (value.equals("none")) return ShadowColor.none();
-        final char[] chars = value.toCharArray();
-        int digits = 0;
-        if (chars[digits] == '$') digits++;
-        if (chars[digits] == '#') digits++;
-        final int alpha = parseAlpha(chars, digits + 6);
-        return shadowColorOf((alpha == -1 ? 0xFF : alpha) << 24 | parseHex(chars, digits));
+    // The end of a shadow written at index as [$][#]rrggbb[:aa], or -1 when none is there.
+    private static int shadowEnd(char[] chars, int index) {
+        final int digits = shadowDigits(chars, index);
+        if (parseHex(chars, digits) == -1) return -1;
+        return parseAlpha(chars, digits + 6) == -1 ? digits + 6 : digits + 9;
+    }
+
+    private static int shadowDigits(char[] chars, int index) {
+        if (index < chars.length && chars[index] == '$') index++;
+        if (index < chars.length && chars[index] == '#') index++;
+        return index;
+    }
+
+    // A style with only this ARGB shadow; needs shadow colors.
+    static Style shadowStyle(int argb) {
+        return create(null, shadowColorOf(argb), (short) 0);
     }
 
     // Whether a parsed style resets the shadow; then withoutShadow gives the rest of it.
@@ -302,10 +337,6 @@ final class StyleUtils {
 
     static Style withoutShadow(Style style) {
         return Shadows.with(style, null);
-    }
-
-    static Style withShadow(Style style, ShadowColor shadowColor) {
-        return Shadows.with(style, shadowColor);
     }
 
     static boolean hasShadow(Style style) {
@@ -405,6 +436,10 @@ final class StyleUtils {
 
         private static Style with(Style style, ShadowColor shadowColor) {
             return style.shadowColor(shadowColor);
+        }
+
+        private static Style noneStyle() {
+            return Style.style().shadowColor(ShadowColor.none()).build();
         }
     }
 }

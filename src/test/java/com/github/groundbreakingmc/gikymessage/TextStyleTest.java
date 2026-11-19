@@ -20,7 +20,7 @@ class TextStyleTest extends TextTestBase {
         final Style expected = Style.style(NamedTextColor.RED, TextDecoration.BOLD);
         for (final String value : new String[]{"&c&l", "§c§l", "red bold", "RED BOLD", "#ff5555 bold",
                 "&#ff5555&l", "§#ff5555§l", "&x&f&f&5&5&5&5&l", "§x§f§f§5§5§5§5§l"}) {
-            assertEquals(expected, StyleUtils.parseStyle(value), value);
+            assertEquals(expected, Look.parse(Look.STYLE, value, 0f).style, value);
             final Component result = bound("[Hello](style:{format})").render((slotKey, slotValue) -> slotValue.component(slotKey.equals("format") ? Component.text(value) : null));
             assertEquals(Component.text("Hello", expected), result);
         }
@@ -79,16 +79,16 @@ class TextStyleTest extends TextTestBase {
         assertEquals(TextDecoration.State.FALSE, result.decoration(TextDecoration.ITALIC));
         assertEquals(TextDecoration.State.TRUE, result.decoration(TextDecoration.UNDERLINED));
         assertEquals(ClickEvent.runCommand("/test"), result.clickEvent());
-        assertEquals(StyleUtils.parseStyle("&r&n"), StyleUtils.parseStyle("reset underlined"));
+        assertEquals(Look.parse(Look.STYLE, "&r&n", 0f).style, Look.parse(Look.STYLE, "reset underlined", 0f).style);
     }
 
     @Test
     void colorDoesNotResetDecorationsAndLaterValuesWin() {
-        final Style result = StyleUtils.parseStyle("&l&c&r&a&o");
+        final Style result = Look.parse(Look.STYLE, "&l&c&r&a&o", 0f).style;
         assertEquals(NamedTextColor.GREEN, result.color());
         assertEquals(TextDecoration.State.FALSE, result.decoration(TextDecoration.BOLD));
         assertEquals(TextDecoration.State.TRUE, result.decoration(TextDecoration.ITALIC));
-        assertEquals(TextDecoration.State.TRUE, StyleUtils.parseStyle("&l&c").decoration(TextDecoration.BOLD));
+        assertEquals(TextDecoration.State.TRUE, Look.parse(Look.STYLE, "&l&c", 0f).style.decoration(TextDecoration.BOLD));
     }
 
     @Test
@@ -110,8 +110,8 @@ class TextStyleTest extends TextTestBase {
 
     @Test
     void partialStylePreservesGradientColors() {
-        final Component expected = bound("&l[AB](gradient:c-e)").render();
-        final Component result = bound("[AB](gradient:c-e,style:bold)").render();
+        final Component expected = bound("&l[AB](color:c-e)").render();
+        final Component result = bound("[AB](color:c-e,style:bold)").render();
         assertEquals(expected.compact(), result.compact());
     }
 

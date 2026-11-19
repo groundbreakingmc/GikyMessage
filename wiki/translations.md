@@ -60,9 +60,10 @@ With `{rank}` = `vip` the game looks up `myserver.rank.vip`, and players without
 
 - The translation takes the segment's style as a whole: write `[&6VIP](lang:…)` or
   `&6[VIP](lang:…)`. Colors in the middle of the text, as in `[V&cIP](lang:…)`, are dropped.
-- A segment shows one kind of content. If it has several of `head:`, `sprite:`, `lang:` and
-  `gradient:`, only the first one in that list is used, so a translated segment can't have a
-  gradient. `color:` and `style:` work with `lang:` as usual.
+- A segment shows one kind of content. If it has several of `head:`, `sprite:` and `lang:`, only
+  the first one in that list is used. `color:`, `style:` and `shadow:` work with `lang:` as usual.
+  A translation can't be split into letters, so a [gradient](gradients.md) gives it its first
+  color.
 - If the key is empty, for example because the placeholder is empty, the segment stays ordinary
   text.
 

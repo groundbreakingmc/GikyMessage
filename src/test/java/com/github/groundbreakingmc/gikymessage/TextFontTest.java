@@ -62,10 +62,10 @@ class TextFontTest extends TextTestBase {
                         .build()),
                 Text.of("&c[A](run:\"/spawn\", font:myserver:icons, insert:x)").render());
 
-        final Component gradient = Text.of("[AB](gradient:#ff0000-#0000ff, font:myserver:icons)").render();
+        final Component gradient = Text.of("[AB](color:#ff0000-#0000ff, font:myserver:icons)").render();
         assertEquals(ICONS, gradient.style().font());
-        assertEquals(1, gradient.children().size());
-        assertNotNull(gradient.children().get(0).children().get(0).color());
+        assertEquals(2, gradient.children().size());
+        assertNotNull(gradient.children().get(0).color());
     }
 
     @Test

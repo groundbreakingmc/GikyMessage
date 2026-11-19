@@ -3,40 +3,57 @@
 **English** · [Русский](ru/gradients.md) · [← Documentation](README.md)
 
 A gradient fills a [segment](segments.md) with colors that blend smoothly from one to the next,
-letter by letter:
+letter by letter. Write two or more colors joined by `-` in `color:`:
 
 ```text
-[Skyblock Season 3](gradient:#55ffff-#5555ff)
+[Skyblock Season 3](color:#55ffff-#5555ff)
 ```
 
 ![Skyblock Season 3 fading from aqua to blue](images/en/grad-intro.svg)
 
 ## Choosing colors
 
-List two or more colors separated by `-`. Each one is a hex code such as `#ff5555` or a one-letter
-[color code](colors.md#the-16-colors) without `&`:
+Each color is written as in [`color:`](colors.md#coloring-one-part-color-and-style): a hex code
+such as `#ff5555` or `&#ff5555`, a code such as `c` or `&c`, or a name such as `red`:
 
 ```text
-[&lRAINBOW SALE](gradient:#ff5555-#ffff55-#55ff55-#55ffff-#5555ff-#ff55ff)
-[Royal Mage](gradient:6-e)
+[&lRAINBOW SALE](color:#ff5555-#ffff55-#55ff55-#55ffff-#5555ff-#ff55ff)
+[Royal Mage](color:gold-yellow)
 ```
 
 ![A bold rainbow and a gold-to-yellow title](images/en/grad-stops.svg)
 
-Color names such as `red` don't work here. If the list isn't valid, the text keeps its usual colors.
+Put no spaces around `-`. If the list isn't valid, the segment keeps the colors it had.
 
-The gradient replaces any colors inside the segment, but styles stay: `[&lRAINBOW SALE](gradient:…)`
-is bold and multicolored.
+A gradient sets only the colors: `[&lRAINBOW SALE](color:…)` is bold and multicolored.
+
+## Colors inside the segment
+
+`color:` colors only the letters that have no color of their own. Codes inside the segment and
+colored parts that placeholders insert, such as a highlighted mention, keep their colors, and the
+gradient goes on after them. `force-color:` colors every letter:
+
+```text
+[Welcome to &eSkyCraft](color:#55ffff-#5555ff)         SkyCraft stays yellow
+[Welcome to &eSkyCraft](force-color:#55ffff-#5555ff)   the whole line is a gradient
+```
 
 ## With placeholders
 
 The gradient is spread over the final text, so it fits a short name and a long one alike:
 
 ```text
-&7Top killer: [{player}](gradient:#ff5555-#ffaa00)
+&7Top killer: [{player}](color:#ff5555-#ffaa00)
 ```
 
 ![The gradient spans 'Steve' and also the longer 'xXDragonSlayerXx'](images/en/grad-placeholder.svg)
+
+The colors can come from a placeholder too. With `{rank_colors}` = `#ff5555-#ffaa00` the name gets
+a gradient, with `red` one color:
+
+```text
+[{player}](color:{rank_colors})
+```
 
 ## A gradient that moves
 
@@ -44,10 +61,10 @@ The gradient is spread over the final text, so it fits a short name and a long o
 quarter of the way, and `phase:1` looks the same as `phase:0`:
 
 ```text
-[SkyCraft](gradient:#ff5555-#ffaa00-#ffff55, phase:0)
-[SkyCraft](gradient:#ff5555-#ffaa00-#ffff55, phase:0.25)
-[SkyCraft](gradient:#ff5555-#ffaa00-#ffff55, phase:0.5)
-[SkyCraft](gradient:#ff5555-#ffaa00-#ffff55, phase:0.75)
+[SkyCraft](color:#ff5555-#ffaa00-#ffff55, phase:0)
+[SkyCraft](color:#ff5555-#ffaa00-#ffff55, phase:0.25)
+[SkyCraft](color:#ff5555-#ffaa00-#ffff55, phase:0.5)
+[SkyCraft](color:#ff5555-#ffaa00-#ffff55, phase:0.75)
 ```
 
 ![The same word with four phases: the colors shift along it](images/en/grad-phases.svg)
@@ -60,6 +77,13 @@ run along the text:
 GikyMessage doesn't animate anything by itself: your plugin re-sends the text with the next phase.
 Negative phases move the colors the other way.
 
+## Good to know
+
+- A [translation](translations.md), a player head and a sprite can't be split into letters. A
+  gradient gives them its first color.
+- A part of a placeholder value that isn't plain text, such as a translated item name, gets the
+  color at its place in the gradient.
+
 ## For developers
 
 Here is how to animate the text of a [boss bar](https://docs.papermc.io/adventure/bossbar/): compile
@@ -68,7 +92,7 @@ the frames once, then switch between them on a timer.
 ```java
 // 20 frames: the colors make a full round in one second at 20 ticks per second.
 List<Text<Void>> frames = IntStream.range(0, 20)
-        .mapToObj(i -> Text.of("[&lSkyCraft](gradient:#ff5555-#ffaa00-#ffff55, phase:" + i / 20.0 + ")"))
+        .mapToObj(i -> Text.of("[&lSkyCraft](color:#ff5555-#ffaa00-#ffff55, phase:" + i / 20.0 + ")"))
         .toList();
 
 BossBar bar = BossBar.bossBar(Component.empty(), 1f, BossBar.Color.YELLOW, BossBar.Overlay.PROGRESS);
@@ -79,6 +103,11 @@ Bukkit.getScheduler().runTaskTimer(plugin,
 
 A text without placeholders builds its component once, so each `render()` here returns a ready
 object.
+
+A color placeholder is reported as text, one color or a whole gradient, such as
+`value.text("#ff5555-#ffaa00")`.
+A segment remembers the last values it has read, so a value that stays the same isn't parsed
+again.
 
 ---
 

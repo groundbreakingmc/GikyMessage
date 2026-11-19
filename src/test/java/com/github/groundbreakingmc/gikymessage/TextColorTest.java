@@ -74,7 +74,7 @@ class TextColorTest extends TextTestBase {
 
     @Test
     void colorCanModifyGradientAndDoesNotEscapeItsBlock() {
-        final Component result = bound("&b[AB](gradient:c-e,force-color:green)C").render();
+        final Component result = bound("&b[AB](color:c-e,force-color:green)C").render();
         assertEquals(Component.empty().append(Component.text("AB", NamedTextColor.GREEN))
                 .append(Component.text("C", NamedTextColor.AQUA)), result.compact());
     }

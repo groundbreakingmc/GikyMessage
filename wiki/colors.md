@@ -132,10 +132,10 @@ from a placeholder, for example a team color:
 
 ![Steve in red and Alex in blue, depending on the team](images/en/colors-team.svg)
 
-`color:` takes one color in any form: `red`, `c`, `&c`, `#ff5555` or `&#ff5555`. `style:` takes
-several values separated by spaces: colors, the words `bold`, `italic`, `underlined`,
-`strikethrough`, `obfuscated` and `reset`, `&` codes, or a [shadow](#text-shadow) such as
-`$#000000:80`:
+`color:` takes one color in any form: `red`, `c`, `&c`, `#ff5555` or `&#ff5555`, or a
+[gradient](gradients.md): colors joined by `-`, such as `#ff5555-#5555ff`. `style:` takes several
+values separated by spaces: colors, the words `bold`, `italic`, `underlined`, `strikethrough`,
+`obfuscated` and `reset`, `&` codes, or a [shadow](#text-shadow) such as `$#000000:80`:
 
 ```text
 [Event starts now!](style:"gold bold")
@@ -175,7 +175,8 @@ that placeholders insert:
 [{prefix} {player}](force-style:"gray italic")  all gray and italic, the colored prefix too
 ```
 
-A forced action wins over a plain one: `[Text](color:red, force-color:blue)` is blue.
+A forced action wins over a plain one: `[Text](color:red, force-color:blue)` is blue. A forced
+[gradient](gradients.md#colors-inside-the-segment) colors every letter, too.
 `force-style:reset` also removes every shadow inside the segment.
 
 Shadow actions need Adventure 4.18 or newer, like [shadow codes](#text-shadow). Where the server has
@@ -184,7 +185,7 @@ placeholder is left out while the rest of the style still applies.
 
 ## For developers
 
-A color placeholder is reported as text, in any of the forms above:
+A color placeholder is reported as text, in any of the forms above, a gradient included:
 
 ```java
 case "team_color" -> (player, value) -> value.text(teamOf(player).colorCode()); // "&c", "red", "#ff5555"…

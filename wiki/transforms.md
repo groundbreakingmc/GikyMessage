@@ -63,7 +63,7 @@ shortened: `1234567 coins and 2000 gems` → `1.2M coins and 2K gems`.
 - `max` counts characters in the whole segment, colors aside, and doesn't add `…`.
 - Unknown step names are ignored, as are `max:0` and `max:` with something other than a number.
 - Transforms run before a [gradient](gradients.md) and a [translation](translations.md), so
-  `[{name}](transform:upper, gradient:#ff5555-#5555ff)` colors the upper-case text.
+  `[{name}](transform:upper, color:#ff5555-#5555ff)` colors the upper-case text.
 
 ---
 

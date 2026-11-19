@@ -26,7 +26,7 @@
 # messages.yml плагина, который использует GikyMessage
 chat: '[&8\[&6{clan}&8\] ](if:{clan})[&f{player}](show:&7Ранг: &6{rank}\n&7Убийств: &f{kills}, suggest:/msg {player} )&7: &f{message}'
 tpa: '&e{player} хочет телепортироваться к вам. [&a\[Принять\]](run:/tpaccept {player}, show:&aПринять запрос) [&c\[Отказать\]](run:/tpdeny {player})'
-sale: '[&lРАСПРОДАЖА](gradient:#ff5555-#ffaa00) &7— &fскидка 30% на всё до воскресенья!'
+sale: '[&lРАСПРОДАЖА](color:#ff5555-#ffaa00) &7— &fскидка 30% на всё до воскресенья!'
 ```
 
 ## Почему GikyMessage
@@ -64,7 +64,7 @@ sale: '[&lРАСПРОДАЖА](gradient:#ff5555-#ffaa00) &7— &fскидка 3
 | `&aЗелёный &#ff8800оранжевый &lжирный` | <img src="wiki/images/ru/glance-colors.svg" alt="Зелёный, оранжевый и жирный текст"> |
 | `&7Привет, &f{player}&7!` | <img src="wiki/images/ru/glance-placeholder.svg" alt="Привет, Steve!"> |
 | `[&a\[Спавн\]](run:/spawn, show:&7Телепорт на спавн)` | <img src="wiki/images/ru/glance-click.svg" alt="Зелёная кнопка [Спавн] с подсказкой"> |
-| `[Скайблок, 3 сезон](gradient:#55ffff-#5555ff)` | <img src="wiki/images/ru/glance-gradient.svg" alt="Текст с переходом от бирюзового к синему"> |
+| `[Скайблок, 3 сезон](color:#55ffff-#5555ff)` | <img src="wiki/images/ru/glance-gradient.svg" alt="Текст с переходом от бирюзового к синему"> |
 | `[&6{clan} ](if:{clan})&f{player}` | <img src="wiki/images/ru/glance-condition.svg" alt="Тег клана виден только у игрока, который состоит в клане"> |
 | `&7Баланс: &e[{balance}](transform:compact)` | <img src="wiki/images/ru/glance-transform.svg" alt="Баланс: 1.2M"> |
 

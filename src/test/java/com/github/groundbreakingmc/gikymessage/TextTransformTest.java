@@ -88,9 +88,9 @@ class TextTransformTest extends TextTestBase {
 
     @Test
     void transformsRunBeforeGradientsAndTranslations() {
-        final Component gradient = Text.of("[ab](transform:upper, gradient:#ff0000-#0000ff)").render();
+        final Component gradient = Text.of("[ab](transform:upper, color:#ff0000-#0000ff)").render();
         assertEquals("AB", plain(gradient));
-        assertEquals(Text.of("[AB](gradient:#ff0000-#0000ff)").render(), gradient);
+        assertEquals(Text.of("[AB](color:#ff0000-#0000ff)").render(), gradient);
         assertEquals(Component.translatable("myserver.vip", "VIP"),
                 Text.of("[vip](transform:upper, lang:myserver.vip)").render());
     }

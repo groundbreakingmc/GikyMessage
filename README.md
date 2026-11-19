@@ -26,7 +26,7 @@ All it takes is three lines in a plugin's config:
 # messages.yml of a plugin that uses GikyMessage
 chat: '[&8\[&6{clan}&8\] ](if:{clan})[&f{player}](show:&7Rank: &6{rank}\n&7Kills: &f{kills}, suggest:/msg {player} )&7: &f{message}'
 tpa: '&e{player} wants to teleport to you. [&a\[Accept\]](run:/tpaccept {player}, show:&aClick to accept) [&c\[Deny\]](run:/tpdeny {player})'
-sale: '[&lSALE](gradient:#ff5555-#ffaa00) &7— &f30% off everything until Sunday!'
+sale: '[&lSALE](color:#ff5555-#ffaa00) &7— &f30% off everything until Sunday!'
 ```
 
 ## Why GikyMessage
@@ -63,7 +63,7 @@ sale: '[&lSALE](gradient:#ff5555-#ffaa00) &7— &f30% off everything until Sunda
 | `&aGreen &#ff8800orange &lbold` | <img src="wiki/images/en/glance-colors.svg" alt="Green, orange and bold text"> |
 | `&7Hello, &f{player}&7!` | <img src="wiki/images/en/glance-placeholder.svg" alt="Hello, Steve!"> |
 | `[&a\[Spawn\]](run:/spawn, show:&7Teleport to spawn)` | <img src="wiki/images/en/glance-click.svg" alt="A green [Spawn] button with a tooltip"> |
-| `[Skyblock Season 3](gradient:#55ffff-#5555ff)` | <img src="wiki/images/en/glance-gradient.svg" alt="Text that fades from aqua to blue"> |
+| `[Skyblock Season 3](color:#55ffff-#5555ff)` | <img src="wiki/images/en/glance-gradient.svg" alt="Text that fades from aqua to blue"> |
 | `[&6{clan} ](if:{clan})&f{player}` | <img src="wiki/images/en/glance-condition.svg" alt="The clan tag is shown only for a player who has a clan"> |
 | `&7Balance: &e[{balance}](transform:compact)` | <img src="wiki/images/en/glance-transform.svg" alt="Balance: 1.2M"> |
 

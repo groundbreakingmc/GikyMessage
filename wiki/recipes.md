@@ -31,7 +31,7 @@ chat: '[&8\[&6{clan}&8\] ](if:{clan}){prefix}[&f{player}](show:&f{player}\n&7Ran
 ```yaml
 join: '&8\[&a+&8\] [&7{player}](show:&7First joined: &f{first_join})'
 quit: '&8\[&c-&8\] &7{player}'
-first-join: '[&lWELCOME](gradient:#55ff55-#55ffff) &f{player} &7is new here! &8(player #{number})'
+first-join: '[&lWELCOME](color:#55ff55-#55ffff) &f{player} &7is new here! &8(player #{number})'
 ```
 
 ![Join, quit and first-join messages](images/en/rc-join.svg)
@@ -94,7 +94,7 @@ help: '[&6&lCommands]\n[&e/spawn](suggest:/spawn, show:&7Teleport to spawn) &8�
 ## Event announcement
 
 ```yaml
-event: '[&l⚔ PvP EVENT ⚔](gradient:#ff5555-#ffaa00) &7starts in &f{minutes} &7min. [&e&n\[Join\]](run:/event join, show:&7Click to join the event)'
+event: '[&l⚔ PvP EVENT ⚔](color:#ff5555-#ffaa00) &7starts in &f{minutes} &7min. [&e&n\[Join\]](run:/event join, show:&7Click to join the event)'
 ```
 
 ![A gradient PvP EVENT banner with a Join button](images/en/rc-event.svg)

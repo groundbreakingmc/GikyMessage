@@ -81,7 +81,7 @@ class BoundTextTest {
                 Long.MAX_VALUE, rich, Component.empty(), "{value}"};
         List<String> templates = List.of("{value}", "{value}/{suffix}/{value}",
                 "[{value}/{suffix}](color:red,style:bold)",
-                "[{value}{value}/{suffix}](gradient:c-e)",
+                "[{value}{value}/{suffix}](color:c-e)",
                 "[x](copy:'{value}/{suffix}',show:'[{value}](color:blue)')",
                 "{value}[{suffix}](style:italic){value}");
         for (String raw : templates) for (boolean cached : new boolean[]{false, true}) {
@@ -230,7 +230,7 @@ class BoundTextTest {
     @Test
     void rendererFailureDoesNotLeaveAPartiallyValidCache() throws Exception {
         Context c = new Context();
-        Text<Context> text = compile("[{value}](gradient:#ff0000-#0000ff)", false);
+        Text<Context> text = compile("[{value}](color:#ff0000-#0000ff)", false);
         c.value = "Steve";
         BoundText<Context> binding = text.bind(c);
         Component good = binding.render();

@@ -69,8 +69,8 @@
 чата](../images/ru/ph-actions.svg)
 
 Плейсхолдеры подставляются в действиях `run`, `suggest`, `url`, `copy`, `show`, `color`, `style`,
-`head`, `lang`, `if` и `unless`. Остальные — `insert`, `font`, `sprite`, `gradient`, `phase`,
-`transform` и `page` — принимают только неизменный текст.
+`shadow` и их `force-`-версиях, `head`, `lang`, `if` и `unless`. Остальные — `insert`, `font`,
+`sprite`, `phase`, `transform` и `page` — принимают только неизменный текст.
 
 ## Для разработчиков
 

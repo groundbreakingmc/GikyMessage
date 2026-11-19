@@ -35,19 +35,18 @@ final class Compiler {
     private static final byte ACTION_HEAD = 7;
     private static final byte ACTION_SPRITE = 8;
     private static final byte ACTION_PAGE = 9;
-    private static final byte ACTION_GRADIENT = 10;
-    private static final byte ACTION_COLOR = 11;
-    private static final byte ACTION_STYLE = 12;
-    private static final byte ACTION_FONT = 13;
-    private static final byte ACTION_LANG = 14;
-    private static final byte ACTION_PHASE = 15;
-    private static final byte ACTION_IF = 16;
-    private static final byte ACTION_UNLESS = 17;
-    private static final byte ACTION_TRANSFORM = 18;
-    private static final byte ACTION_SHADOW = 19;
-    private static final byte ACTION_FORCE_COLOR = 20;
-    private static final byte ACTION_FORCE_STYLE = 21;
-    private static final byte ACTION_FORCE_SHADOW = 22;
+    private static final byte ACTION_COLOR = 10;
+    private static final byte ACTION_STYLE = 11;
+    private static final byte ACTION_FONT = 12;
+    private static final byte ACTION_LANG = 13;
+    private static final byte ACTION_PHASE = 14;
+    private static final byte ACTION_IF = 15;
+    private static final byte ACTION_UNLESS = 16;
+    private static final byte ACTION_TRANSFORM = 17;
+    private static final byte ACTION_SHADOW = 18;
+    private static final byte ACTION_FORCE_COLOR = 19;
+    private static final byte ACTION_FORCE_STYLE = 20;
+    private static final byte ACTION_FORCE_SHADOW = 21;
 
     /** What a segment hidden while compiling is replaced with; it renders nothing. */
     private static final Token EMPTY_SEGMENT = new Token.Constant(Component.empty());
@@ -754,8 +753,6 @@ final class Compiler {
 
                 case ACTION_LANG -> selectedContentPriority >= 2;
 
-                case ACTION_GRADIENT -> selectedContentPriority >= 3;
-
                 default -> false;
             };
 
@@ -1095,22 +1092,6 @@ final class Compiler {
                         selectedContentValueEnd = valueEnd;
                     }
                 }
-
-                case ACTION_GRADIENT -> {
-                    selectedContentPriority = 3;
-                    selectedContentType = ACTION_GRADIENT;
-                    selectedContentDynamic = false;
-
-                    if (quoted) {
-                        selectedContentValue = quotedValue;
-                        selectedContentValueStart = -1;
-                        selectedContentValueEnd = -1;
-                    } else {
-                        selectedContentValue = null;
-                        selectedContentValueStart = valueStart;
-                        selectedContentValueEnd = valueEnd;
-                    }
-                }
             }
         }
 
@@ -1205,7 +1186,7 @@ final class Compiler {
             throw unsupported("Head and sprite objects", "4.25");
         }
 
-        // Transforms rewrite the segment's text before a gradient or translation uses it.
+        // Transforms rewrite the segment's text before a translation or a gradient uses it.
         final Transforms transforms = transformValue == null ? null : Transforms.parse(transformValue);
 
         if (selectedContentType == ACTION_HEAD) {
@@ -1247,55 +1228,31 @@ final class Compiler {
                 contentToken = Token.Translated.create(text, selectedContentValue, isDynamic(text));
             }
         } else {
-            if (selectedContentType == ACTION_GRADIENT) {
-                final int[] gradientColors =
-                        parseGradientColors(selectedContentValue);
-
-                if (gradientColors != null) {
-                    final Token rawContent = transform(wrapContent(
-                            innerText,
-                            children,
-                            childCount,
-                            Style.empty()
-                    ), transforms);
-
-                    contentToken = Token.GradientContent.create(
-                            rawContent,
-                            gradientColors,
-                            contentStyle,
-                            isDynamic(rawContent),
-                            parsePhase(phaseValue)
-                    );
-                } else {
-                    contentToken = transform(wrapContent(
-                            innerText,
-                            children,
-                            childCount,
-                            contentStyle
-                    ), transforms);
-                }
-            } else {
-                contentToken = transform(wrapContent(
-                        innerText,
-                        children,
-                        childCount,
-                        contentStyle
-                ), transforms);
-            }
+            contentToken = transform(wrapContent(
+                    innerText,
+                    children,
+                    childCount,
+                    contentStyle
+            ), transforms);
         }
 
         // color and shadow fill only what the segment's text leaves unset, so they go first and
         // style fills the rest. The forced ones override everything, the most specific last.
-        contentToken = withShadow(contentToken, shadowValue, shadowDynamic, false, placeholders);
-        contentToken = withColor(contentToken, colorValue, colorDynamic, false, placeholders);
-        contentToken = withStyle(contentToken, styleValue, styleDynamic, false, placeholders);
+        // phase shifts every gradient of the segment.
+        final float phase = parsePhase(phaseValue);
+        contentToken = withLook(contentToken, Look.SHADOW, shadowValue, shadowDynamic, false, phase, placeholders);
+        contentToken = withLook(contentToken, Look.COLOR, colorValue, colorDynamic, false, phase, placeholders);
+        contentToken = withLook(contentToken, Look.STYLE, styleValue, styleDynamic, false, phase, placeholders);
         if (!outerLook.isEmpty()) {
-            contentToken = Token.StyleContent.create(contentToken, Token.NO_PARTS, Token.NO_PH, outerLook, false,
+            contentToken = Token.LookContent.create(contentToken, new Look(null, outerLook, null), false,
                     isDynamic(contentToken));
         }
-        contentToken = withStyle(contentToken, forceStyleValue, forceStyleDynamic, true, placeholders);
-        contentToken = withColor(contentToken, forceColorValue, forceColorDynamic, true, placeholders);
-        contentToken = withShadow(contentToken, forceShadowValue, forceShadowDynamic, true, placeholders);
+        contentToken = withLook(contentToken, Look.STYLE, forceStyleValue, forceStyleDynamic, true, phase,
+                placeholders);
+        contentToken = withLook(contentToken, Look.COLOR, forceColorValue, forceColorDynamic, true, phase,
+                placeholders);
+        contentToken = withLook(contentToken, Look.SHADOW, forceShadowValue, forceShadowDynamic, true, phase,
+                placeholders);
 
         final Token segment;
         if (!clickDynamic && !showDynamic) {
@@ -1685,9 +1642,7 @@ final class Compiler {
                 || token instanceof Token.MetaFullDyn
                 || token instanceof Token.ObjDyn
                 || token instanceof Token.DynChildren
-                || token instanceof Token.GradientContent
-                || token instanceof Token.ColorContent
-                || token instanceof Token.StyleContent
+                || token instanceof Token.LookContent
                 || token instanceof Token.Translated
                 || token instanceof Token.TransformContent
                 || token instanceof Token.Conditional
@@ -1775,53 +1730,30 @@ final class Compiler {
         return false;
     }
 
-    // Finds the ) that closes the action list opened at start. The list is read the way its
-    // actions are: a quote opens a quoted value only as the first character of a value, so an
-    // apostrophe inside an unquoted value, as in show:Don't, is ordinary text.
-    // The token with a style, color or shadow action applied; an invalid fixed value is ignored.
-    private static Token withStyle(Token content, String raw, boolean dynamic, boolean force,
-                                   PlaceholderTable placeholders) {
-        if (raw == null) return content;
-        if (dynamic) {
-            final DynamicValue value = parseDynamicValue(raw, placeholders);
-            return Token.StyleContent.create(content, value.staticParts, value.placeholderIndices, null, force, true);
-        }
-        final Style value = StyleUtils.parseStyle(raw);
-        // Only a shadow puts a $ into a valid style.
-        if (value != null && !Platform.SHADOW_COLORS && raw.indexOf('$') >= 0) {
-            throw unsupported("Shadow colors", "4.18");
-        }
-        if (value == null || value.isEmpty()) return content;
-        return Token.StyleContent.create(content, Token.NO_PARTS, Token.NO_PH, value, force, isDynamic(content));
-    }
-
-    private static Token withColor(Token content, String raw, boolean dynamic, boolean force,
-                                   PlaceholderTable placeholders) {
-        if (raw == null) return content;
-        if (dynamic) {
-            final DynamicValue value = parseDynamicValue(raw, placeholders);
-            return Token.ColorContent.create(content, value.staticParts, value.placeholderIndices, null, force, true);
-        }
-        final TextColor value = StyleUtils.parseColor(raw);
-        if (value == null) return content;
-        return Token.ColorContent.create(content, Token.NO_PARTS, Token.NO_PH, value, force, isDynamic(content));
-    }
-
-    private static Token withShadow(Token content, String raw, boolean dynamic, boolean force,
-                                    PlaceholderTable placeholders) {
+    // The token with a color, shadow or style action applied; an invalid fixed value is ignored.
+    // A value with placeholders is read on each render.
+    private static Token withLook(Token content, byte kind, String raw, boolean dynamic, boolean force,
+                                  float phase, PlaceholderTable placeholders) {
         if (raw == null) return content;
         if (dynamic) {
             // Without shadow colors a shadow from a placeholder is left out, like an invalid one.
-            if (!Platform.SHADOW_COLORS) return content;
+            if (kind == Look.SHADOW && !Platform.SHADOW_COLORS) return content;
             final DynamicValue value = parseDynamicValue(raw, placeholders);
-            return Token.ShadowContent.create(content, value.staticParts, value.placeholderIndices, null, force, true);
+            return Token.LookContent.create(content, kind, value.staticParts, value.placeholderIndices, phase, force);
         }
-        if (!StyleUtils.isShadow(raw)) return content;
-        if (!Platform.SHADOW_COLORS) throw unsupported("Shadow colors", "4.18");
-        return Token.ShadowContent.create(content, Token.NO_PARTS, Token.NO_PH, StyleUtils.parseShadow(raw), force,
-                isDynamic(content));
+        final Look look = Look.parse(kind, raw, phase);
+        if (look == null) return content;
+        // Only a shadow puts a $ into a valid style.
+        if (!Platform.SHADOW_COLORS && (kind == Look.SHADOW || kind == Look.STYLE && raw.indexOf('$') >= 0)) {
+            throw unsupported("Shadow colors", "4.18");
+        }
+        if (look.isEmpty()) return content;
+        return Token.LookContent.create(content, look, force, isDynamic(content));
     }
 
+    // Finds the ) that closes the action list opened at start. The list is read the way its
+    // actions are: a quote opens a quoted value only as the first character of a value, so an
+    // apostrophe inside an unquoted value, as in show:Don't, is ordinary text.
     private static int findClosingParen(char[] src, int start) {
         int pos = start + 1;
         final int len = src.length;
@@ -1853,45 +1785,6 @@ final class Compiler {
         return -1;
     }
 
-    // Reads dash-separated hex or legacy color stops; returns null if parsing fails or fewer than two stops are found.
-    private static int[] parseGradientColors(String value) {
-        final char[] src = value.toCharArray();
-        final int len = src.length;
-
-        int count = 1;
-        for (int i = 1; i < len; i++) {
-            if (src[i] == '-' && i + 1 < len && (src[i + 1] == '#' || StyleUtils.isHexChar(src[i + 1])))
-                count++;
-        }
-        if (count < 2) return null;
-
-        final int[] colors = new int[count];
-        int ci = 0;
-        int i = 0;
-
-        while (i < len && ci < count) {
-            if (i > 0 && src[i] == '-') i++;
-            while (i < len && src[i] == ' ') i++;
-            if (i >= len) return null;
-
-            if (src[i] == '#') {
-                final int rgb = StyleUtils.parseHex(src, i + 1);
-                if (rgb == -1) return null;
-                colors[ci++] = rgb;
-                i += 7;
-            } else {
-                final TextColor legacy = StyleUtils.fromLegacyCode(src[i]);
-                if (legacy == null) return null;
-                colors[ci++] = legacy.value();
-                i++;
-            }
-
-            while (i < len && src[i] != '-') i++;
-        }
-
-        return ci == count ? colors : null;
-    }
-
     private static Token[] pushToken(Token[] arr, int count, Token token) {
         if (count == arr.length) arr = Arrays.copyOf(arr, arr.length * 2);
         arr[count] = token;
@@ -1901,7 +1794,7 @@ final class Compiler {
     // Each name sits at the index of its action code.
     private static final String[] ACTION_NAMES = {
             null, "run", "suggest", "url", "copy", "insert", "show", "head", "sprite", "page",
-            "gradient", "color", "style", "font", "lang", "phase", "if", "unless", "transform",
+            "color", "style", "font", "lang", "phase", "if", "unless", "transform",
             "shadow", "force-color", "force-style", "force-shadow"
     };
 

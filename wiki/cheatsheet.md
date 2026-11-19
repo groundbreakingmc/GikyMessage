@@ -49,7 +49,7 @@ Values are shown exactly as they are: `&c` inside a value isn't a color.
 | `font:uniform` | Another font |
 | `color:red`, `style:"gold bold $#000000"`, `shadow:#000000:80` | Color, style and shadow where the segment's text sets none |
 | `force-color:red`, `force-style:"gold bold"`, `force-shadow:none` | The same, over everything inside the segment |
-| `gradient:#ff5555-#5555ff`, `phase:0.5` | [Gradient](gradients.md), shifted along the text |
+| `color:#ff5555-#5555ff`, `phase:0.5` | [Gradient](gradients.md), shifted along the text |
 | `if:{clan}`, `unless:{clan}`, `if:{group}==vip`, `if:{level}>=10` | [Conditions](conditions.md) |
 | `lang:item.minecraft.diamond` | [Translation](translations.md) to the player's language |
 | `transform:compact`, `transform:"upper max:10"` | [Transforms](transforms.md) |

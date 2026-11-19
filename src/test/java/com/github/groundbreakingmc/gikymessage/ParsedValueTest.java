@@ -159,7 +159,7 @@ class ParsedValueTest {
                 new Parsed("{value}", PLAIN), new Parsed("gone", NOTHING), new Parsed(null, PLAIN)};
         final List<String> templates = List.of("{value}", "{value}/{suffix}/{value}",
                 "[{value}/{suffix}](color:red,style:bold)",
-                "[{value}{value}/{suffix}](gradient:c-e)",
+                "[{value}{value}/{suffix}](color:c-e)",
                 "[x](copy:'{value}/{suffix}',show:'[{value}](color:blue)')",
                 "{value}[{suffix}](style:italic){value}");
         for (final String raw : templates) {

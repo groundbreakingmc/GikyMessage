@@ -69,8 +69,8 @@ who clicks:
 chat](images/en/ph-actions.svg)
 
 These actions fill in placeholders: `run`, `suggest`, `url`, `copy`, `show`, `color`, `style`,
-`head`, `lang`, `if` and `unless`. The rest — `insert`, `font`, `sprite`, `gradient`, `phase`,
-`transform` and `page` — take fixed text only.
+`shadow` and their `force-` versions, `head`, `lang`, `if` and `unless`. The rest — `insert`,
+`font`, `sprite`, `phase`, `transform` and `page` — take fixed text only.
 
 ## For developers
 

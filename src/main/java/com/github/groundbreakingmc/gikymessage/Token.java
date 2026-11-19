@@ -5,9 +5,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
-import net.kyori.adventure.text.format.ShadowColor;
 import net.kyori.adventure.text.format.Style;
-import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.object.ObjectContents;
 
 import java.lang.ref.WeakReference;
@@ -407,143 +405,75 @@ interface Token {
         }
     }
 
-    // The color of a segment: with force throughout its component tree, otherwise only where
-    // the segment's text has no color of its own.
-    final class ColorContent implements Token {
+    // The look of a color, shadow or style action applied to its content: with force throughout
+    // the content, otherwise only where the content's text leaves it unset. A value with
+    // placeholders is read on each render; the looks of its last values are kept.
+    final class LookContent implements Token {
+
+        private static final int CACHE_SIZE = 8;
 
         private final Token content;
+        // The fixed value, or null for one with placeholders.
+        private final Look look;
+        private final byte kind;
         private final String[] staticParts;
         private final int[] placeholderIndices;
-        private final TextColor color;
+        private final float phase;
         private final boolean force;
+        // The looks of the last values, one per slot of their hash; null for a fixed value.
+        private final AtomicReferenceArray<Look> looks;
 
-        static Token create(Token content, String[] staticParts, int[] placeholderIndices,
-                            TextColor color, boolean force, boolean dynamic) {
-            return dynamic ? new ColorContent(content, staticParts, placeholderIndices, color, force)
-                    : new Constant(applyColor(content.render(null, null), color, force));
+        static Token create(Token content, Look look, boolean force, boolean dynamic) {
+            return dynamic ? new LookContent(content, look, (byte) -1, NO_PARTS, NO_PH, 0f, force)
+                    : new Constant(applyLook(content.render(null, null), look, force));
         }
 
-        private ColorContent(Token content, String[] staticParts, int[] placeholderIndices,
-                             TextColor color, boolean force) {
+        static Token create(Token content, byte kind, String[] staticParts, int[] placeholderIndices,
+                            float phase, boolean force) {
+            return new LookContent(content, null, kind, staticParts, placeholderIndices, phase, force);
+        }
+
+        private LookContent(Token content, Look look, byte kind, String[] staticParts, int[] placeholderIndices,
+                            float phase, boolean force) {
             this.content = content;
+            this.look = look;
+            this.kind = kind;
             this.staticParts = staticParts;
             this.placeholderIndices = placeholderIndices;
-            this.color = color;
+            this.phase = phase;
             this.force = force;
+            this.looks = look == null ? new AtomicReferenceArray<>(CACHE_SIZE) : null;
         }
 
         @Override
         public Component render(Object[] placeholders, long[] numbers) {
             final Component rendered = this.content.render(placeholders, numbers);
-            final TextColor resolved = this.placeholderIndices.length == 0 ? this.color
-                    : StyleUtils.parseColor(buildText(this.staticParts, this.placeholderIndices, placeholders, numbers));
-            return resolved == null ? rendered : applyColor(rendered, resolved, this.force);
+            final Look look = this.look != null ? this.look
+                    : this.resolve(buildText(this.staticParts, this.placeholderIndices, placeholders, numbers));
+            return applyLook(rendered, look, this.force);
+        }
+
+        // An invalid value is kept as an empty look, so it is not read again either.
+        private Look resolve(String value) {
+            final int slot = value.hashCode() & (CACHE_SIZE - 1);
+            final Look cached = this.looks.get(slot);
+            if (cached != null && cached.source.equals(value)) return cached;
+            final Look parsed = Look.parse(this.kind, value, this.phase);
+            final Look look = parsed != null ? parsed : new Look(value, Style.empty(), null);
+            this.looks.set(slot, look);
+            return look;
         }
     }
 
-    private static Component applyColor(Component component, TextColor color, boolean force) {
-        if (!force) return component.color() == null ? component.color(color) : component;
-        final List<Component> children = component.children();
-        final Component colored = component.color(color);
-        if (children.isEmpty()) return colored;
-        final ChildBuffer buffer = acquireChildren(children.size());
-        try {
-            for (int index = 0; index < children.size(); index++) {
-                buffer.setComponent(index, applyColor(children.get(index), color, true));
-            }
-            return colored.children(buffer);
-        } finally {
-            releaseChildren(buffer);
-        }
+    private static Component applyLook(Component component, Look look, boolean force) {
+        Component result = component;
+        if (!look.style.isEmpty()) result = applyStyle(result, look.style, force);
+        if (look.colors != null) result = applyGradient(result, look.colors, force);
+        return result;
     }
 
-    // The shadow of a segment, applied like ColorContent its color. Created only where the
-    // platform has shadow colors.
-    final class ShadowContent implements Token {
-
-        private final Token content;
-        private final String[] staticParts;
-        private final int[] placeholderIndices;
-        private final ShadowColor shadow;
-        private final boolean force;
-
-        static Token create(Token content, String[] staticParts, int[] placeholderIndices,
-                            ShadowColor shadow, boolean force, boolean dynamic) {
-            return dynamic ? new ShadowContent(content, staticParts, placeholderIndices, shadow, force)
-                    : new Constant(applyShadow(content.render(null, null), shadow, force));
-        }
-
-        private ShadowContent(Token content, String[] staticParts, int[] placeholderIndices,
-                              ShadowColor shadow, boolean force) {
-            this.content = content;
-            this.staticParts = staticParts;
-            this.placeholderIndices = placeholderIndices;
-            this.shadow = shadow;
-            this.force = force;
-        }
-
-        @Override
-        public Component render(Object[] placeholders, long[] numbers) {
-            final Component rendered = this.content.render(placeholders, numbers);
-            final ShadowColor resolved = this.placeholderIndices.length == 0 ? this.shadow
-                    : StyleUtils.parseShadow(buildText(this.staticParts, this.placeholderIndices, placeholders, numbers));
-            return resolved == null ? rendered : applyShadow(rendered, resolved, this.force);
-        }
-    }
-
-    private static Component applyShadow(Component component, ShadowColor shadow, boolean force) {
-        if (!force) {
-            return StyleUtils.hasShadow(component.style())
-                    ? component : component.style(StyleUtils.withShadow(component.style(), shadow));
-        }
-        final List<Component> children = component.children();
-        final Component shadowed = component.style(StyleUtils.withShadow(component.style(), shadow));
-        if (children.isEmpty()) return shadowed;
-        final ChildBuffer buffer = acquireChildren(children.size());
-        try {
-            for (int index = 0; index < children.size(); index++) {
-                buffer.setComponent(index, applyShadow(children.get(index), shadow, true));
-            }
-            return shadowed.children(buffer);
-        } finally {
-            releaseChildren(buffer);
-        }
-    }
-
-    // The color, styles and shadow of a segment, applied like ColorContent its color; events and
-    // other properties are kept.
-    final class StyleContent implements Token {
-
-        private final Token content;
-        private final String[] staticParts;
-        private final int[] placeholderIndices;
-        private final Style style;
-        private final boolean force;
-
-        static Token create(Token content, String[] staticParts, int[] placeholderIndices,
-                            Style style, boolean force, boolean dynamic) {
-            return dynamic ? new StyleContent(content, staticParts, placeholderIndices, style, force)
-                    : new Constant(applyStyle(content.render(null, null), style, force));
-        }
-
-        private StyleContent(Token content, String[] staticParts, int[] placeholderIndices,
-                             Style style, boolean force) {
-            this.content = content;
-            this.staticParts = staticParts;
-            this.placeholderIndices = placeholderIndices;
-            this.style = style;
-            this.force = force;
-        }
-
-        @Override
-        public Component render(Object[] placeholders, long[] numbers) {
-            final Component rendered = this.content.render(placeholders, numbers);
-            final Style resolved = this.placeholderIndices.length == 0 ? this.style
-                    : StyleUtils.parseStyle(buildText(this.staticParts, this.placeholderIndices, placeholders, numbers));
-            return resolved == null || resolved.isEmpty() ? rendered : applyStyle(rendered, resolved, this.force);
-        }
-    }
-
+    // Without force the style fills what the component's root leaves unset; its children
+    // inherit it. With force it is set on every component.
     private static Component applyStyle(Component component, Style style, boolean force) {
         final boolean resetsShadow = StyleUtils.resetsShadow(style);
         final Style applied = resetsShadow ? StyleUtils.withoutShadow(style) : style;
@@ -567,67 +497,6 @@ interface Token {
             return styled.children(buffer);
         } finally {
             releaseChildren(buffer);
-        }
-    }
-
-    final class GradientContent implements Token {
-
-        private final Token content;
-        private final int[] colors;
-        private final Style baseStyle;
-        // Fraction of a full color cycle in [0, 1); zero is the plain gradient.
-        private final float phase;
-        // The styles for the last texts, one per length modulo 16, so names of up to 16
-        // characters, the usual content of a dynamic gradient, never evict each other.
-        private final AtomicReferenceArray<Style[]> styleCache = new AtomicReferenceArray<>(16);
-
-        static Token create(Token content, int[] colors, Style baseStyle, boolean dynamic, float phase) {
-            if (dynamic) return new GradientContent(content, colors, baseStyle, phase);
-            final Component rendered = content.render(null, null);
-            return new Constant(renderGradient(rendered,
-                    gradientStyles(countCodePoints(rendered), colors, phase), baseStyle));
-        }
-
-        private GradientContent(Token content, int[] colors, Style baseStyle, float phase) {
-            this.content = content;
-            this.colors = colors;
-            this.baseStyle = baseStyle;
-            this.phase = phase;
-        }
-
-        @Override
-        public Component render(Object[] placeholders, long[] numbers) {
-            final Component rendered = this.content.render(placeholders, numbers);
-            return renderGradient(rendered, this.styles(countCodePoints(rendered)), this.baseStyle);
-        }
-
-        private static Component renderGradient(Component rendered, Style[] styles, Style baseStyle) {
-
-            final ChildScratch scratch = childScratch();
-            final Component colored;
-            if (styles.length == 0) {
-                colored = rendered;
-            } else {
-                scratch.gradientIndex = 0;
-                colored = applyGradient(rendered, styles, scratch);
-            }
-            final ChildBuffer children = scratch.acquire(1);
-            try {
-                children.setComponent(0, colored);
-                return textComponent("", baseStyle, children);
-            } finally {
-                releaseChildren(children);
-            }
-        }
-
-        private Style[] styles(int length) {
-            final int slot = length & 15;
-            Style[] styles = this.styleCache.get(slot);
-            if (styles == null || styles.length != length) {
-                styles = gradientStyles(length, this.colors, this.phase);
-                this.styleCache.set(slot, styles);
-            }
-            return styles;
         }
     }
 
@@ -1133,7 +1002,6 @@ interface Token {
     // reachable from the render that acquired it; idle ones may be collected and created again.
     ThreadLocal<WeakReference<ChildScratch>> CHILD_SCRATCH = new ThreadLocal<>();
     Component[] EMPTY_COMPONENTS = new Component[0];
-    Style[] EMPTY_STYLES = new Style[0];
 
     // Single-code-point strings reused by gradients.
     String[] CHAR_CACHE = buildCharCache();
@@ -1237,21 +1105,6 @@ interface Token {
         return children.isEmpty() ? component : component.children(children);
     }
 
-    private static Style[] gradientStyles(int length, int[] colors, float phase) {
-        if (length == 0) return EMPTY_STYLES;
-
-        final Style[] styles = new Style[length];
-        for (int index = 0; index < length; index++) {
-            final float position = length == 1 ? 0f : (float) index / (length - 1);
-            // Without a phase the gradient is computed exactly as before phases existed.
-            final int rgb = phase == 0f
-                    ? StyleUtils.interpolate(colors, position)
-                    : StyleUtils.interpolateCycle(colors, position, phase);
-            styles[index] = Style.style(StyleUtils.textColorOf(rgb));
-        }
-        return styles;
-    }
-
     private static int countCodePoints(Component component) {
         int count = component instanceof TextComponent textComponent
                 ? textComponent.content().codePointCount(0, textComponent.content().length())
@@ -1264,53 +1117,67 @@ interface Token {
         return count;
     }
 
+    // Spreads a gradient over the characters of a component, each character a child of its own.
+    // With force it colors every character. Without force it skips the characters that have a
+    // color of their own and counts them, so the gradient goes on after them. A component whose
+    // text is not its own, such as a translation, takes the color at its place.
+    private static Component applyGradient(Component component, Look.Gradient gradient, boolean force) {
+        final Style[] styles = gradient.styles(countCodePoints(component));
+        final ChildScratch scratch = childScratch();
+        scratch.gradientIndex = 0;
+        return applyGradient(component, styles, force, false, scratch);
+    }
+
     private static Component applyGradient(
             Component component,
             Style[] styles,
+            boolean force,
+            boolean inheritsOwn,
             ChildScratch scratch
     ) {
-        final List<Component> originalChildren = component.children();
-        final int textLength;
-        final String text;
-        if (component instanceof TextComponent textComponent) {
-            text = textComponent.content();
-            textLength = text.codePointCount(0, text.length());
-        } else {
-            text = null;
-            textLength = 0;
+        final boolean own = inheritsOwn || component.color() != null;
+        if (own && !force) {
+            scratch.gradientIndex += countCodePoints(component);
+            return component;
         }
 
-        if (textLength == 0 && originalChildren.isEmpty()) return component;
+        final List<Component> originalChildren = component.children();
+        final String text = component instanceof TextComponent textComponent ? textComponent.content() : null;
+        final int textLength = text == null ? 0 : text.codePointCount(0, text.length());
+        // One character, or text that is not the component's own, takes one style itself.
+        final boolean whole = text == null || textLength == 1;
+        final int split = whole ? 0 : textLength;
 
-        final ChildBuffer children = scratch.acquire(textLength + originalChildren.size());
+        final Component self;
+        if (whole) {
+            final Style style = styles[Math.min(scratch.gradientIndex, styles.length - 1)];
+            self = component.style(component.style().merge(style));
+            scratch.gradientIndex += textLength;
+        } else if (split > 0) {
+            self = Component.text("", component.style());
+        } else {
+            self = component;
+        }
+        if (originalChildren.isEmpty() && split == 0) return self;
+
+        final ChildBuffer children = scratch.acquire(split + originalChildren.size());
         try {
             int outputIndex = 0;
-            if (text != null) {
-                int offset = 0;
-                for (int index = 0; index < textLength; index++) {
-                    final int codePoint = text.codePointAt(offset);
-                    final String value = codePoint < CHAR_CACHE.length
-                            ? CHAR_CACHE[codePoint]
-                            : Character.toString(codePoint);
-                    children.setComponent(
-                            outputIndex++,
-                            Component.text(value, styles[scratch.gradientIndex++])
-                    );
-                    offset += Character.charCount(codePoint);
-                }
+            int offset = 0;
+            for (int index = 0; index < split; index++) {
+                final int codePoint = text.codePointAt(offset);
+                final String value = codePoint < CHAR_CACHE.length
+                        ? CHAR_CACHE[codePoint]
+                        : Character.toString(codePoint);
+                children.setComponent(outputIndex++, Component.text(value, styles[scratch.gradientIndex++]));
+                offset += Character.charCount(codePoint);
             }
 
             for (int index = 0, size = originalChildren.size(); index < size; index++) {
-                children.setComponent(
-                        outputIndex++,
-                        applyGradient(originalChildren.get(index), styles, scratch)
-                );
+                children.setComponent(outputIndex++,
+                        applyGradient(originalChildren.get(index), styles, force, own, scratch));
             }
-
-            if (text != null) {
-                return textComponent("", component.style(), children);
-            }
-            return component.children(children);
+            return self.children(children);
         } finally {
             releaseChildren(children);
         }

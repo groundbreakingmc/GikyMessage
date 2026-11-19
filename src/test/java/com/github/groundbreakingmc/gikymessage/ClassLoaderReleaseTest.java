@@ -26,7 +26,7 @@ class ClassLoaderReleaseTest {
     @Test
     void compilingStaticContentReleasesTheLibrary() throws Exception {
         // Static children are rendered once, while compiling, through the per-thread child buffers.
-        assertReleased(library -> library.compile("&aHello &bWorld [gradient](gradient:#ff0000-#0000ff)"));
+        assertReleased(library -> library.compile("&aHello &bWorld [gradient](color:#ff0000-#0000ff)"));
     }
 
     @Test
@@ -45,7 +45,7 @@ class ClassLoaderReleaseTest {
 
     @Test
     void bindingReleasesTheLibrary() throws Exception {
-        assertReleased(library -> library.renderBound(library.compileBound("[{name}](gradient:#ff0000-#0000ff)", false)));
+        assertReleased(library -> library.renderBound(library.compileBound("[{name}](color:#ff0000-#0000ff)", false)));
     }
 
     private static void assertReleased(Use use) throws Exception {

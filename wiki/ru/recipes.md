@@ -32,7 +32,7 @@ chat: '[&8\[&6{clan}&8\] ](if:{clan}){prefix}[&f{player}](show:&f{player}\n&7Р�
 ```yaml
 join: '&8\[&a+&8\] [&7{player}](show:&7Впервые зашёл: &f{first_join})'
 quit: '&8\[&c-&8\] &7{player}'
-first-join: '[&lНОВИЧОК](gradient:#55ff55-#55ffff) &f{player} &7впервые на сервере! &8(игрок №{number})'
+first-join: '[&lНОВИЧОК](color:#55ff55-#55ffff) &f{player} &7впервые на сервере! &8(игрок №{number})'
 ```
 
 ![Сообщения о входе, выходе и первом входе](../images/ru/rc-join.svg)
@@ -94,7 +94,7 @@ help: '[&6&lКоманды]\n[&e/spawn](suggest:/spawn, show:&7Телепорт 
 ## Объявление ивента
 
 ```yaml
-event: '[&l⚔ PvP-ИВЕНТ ⚔](gradient:#ff5555-#ffaa00) &7начнётся через &f{minutes} &7мин. [&e&n\[Участвовать\]](run:/event join, show:&7Записаться на ивент)'
+event: '[&l⚔ PvP-ИВЕНТ ⚔](color:#ff5555-#ffaa00) &7начнётся через &f{minutes} &7мин. [&e&n\[Участвовать\]](run:/event join, show:&7Записаться на ивент)'
 ```
 
 ![Баннер PvP-ИВЕНТ с градиентом и кнопкой Участвовать](../images/ru/rc-event.svg)

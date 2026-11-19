@@ -39,10 +39,11 @@ as text.
 
 ### A gradient doesn't appear
 
-**Cause:** the color list isn't valid: it has fewer than two colors, or uses names like `red`.
+**Cause:** the color list isn't valid: it has fewer than two colors, a short hex code such as
+`#f55`, or spaces around `-`. Or the letters have colors of their own: `color:` keeps them.
 
-**Fix:** write hex codes or one-letter codes separated by `-`: `gradient:#ff5555-#5555ff` or
-`gradient:c-9`. [More](gradients.md#choosing-colors).
+**Fix:** join full colors with `-`: `color:#ff5555-#5555ff` or `color:c-9`. To color every letter,
+use `force-color:`. [More](gradients.md#choosing-colors).
 
 ### A custom shadow isn't visible
 

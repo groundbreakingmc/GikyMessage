@@ -37,7 +37,7 @@ class NativeRenderTest {
                 .append(Component.translatable("translation").append(Component.text("child")));
         List<String> templates = List.of("{s}", "{n}", "{n}{n}{n}", "&e{s}/{n}/{c}/{missing}",
                 "[{s}/{n}/{c}](copy:'{n}/{s}/{c}/{n}',show:'{n}/{s}') {n}",
-                "[{n}{n}{s}](gradient:c-e) {n}",
+                "[{n}{n}{s}](color:c-e) {n}",
                 "[{n}/{c}](style:bold,color:#123456) {n}",
                 "[copy](copy:'{n}{n}{n}')", "[head](head:{s})");
         for (String raw : templates) for (boolean cached : new boolean[]{false, true}) {

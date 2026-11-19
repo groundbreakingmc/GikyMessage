@@ -84,10 +84,8 @@ class TextLangTest extends TextTestBase {
     }
 
     @Test
-    void headWinsOverLangAndLangWinsOverGradient() {
+    void headWinsOverLang() {
         assertInstanceOf(ObjectComponent.class, Text.of("[x](lang:myserver.x, head:Steve)").render());
-        assertEquals(Component.translatable("myserver.ab", "AB"),
-                Text.of("[AB](gradient:#ff0000-#0000ff, lang:myserver.ab)").render());
         assertEquals(Component.translatable("myserver.second", "x"),
                 Text.of("[x](lang:myserver.first, lang:myserver.second)").render());
     }

@@ -27,7 +27,7 @@ class OlderAdventureTest {
                 "Hello",
                 "&aHello &b&lWorld&r!",
                 "&#ff8800{name} &7&o({health})",
-                "[{name}](gradient:#ff5555-#5555ff) [static](gradient:a-b)",
+                "[{name}](color:#ff5555-#5555ff) [static](force-color:a-b)",
                 "[{name}](color:red) [{health}](style:\"gold bold\")",
                 "[Click](run:\"/msg {name}\", show:\"&aHi {name}\", insert:text)",
                 "[Page](page:2) [Copy](copy:{name}) [Link](url:https://example.com)",
@@ -75,8 +75,7 @@ class OlderAdventureTest {
             assertUnsupported(library, "[x](head:Steve)", "4.25");
             assertUnsupported(library, "[x](head:{name})", "4.25");
             assertUnsupported(library, "[x](sprite:minecraft:item/diamond)", "4.25");
-            // A gradient is the selected content action only where no object is requested.
-            assertUnsupported(library, "[x](gradient:#ff0000-#0000ff, head:Steve)", "4.25");
+            assertUnsupported(library, "[x](color:#ff0000-#0000ff, head:Steve)", "4.25");
         }
     }
 

@@ -682,19 +682,57 @@ interface Token {
     // Compares the text of both sides, negated for unless. Spaces around a side do not count and
     // components compare by their plain text. When both sides are numbers, such as 7, -12 or
     // 3.50, they compare as numbers; <, >, <= and >= hold only then.
-    record Comparison(String[] leftParts, int[] leftPlaceholders, String[] rightParts, int[] rightPlaceholders,
-                      byte operator, boolean negated) implements Condition {
+    final class Comparison implements Condition {
 
         // Operator codes are indices here; at one position the two-character ones are tried first.
         static final String[] OPERATORS = {"==", "!=", "<=", ">=", "<", ">"};
         private static final int NOT_NUMBERS = Integer.MIN_VALUE;
 
+        // A side that is a whole number without its text: fixed digits, or the slot of a sole
+        // placeholder, which holds a number only on some renders. NOT_WHOLE for any other side.
+        private static final int FIXED_WHOLE = -2;
+        private static final int NOT_WHOLE = -1;
+
+        private final String[] leftParts;
+        private final int[] leftPlaceholders;
+        private final String[] rightParts;
+        private final int[] rightPlaceholders;
+        private final byte operator;
+        private final boolean negated;
+        private final int leftWhole;
+        private final int rightWhole;
+        private final long leftValue;
+        private final long rightValue;
+
+        Comparison(String[] leftParts, int[] leftPlaceholders, String[] rightParts, int[] rightPlaceholders,
+                   byte operator, boolean negated) {
+            this.leftParts = leftParts;
+            this.leftPlaceholders = leftPlaceholders;
+            this.rightParts = rightParts;
+            this.rightPlaceholders = rightPlaceholders;
+            this.operator = operator;
+            this.negated = negated;
+            this.leftWhole = wholeSlot(leftParts, leftPlaceholders);
+            this.rightWhole = wholeSlot(rightParts, rightPlaceholders);
+            this.leftValue = this.leftWhole == FIXED_WHOLE ? Long.parseLong(fixedText(leftParts)) : 0;
+            this.rightValue = this.rightWhole == FIXED_WHOLE ? Long.parseLong(fixedText(rightParts)) : 0;
+        }
+
         @Override
         public boolean holds(Object[] placeholders, long[] numbers) {
-            // The left text is copied out before the right one reuses the shared builder.
-            final String left = buildText(this.leftParts, this.leftPlaceholders, placeholders, numbers).strip();
-            final String right = buildText(this.rightParts, this.rightPlaceholders, placeholders, numbers).strip();
-            final int order = compareNumbers(left, right);
+            final int order;
+            String left = null;
+            String right = null;
+            // Two whole numbers, such as a number placeholder and fixed digits, need no text.
+            if (isWhole(this.leftWhole, placeholders) && isWhole(this.rightWhole, placeholders)) {
+                order = Long.compare(whole(this.leftWhole, this.leftValue, numbers),
+                        whole(this.rightWhole, this.rightValue, numbers));
+            } else {
+                // The left text is copied out before the right one reuses the shared builder.
+                left = buildText(this.leftParts, this.leftPlaceholders, placeholders, numbers).strip();
+                right = buildText(this.rightParts, this.rightPlaceholders, placeholders, numbers).strip();
+                order = compareNumbers(left, right);
+            }
             final boolean result = switch (this.operator) {
                 case 0 -> order == NOT_NUMBERS ? left.equals(right) : order == 0;
                 case 1 -> order == NOT_NUMBERS ? !left.equals(right) : order != 0;
@@ -706,13 +744,39 @@ interface Token {
             return result != this.negated;
         }
 
+        private static int wholeSlot(String[] parts, int[] placeholders) {
+            if (placeholders.length == 0) {
+                final String text = fixedText(parts);
+                return isDecimal(text) && isWholeText(text) ? FIXED_WHOLE : NOT_WHOLE;
+            }
+            return parts.length == 0 && placeholders.length == 1 ? placeholders[0] : NOT_WHOLE;
+        }
+
+        // The compiler strips the text of a side, so fixed text is used as it is.
+        private static String fixedText(String[] parts) {
+            return parts.length == 0 || parts[0] == null ? "" : parts[0];
+        }
+
+        private static boolean isWhole(int slot, Object[] placeholders) {
+            return slot == FIXED_WHOLE || slot >= 0 && isNumber(placeholders[slot]);
+        }
+
+        private static long whole(int slot, long fixed, long[] numbers) {
+            return slot == FIXED_WHOLE ? fixed : numbers[slot];
+        }
+
         // The sign of left minus right when both are decimal numbers, else NOT_NUMBERS.
         static int compareNumbers(String left, String right) {
             if (!isDecimal(left) || !isDecimal(right)) return NOT_NUMBERS;
-            if (left.length() <= 18 && right.length() <= 18 && left.indexOf('.') < 0 && right.indexOf('.') < 0) {
+            if (isWholeText(left) && isWholeText(right)) {
                 return Long.compare(Long.parseLong(left), Long.parseLong(right));
             }
             return Integer.signum(new BigDecimal(left).compareTo(new BigDecimal(right)));
+        }
+
+        // A decimal number that a long holds as it is.
+        private static boolean isWholeText(String decimal) {
+            return decimal.length() <= 18 && decimal.indexOf('.') < 0;
         }
 
         // An optional sign, digits, and optionally a point with more digits.

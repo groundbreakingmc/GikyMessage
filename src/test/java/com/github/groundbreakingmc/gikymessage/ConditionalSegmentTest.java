@@ -164,6 +164,22 @@ class ConditionalSegmentTest extends TextTestBase {
     }
 
     @Test
+    void aNumberComparesWithFixedTextOfAnyForm() {
+        assertEquals("x", plain(bound("[x](if:{a}== 007 )").render(values("a", 7L))));
+        assertEquals("x", plain(bound("[x](if:{a}==+7)").render(values("a", 7L))));
+        assertEquals("x", plain(bound("[x](if:{a}==7.0)").render(values("a", 7L))));
+        assertEquals("x", plain(bound("[x](if:{a}<7.5)").render(values("a", 7L))));
+        assertEquals("x", plain(bound("[x](if:{a}>=-3)").render(values("a", -3L))));
+        assertEquals("x", plain(bound("[x](if:{a}<123456789012345678901)").render(values("a", Long.MAX_VALUE))));
+        assertEquals("", plain(bound("[x](if:{a}==seven)").render(values("a", 7L))));
+        assertEquals("x", plain(bound("[x](if:{a}!=seven)").render(values("a", 7L))));
+        assertEquals("x", plain(bound("[x](if:{a}<{b})").render(values("a", -5L, "b", 3L))));
+        assertEquals("x", plain(bound("[x](if:5<{b})").render(values("b", 6L))));
+        // A number used twice, by the text and by the condition, compares the same.
+        assertEquals("7 x", plain(bound("{a} [x](if:{a}==7)").render(values("a", 7L))));
+    }
+
+    @Test
     void orderingNeedsNumbersOnBothSides() {
         assertEquals("", plain(bound("[x](if:{a}>5)").render(values("a", "many"))));
         assertEquals("", plain(bound("[x](if:{a}<5)").render(values("a", ""))));

@@ -1568,6 +1568,10 @@ final class Compiler {
                 );
                 return new Token.Plain(plain.text, merged);
             }
+            // A sole child whose root style is fixed becomes the root itself, one level less.
+            if (token instanceof Token.PlainDyn || token instanceof Token.DynChildren) {
+                return Token.withRootStyle(token, style);
+            }
 
             final Token[] content = {token};
             return isDynamic(token)

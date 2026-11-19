@@ -45,10 +45,8 @@ class TextFontTest extends TextTestBase {
         // The font sits on the segment's root, so both children inherit it.
         assertEquals(ICONS, rendered.style().font());
         assertEquals(Component.text("", Style.style().font(ICONS).build())
-                        .append(Component.text()
-                                .append(Component.text("", NamedTextColor.GOLD))
-                                .append(Component.text("Steve"))
-                                .build()),
+                        .append(Component.text("", NamedTextColor.GOLD))
+                        .append(Component.text("Steve")),
                 rendered);
     }
 

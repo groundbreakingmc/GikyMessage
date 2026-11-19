@@ -347,11 +347,10 @@ interface Token {
         static Token create(Token content, Look look, boolean force, boolean dynamic) {
             if (!dynamic) return new Constant(applyLook(content.render(null, null), look, force));
             // A plain style over content whose root style is fixed is applied to that root once.
-            if (!force && look.colors == null && look.shadows == null) {
-                if (content instanceof PlainDyn plain) return plain.withStyle(fill(plain.base.style(), look.style));
-                if (content instanceof DynChildren children) {
-                    return children.withStyle(fill(children.base.style(), look.style));
-                }
+            if (!force && look.colors == null && look.shadows == null
+                    && (content instanceof PlainDyn || content instanceof DynChildren)) {
+                return withRootStyle(content, StyleUtils.resetsShadow(look.style)
+                        ? StyleUtils.withoutShadow(look.style) : look.style);
             }
             return new LookContent(content, look, (byte) -1, NO_PARTS, NO_PH, 0f, force);
         }
@@ -400,6 +399,15 @@ interface Token {
         if (look.colors != null) result = applyGradient(result, look.colors, force);
         if (look.shadows != null) result = applyGradient(result, look.shadows, force);
         return result;
+    }
+
+    // A PlainDyn or DynChildren whose root also takes what the style sets and the root leaves unset.
+    static Token withRootStyle(Token token, Style style) {
+        if (token instanceof PlainDyn plain) {
+            return plain.withStyle(plain.base.style().merge(style, Style.Merge.Strategy.IF_ABSENT_ON_TARGET));
+        }
+        final DynChildren children = (DynChildren) token;
+        return children.withStyle(children.base.style().merge(style, Style.Merge.Strategy.IF_ABSENT_ON_TARGET));
     }
 
     // What a plain style gives a root with this style: it fills only what the root leaves unset.

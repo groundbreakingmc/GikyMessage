@@ -21,8 +21,8 @@ final class TextImpl<C> implements Text<C> {
     private final String[] placeholderKeys;
     private final ValueResolver<C>[] resolvers;
     private volatile Component[] fallbacks;
-    // Per thread: the last value tuple, then the result it produced, null until one is cached.
-    // A plain array for the same reason as above.
+    // Per thread: the last value tuple as reported, the result it produced, null until one is
+    // cached, and the numbers of the tuple. A plain array for the same reason as above.
     private final ThreadLocal<Object[]> renderCache;
     private final boolean cacheable;
 
@@ -35,7 +35,7 @@ final class TextImpl<C> implements Text<C> {
         final int placeholderCount = this.placeholderKeys.length;
         this.renderCache = placeholderCount == 0 || !cacheable
                 ? null
-                : ThreadLocal.withInitial(() -> new Object[placeholderCount + 1]);
+                : ThreadLocal.withInitial(() -> new Object[placeholderCount + 2]);
     }
 
     private static <C> ValueResolver<C>[] bind(String[] keys, ResolverFactory<C> factory) {
@@ -62,11 +62,10 @@ final class TextImpl<C> implements Text<C> {
         final RenderBuffer renderBuffer = renderScratch().acquire(this.placeholderKeys.length);
         final Object[] buffer = renderBuffer.values;
         try {
-            final ValueResolver.Value output = this.cacheable ? renderBuffer.componentValue() : renderBuffer;
             for (int index = 0; index < this.placeholderKeys.length; index++) {
                 renderBuffer.resolved = null;
                 final ValueResolver<C> resolver = this.resolvers[index];
-                if (resolver != null) resolver.resolve(context, output);
+                if (resolver != null) resolver.resolve(context, renderBuffer);
                 final Object value = renderBuffer.resolved;
                 buffer[index] = value == null ? this.fallbacks()[index] : value;
                 if (value == Token.NUMBER_VALUE) renderBuffer.storeNumber(index);
@@ -121,23 +120,51 @@ final class TextImpl<C> implements Text<C> {
         if (!this.cacheable) return this.token.render(buffer, numbers);
 
         final Object[] cache = this.renderCache.get();
-        final int valueCount = cache.length - 1;
+        final int valueCount = this.placeholderKeys.length;
         final Object cachedResult = cache[valueCount];
-        if (cachedResult != null && matches(buffer, cache, valueCount)) {
+        if (cachedResult != null && matches(buffer, numbers, cache, (long[]) cache[valueCount + 1], valueCount)) {
             return (Component) cachedResult;
         }
 
-        final Component rendered = this.token.render(buffer, numbers);
+        // The values as reported: rendering may turn them into text or components in place.
+        cache[valueCount] = null;
         System.arraycopy(buffer, 0, cache, 0, valueCount);
+        if (numbers != null) {
+            long[] cachedNumbers = (long[]) cache[valueCount + 1];
+            if (cachedNumbers == null) cache[valueCount + 1] = cachedNumbers = new long[valueCount];
+            System.arraycopy(numbers, 0, cachedNumbers, 0, valueCount);
+        }
+        final Component rendered = this.token.render(buffer, numbers);
         cache[valueCount] = rendered;
         return rendered;
     }
 
-    private static boolean matches(Object[] buffer, Object[] cachedValues, int valueCount) {
+    // Values of one type compare as they are; values of different types compare as the
+    // components they render as, so a text equals the same text reported as a component.
+    private static boolean matches(Object[] buffer, long[] numbers, Object[] cache, long[] cachedNumbers,
+                                   int valueCount) {
         for (int index = 0; index < valueCount; index++) {
-            if (!Objects.equals(buffer[index], cachedValues[index])) return false;
+            final Object value = buffer[index];
+            final Object cached = cache[index];
+            if (value == Token.NUMBER_VALUE) {
+                if (cached != Token.NUMBER_VALUE) {
+                    if (!Component.text(numbers[index]).equals(asComponent(cached, cachedNumbers, index))) return false;
+                } else if (numbers[index] != cachedNumbers[index]) {
+                    return false;
+                }
+            } else if (value.getClass() == cached.getClass() || value instanceof Component && cached instanceof Component) {
+                if (!value.equals(cached)) return false;
+            } else if (!asComponent(value, numbers, index).equals(asComponent(cached, cachedNumbers, index))) {
+                return false;
+            }
         }
         return true;
+    }
+
+    private static Component asComponent(Object value, long[] numbers, int index) {
+        if (value == Token.NUMBER_VALUE) return Component.text(numbers[index]);
+        if (value instanceof String text) return Component.text(text);
+        return (Component) value;
     }
 
     // Buffers left unused between renders may be collected and are then created again.
@@ -188,7 +215,6 @@ final class TextImpl<C> implements Text<C> {
         private Object resolved;
         private long resolvedNumber;
         private int size;
-        private ComponentValue componentValue;
 
         private RenderBuffer(RenderScratch owner) {
             this.owner = owner;
@@ -213,11 +239,6 @@ final class TextImpl<C> implements Text<C> {
         @Override
         public void component(String source, Function<? super String, ? extends Component> parser) {
             this.resolved = parse(source, parser);
-        }
-
-        private ComponentValue componentValue() {
-            if (this.componentValue == null) this.componentValue = new ComponentValue(this);
-            return this.componentValue;
         }
 
         private void prepare(int size) {
@@ -249,35 +270,6 @@ final class TextImpl<C> implements Text<C> {
                 Arrays.fill(this.values, 0, this.size, null);
             }
             this.size = 0;
-        }
-    }
-
-    private static final class ComponentValue implements ValueResolver.Value {
-
-        private final RenderBuffer buffer;
-
-        private ComponentValue(RenderBuffer buffer) {
-            this.buffer = buffer;
-        }
-
-        @Override
-        public void text(String text) {
-            this.buffer.resolved = text == null ? null : Component.text(text);
-        }
-
-        @Override
-        public void number(long number) {
-            this.buffer.resolved = Component.text(number);
-        }
-
-        @Override
-        public void component(Component component) {
-            this.buffer.resolved = component;
-        }
-
-        @Override
-        public void component(String source, Function<? super String, ? extends Component> parser) {
-            this.buffer.resolved = parse(source, parser);
         }
     }
 

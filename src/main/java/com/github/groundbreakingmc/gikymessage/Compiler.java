@@ -864,7 +864,7 @@ final class Compiler {
             switch (action) {
                 case ACTION_RUN -> {
                     selectedClickPriority = 0;
-                    selectedClickType = Token.MetaDyn.RUN;
+                    selectedClickType = Token.EventContent.RUN;
                     selectedClickDynamic = dynamic;
 
                     pageValue = -1;
@@ -882,7 +882,7 @@ final class Compiler {
 
                 case ACTION_SUGGEST -> {
                     selectedClickPriority = 1;
-                    selectedClickType = Token.MetaDyn.SUGGEST;
+                    selectedClickType = Token.EventContent.SUGGEST;
                     selectedClickDynamic = dynamic;
 
                     pageValue = -1;
@@ -900,7 +900,7 @@ final class Compiler {
 
                 case ACTION_URL -> {
                     selectedClickPriority = 2;
-                    selectedClickType = Token.MetaDyn.URL;
+                    selectedClickType = Token.EventContent.URL;
                     selectedClickDynamic = dynamic;
 
                     pageValue = -1;
@@ -918,7 +918,7 @@ final class Compiler {
 
                 case ACTION_COPY -> {
                     selectedClickPriority = 3;
-                    selectedClickType = Token.MetaDyn.COPY;
+                    selectedClickType = Token.EventContent.COPY;
                     selectedClickDynamic = dynamic;
 
                     pageValue = -1;
@@ -1154,7 +1154,7 @@ final class Compiler {
         final String clickValue = selectedClickValue;
         final boolean clickDynamic = selectedClickDynamic;
 
-        final ClickEvent staticClick = clickType != -1 && clickDynamic
+        final ClickEvent<?> staticClick = clickType != -1 && clickDynamic
                 ? null
                 : buildStaticClick(clickType, clickValue, pageValue);
 
@@ -1257,52 +1257,14 @@ final class Compiler {
         final Token segment;
         if (!clickDynamic && !showDynamic) {
             segment = contentToken;
-        } else if (clickDynamic && showDynamic) {
-            final DynamicValue dynamicClick = parseDynamicValue(
-                    clickValue,
-                    placeholders
-            );
-
-            final Token.DynamicHover dynamicHover =
-                    compileDynamicHover(
-                            showText,
-                            placeholders
-                    );
-
-            segment = new Token.MetaFullDyn(
-                    contentToken,
-                    clickType,
-                    dynamicClick.staticParts,
-                    dynamicClick.placeholderIndices,
-                    null,
-                    Token.MetaDyn.SHOW,
-                    null,
-                    null,
-                    dynamicHover
-            );
-        } else if (clickDynamic) {
-            final DynamicValue dynamicClick = parseDynamicValue(
-                    clickValue,
-                    placeholders
-            );
-
-            segment = new Token.MetaDyn(
-                    contentToken,
-                    clickType,
-                    dynamicClick.staticParts,
-                    dynamicClick.placeholderIndices,
-                    null
-            );
         } else {
-            segment = new Token.MetaDyn(
+            final DynamicValue click = clickDynamic ? parseDynamicValue(clickValue, placeholders) : null;
+            segment = new Token.EventContent(
                     contentToken,
-                    Token.MetaDyn.SHOW,
-                    Token.NO_PARTS,
-                    Token.NO_PH,
-                    compileDynamicHover(
-                            showText,
-                            placeholders
-                    )
+                    clickDynamic ? clickType : Token.EventContent.NONE,
+                    clickDynamic ? click.staticParts : Token.NO_PARTS,
+                    clickDynamic ? click.placeholderIndices : Token.NO_PH,
+                    showDynamic ? compileToken(showText, placeholders) : null
             );
         }
 
@@ -1580,13 +1542,6 @@ final class Compiler {
         return new DynamicValue(resultStatic, resultIndices);
     }
 
-    private static Token.DynamicHover compileDynamicHover(
-            String value,
-            PlaceholderTable outerPlaceholders
-    ) {
-        return new Token.DynamicHover(compileToken(value, outerPlaceholders));
-    }
-
     // Compares a character range with a string without allocating a substring.
     static boolean regionEquals(char[] src, int off, int len, String s) {
         if (s.length() != len) return false;
@@ -1638,8 +1593,7 @@ final class Compiler {
 
     private static boolean isDynamic(Token token) {
         return token instanceof Token.PlainDyn
-                || token instanceof Token.MetaDyn
-                || token instanceof Token.MetaFullDyn
+                || token instanceof Token.EventContent
                 || token instanceof Token.ObjDyn
                 || token instanceof Token.DynChildren
                 || token instanceof Token.LookContent
@@ -1872,9 +1826,9 @@ final class Compiler {
 
     // Like an invalid sprite key, a static value that Adventure rejects, such as a URL with
     // spaces or page 0, is a template error.
-    private static ClickEvent buildStaticClick(byte type, String value, int page) {
+    private static ClickEvent<?> buildStaticClick(byte type, String value, int page) {
         try {
-            if (type != -1) return Token.MetaFullDyn.buildClick(type, value);
+            if (type != -1) return Token.EventContent.buildClick(type, value);
             return page != -1 ? ClickEvent.changePage(page) : null;
         } catch (IllegalArgumentException rejected) {
             throw new TextFormatException("Invalid click value: " + (type != -1 ? value : page), rejected);

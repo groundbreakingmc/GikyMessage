@@ -38,7 +38,7 @@ final class StyleUtils {
             TextColor color,
             ShadowColor shadowColor,
             short decorations,
-            ClickEvent clickEvent,
+            ClickEvent<?> clickEvent,
             HoverEvent<?> hoverEvent,
             String insertion,
             Key font

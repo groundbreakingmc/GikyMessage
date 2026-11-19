@@ -260,146 +260,61 @@ interface Token {
         }
     }
 
-    final class DynamicHover {
+    // Replaces the click, the hover or both on the content root with ones built from
+    // placeholders, preserving its other styles and metadata.
+    final class EventContent implements Token {
 
-        private final Token content;
-
-        DynamicHover(Token content) {
-            this.content = content;
-        }
-
-        HoverEvent<?> render(Object[] placeholders, long[] numbers) {
-            return HoverEvent.showText(this.content.render(placeholders, numbers));
-        }
-
-
-    }
-
-    // Replaces one event on the content root, preserving its other styles and metadata.
-    final class MetaDyn implements Token {
-
+        static final byte NONE = -1;
         static final byte RUN = 0;
         static final byte SUGGEST = 1;
         static final byte URL = 2;
         static final byte COPY = 3;
-        static final byte SHOW = 4;
 
         private final Token content;
-        private final byte actionType;
-        private final String[] metaStatic;
-        private final int[] metaPh;
-        private final DynamicHover dynamicHover;
+        private final byte clickType;
+        private final String[] clickParts;
+        private final int[] clickPlaceholders;
+        // The tooltip, or null to keep the content's own.
+        private final Token hover;
 
-        MetaDyn(
-                Token content,
-                byte actionType,
-                String[] metaStatic,
-                int[] metaPh,
-                DynamicHover dynamicHover
-        ) {
+        EventContent(Token content, byte clickType, String[] clickParts, int[] clickPlaceholders, Token hover) {
             this.content = content;
-            this.actionType = actionType;
-            this.metaStatic = metaStatic;
-            this.metaPh = metaPh;
-            this.dynamicHover = dynamicHover;
+            this.clickType = clickType;
+            this.clickParts = clickParts;
+            this.clickPlaceholders = clickPlaceholders;
+            this.hover = hover;
         }
 
         @Override
-        public Component render(Object[] compPh, long[] numbers) {
-            final Component component = this.content.render(compPh, numbers);
+        public Component render(Object[] placeholders, long[] numbers) {
+            final Component component = this.content.render(placeholders, numbers);
             final Style baseStyle = component.style();
 
             ClickEvent<?> click = baseStyle.clickEvent();
             HoverEvent<?> hover = baseStyle.hoverEvent();
-
-            if (this.actionType == MetaDyn.SHOW) {
-                hover = this.dynamicHover.render(compPh, numbers);
-            } else {
-                final String value = buildText(this.metaStatic, this.metaPh, compPh, numbers);
-                click = MetaFullDyn.dynamicClick(this.actionType, value, click);
+            if (this.clickType != NONE) {
+                final String value = buildText(this.clickParts, this.clickPlaceholders, placeholders, numbers);
+                click = dynamicClick(this.clickType, value, click);
             }
-
-            final Style style = withEvents(baseStyle, click, hover);
-            return style == baseStyle ? component : component.style(style);
-        }
-    }
-
-    // Replaces up to two events on the content root.
-    final class MetaFullDyn implements Token {
-
-        private final Token content;
-        private final byte actionType;
-        private final String[] metaStatic;
-        private final int[] metaPh;
-        private final DynamicHover dynamicHover;
-        private final byte action2Type;
-        private final String[] meta2Static;
-        private final int[] meta2Ph;
-        private final DynamicHover dynamicHover2;
-
-        MetaFullDyn(
-                Token content,
-                byte actionType,
-                String[] metaStatic,
-                int[] metaPh,
-                DynamicHover dynamicHover,
-                byte action2Type,
-                String[] meta2Static,
-                int[] meta2Ph,
-                DynamicHover dynamicHover2
-        ) {
-            this.content = content;
-            this.actionType = actionType;
-            this.metaStatic = metaStatic;
-            this.metaPh = metaPh;
-            this.dynamicHover = dynamicHover;
-            this.action2Type = action2Type;
-            this.meta2Static = meta2Static;
-            this.meta2Ph = meta2Ph;
-            this.dynamicHover2 = dynamicHover2;
-        }
-
-        @Override
-        public Component render(Object[] compPh, long[] numbers) {
-            final Component component = this.content.render(compPh, numbers);
-            final Style baseStyle = component.style();
-
-            ClickEvent<?> click = baseStyle.clickEvent();
-            HoverEvent<?> hover = baseStyle.hoverEvent();
-
-            if (this.actionType == MetaDyn.SHOW) {
-                hover = this.dynamicHover.render(compPh, numbers);
-            } else {
-                final String value = buildText(this.metaStatic, this.metaPh, compPh, numbers);
-                click = MetaFullDyn.dynamicClick(this.actionType, value, click);
-            }
-
-            if (this.action2Type != -1) {
-                if (this.action2Type == MetaDyn.SHOW) {
-                    hover = this.dynamicHover2.render(compPh, numbers);
-                } else {
-                    final String value2 = buildText(this.meta2Static, this.meta2Ph, compPh, numbers);
-                    click = MetaFullDyn.dynamicClick(this.action2Type, value2, click);
-                }
-            }
+            if (this.hover != null) hover = HoverEvent.showText(this.hover.render(placeholders, numbers));
 
             final Style style = withEvents(baseStyle, click, hover);
             return style == baseStyle ? component : component.style(style);
         }
 
-        static ClickEvent buildClick(byte type, String value) {
+        static ClickEvent<?> buildClick(byte type, String value) {
             return switch (type) {
-                case MetaDyn.RUN -> ClickEvent.runCommand(value);
-                case MetaDyn.SUGGEST -> ClickEvent.suggestCommand(value);
-                case MetaDyn.URL -> ClickEvent.openUrl(value);
-                case MetaDyn.COPY -> ClickEvent.copyToClipboard(value);
+                case RUN -> ClickEvent.runCommand(value);
+                case SUGGEST -> ClickEvent.suggestCommand(value);
+                case URL -> ClickEvent.openUrl(value);
+                case COPY -> ClickEvent.copyToClipboard(value);
                 default -> throw new IllegalStateException("Not a click action: " + type);
             };
         }
 
         // Newer Adventure rejects some values, such as a URL with spaces. A placeholder value
         // must not fail the render, so a rejected one leaves the content's click as it was.
-        static ClickEvent<?> dynamicClick(byte type, String value, ClickEvent<?> current) {
+        private static ClickEvent<?> dynamicClick(byte type, String value, ClickEvent<?> current) {
             try {
                 return buildClick(type, value);
             } catch (IllegalArgumentException rejected) {
@@ -1159,7 +1074,7 @@ interface Token {
 
     private static Style withEvents(
             Style baseStyle,
-            ClickEvent clickEvent,
+            ClickEvent<?> clickEvent,
             HoverEvent<?> hoverEvent
     ) {
         Style style = baseStyle;

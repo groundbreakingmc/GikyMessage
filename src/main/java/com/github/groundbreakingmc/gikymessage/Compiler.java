@@ -189,6 +189,14 @@ final class Compiler {
                 final boolean willChangeDeco = code == 'l' || code == 'o' || code == 'n'
                         || code == 'm' || code == 'k' || code == 'r';
 
+                // A code that leaves the look as it is does not split the text.
+                final TextColor nextColor = hexColor != -1 ? StyleUtils.textColorOf(hexColor) : legacyColor;
+                if ((willChangeColor || willChangeDeco)
+                        && keepsLook(code, nextColor, curDeco, curColor, curShadow, inhDeco, inhColor, inhShadow)) {
+                    pos = hexColor != -1 ? digits + 6 : pos + 2;
+                    continue;
+                }
+
                 if (willChangeColor || willChangeDeco) {
                     final Token styleFlush = flushText(textBuf, dynStatic, dynPh, dynPhCnt, hasDyn,
                             curDeco, curColor, curShadow, inhDeco, inhColor, inhShadow);
@@ -216,8 +224,8 @@ final class Compiler {
 
                 // A color starts plain text in that color, as classic codes do: styles and the
                 // shadow end with it.
-                if (hexColor != -1 || legacyColor != null) {
-                    curColor = hexColor != -1 ? StyleUtils.textColorOf(hexColor) : legacyColor;
+                if (nextColor != null) {
+                    curColor = nextColor;
                     curDeco = StyleUtils.resetDecorations(inhDeco);
                     curShadow = inhShadow == null ? null : ShadowColor.none();
                     pos = hexColor != -1 ? digits + 6 : pos + 2;
@@ -270,6 +278,13 @@ final class Compiler {
                 final int shadowColor = StyleUtils.parseHex(src, digits);
                 if (shadowColor != -1) {
                     if (!Platform.SHADOW_COLORS) throw unsupported("Shadow colors", "4.18");
+                    // Opaque unless an alpha follows the color: $#ff5555:80.
+                    final int alpha = StyleUtils.parseAlpha(src, digits + 6);
+                    final ShadowColor nextShadow = StyleUtils.shadowColorOf((alpha == -1 ? 0xFF : alpha) << 24 | shadowColor);
+                    if (same(nextShadow, curShadow)) {
+                        pos = digits + (alpha == -1 ? 6 : 9);
+                        continue;
+                    }
                     // Flush accumulated text before the shadow style changes.
                     final Token shadowFlush = flushText(textBuf, dynStatic, dynPh, dynPhCnt, hasDyn,
                             curDeco, curColor, curShadow, inhDeco, inhColor, inhShadow);
@@ -293,9 +308,7 @@ final class Compiler {
                     textBuf.setLength(0);
                     dynPhCnt = 0;
                     hasDyn = false;
-                    // Opaque unless an alpha follows the color: $#ff5555:80.
-                    final int alpha = StyleUtils.parseAlpha(src, digits + 6);
-                    curShadow = StyleUtils.shadowColorOf((alpha == -1 ? 0xFF : alpha) << 24 | shadowColor);
+                    curShadow = nextShadow;
                     pos = digits + (alpha == -1 ? 6 : 9);
                     continue;
                 }
@@ -482,6 +495,27 @@ final class Compiler {
                 : buildRootToken(rootTokens, rootTokenCnt, canHoistRootStyle);
 
         return root;
+    }
+
+    // Whether a valid code gives the text the look it already has: a color code, when nextColor
+    // is not null, &r, or a decoration. It reads the look the code would start from now.
+    private static boolean keepsLook(char code, TextColor nextColor, short deco, TextColor color, ShadowColor shadow,
+                                     short inhDeco, TextColor inhColor, ShadowColor inhShadow) {
+        if (nextColor == null && code != 'r') {
+            return StyleUtils.withDecoration(deco, StyleUtils.decorationOf(code), StyleUtils.BIT_TRUE) == deco;
+        }
+        // A color and &r both end decorations and the shadow.
+        final TextColor resetColor = nextColor != null ? nextColor : inhColor == null ? null : NamedTextColor.WHITE;
+        return StyleUtils.resetDecorations(inhDeco) == deco
+                && same(inhShadow == null ? null : ShadowColor.none(), shadow)
+                && same(resetColor, color);
+    }
+
+    // The same color or shadow. Instances of different classes, such as a named color and a hex
+    // one on an Adventure that keeps them apart, stay different.
+    private static boolean same(Object first, Object second) {
+        return first == second || first != null && second != null && first.getClass() == second.getClass()
+                && first.equals(second);
     }
 
     private static Token flushText(

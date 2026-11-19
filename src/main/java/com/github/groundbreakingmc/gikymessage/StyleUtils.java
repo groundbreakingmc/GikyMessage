@@ -65,6 +65,18 @@ final class StyleUtils {
         return builder.build();
     }
 
+    // The decoration of a lower-case code letter: k, l, m, n or o; null for any other.
+    static TextDecoration decorationOf(char code) {
+        return switch (code) {
+            case 'k' -> TextDecoration.OBFUSCATED;
+            case 'l' -> TextDecoration.BOLD;
+            case 'm' -> TextDecoration.STRIKETHROUGH;
+            case 'n' -> TextDecoration.UNDERLINED;
+            case 'o' -> TextDecoration.ITALIC;
+            default -> null;
+        };
+    }
+
     static short withDecoration(short decorations, TextDecoration decoration, int state) {
         final int shift = decoration.ordinal() * BITS;
         final int mask = MASK << shift;
@@ -251,14 +263,7 @@ final class StyleUtils {
             final boolean reset;
             if (first == '&' || first == '§') {
                 final char code = Character.toLowerCase(chars[start + 1]);
-                decoration = switch (code) {
-                    case 'k' -> TextDecoration.OBFUSCATED;
-                    case 'l' -> TextDecoration.BOLD;
-                    case 'm' -> TextDecoration.STRIKETHROUGH;
-                    case 'n' -> TextDecoration.UNDERLINED;
-                    case 'o' -> TextDecoration.ITALIC;
-                    default -> null;
-                };
+                decoration = decorationOf(code);
                 reset = code == 'r';
             } else {
                 final String name = value.substring(start, index).toLowerCase(java.util.Locale.ROOT);

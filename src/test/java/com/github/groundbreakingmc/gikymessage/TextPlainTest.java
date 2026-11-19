@@ -2,12 +2,15 @@ package com.github.groundbreakingmc.gikymessage;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.ShadowColor;
 import net.kyori.adventure.text.format.Style;
 import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * Tests for plain text rendering: no-style text, legacy color codes (all 16),
@@ -156,6 +159,20 @@ class TextPlainTest extends TextTestBase {
                             .append(Component.text(" Italic", Style.style(TextDecoration.ITALIC))),
                     "&lBold&r Normal&o Italic"
             );
+        }
+
+        @Test
+        @DisplayName("A code that changes nothing keeps the text in one piece")
+        void repeatedCodesDoNotSplitText() {
+            assertRenders(Component.text("Gray text", NamedTextColor.GRAY), "&7Gray &7text");
+            assertRenders(Component.text("Bold", Style.style(NamedTextColor.RED, TextDecoration.BOLD)), "&c&l&lBold");
+            assertRenders(Component.text("Plain"), "&r&rPlain");
+            assertRenders(Component.text("AB").shadowColor(ShadowColor.shadowColor(0xFF000000)),
+                    "$#000000A$000000B");
+            // Adventure gives the hex code of a named color that named color.
+            assertRenders(Component.text("AB", TextColor.color(0xFF5555)), "&cA&#ff5555B");
+            // After a group the outer color is back, so repeating it changes nothing.
+            assertEquals(Text.of("&7[&eA] B").render(), Text.of("&7[&eA] &7B").render());
         }
     }
 

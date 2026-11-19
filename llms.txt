@@ -40,10 +40,15 @@ https://github.com/groundbreakingmc/GikyMessage/tree/main/wiki
 | `$#RRGGBB:AA` | Shadow with alpha after a colon: `00` transparent … `ff` opaque. |
 | `$#000000:00` | No shadow. |
 
-- A color code does NOT end decorations: in `&6&lSkyCraft &7survival` the word "survival" is gray
-  and still bold. End decorations with `&r` or scope them: `[&6&lSkyCraft] &7survival`.
-- A color or shadow lasts until the next color or shadow code, `&r`, or the end of the enclosing
-  `[...]`. A decoration lasts until `&r` or the end of the enclosing `[...]`.
+- A color code ends decorations and the shadow, as in classic `§` codes: in
+  `&6&lSkyCraft &7survival` the word "survival" is gray and not bold, and `&l&6Title` is plain gold.
+  Write the color first, then the decorations and the shadow: `&6&l`, `&f$#ff5555`. To end
+  decorations without a new color, use `&r` or a scope: `&a[&lSkyCraft] welcomes you`.
+- A color lasts until the next color code, `&r`, or the end of the enclosing `[...]`. A decoration
+  or a shadow lasts until a color code, `&r`, or the end of the enclosing `[...]`; a new shadow code
+  replaces the shadow.
+- A color code inside a segment also ends the decorations and the shadow the segment inherits: in
+  `[&lA [&cB] C]` only "B" is not bold. Write `[&lA [&c&lB] C]` to keep it bold.
 - `&`, `#` or `$` that does not start a valid code is literal: `Tom & Jerry`, `#1`, `$5`.
 - A hex code is exactly six `0-9a-fA-F` digits and has no shorter form: `&#f80` and `$#f80` are
   literal text. The text after a code can start with any character: `&#ff8800Bad` is "Bad" in
@@ -102,9 +107,12 @@ accepted.
   escape the brackets: `\[see\](here)`.
 - Segments nest. An inner segment's click and hover win for its own text:
   `[&7Click [&ehere](run:/spawn) &7now](show:&7Tip)`.
-- A segment's `color:`, or a color in its `style:`, applies to everything inside it and overrides
-  colors set inside, nested segments included; `style:reset` overrides every style inside. When the
-  text has several colors, use `&` codes instead of `color:`.
+- A segment's `color:`, `style:` and `shadow:` set only what its own text leaves unset. Codes inside
+  the segment, nested segments and formatted parts that placeholders insert keep their look:
+  `&a[&bText](color:red)` stays aqua. The look from codes before the segment is replaced:
+  `&7[{message}](style:gold)` is gold.
+- `force-color:`, `force-style:` and `force-shadow:` override everything inside the segment, nested
+  segments and placeholder parts included: `[&bText](force-color:red)` is red.
 
 ### 3.1 Action list syntax
 
@@ -118,8 +126,10 @@ accepted.
 - Inside quotes `\"` and `\'` give a quote and `\\` gives `\`. Every other backslash stays, so `\n`,
   `\[` and the other escapes of section 6 work inside quotes as they do without them. A quoted value
   keeps its leading and trailing spaces.
-- Repeated actions: `color` and `style` use the first occurrence; other actions use the last one,
-  except `if` in a segment with branches (section 4).
+- Repeated actions: `color`, `style`, `shadow` and their `force-` versions use the first
+  occurrence; other actions use the last one, except `if` in a segment with branches (section 4).
+- `color` wins over the color in `style`, and `shadow` over the shadow in `style`. A `force-` action
+  wins over a plain one: `[Text](color:red, force-color:blue)` is blue.
 - One click per segment. With several click actions the winner is `run`, then `suggest`, `url`,
   `copy`, `page`.
 - One content action per segment: `head`, then `sprite`, `lang`.
@@ -135,9 +145,11 @@ accepted.
 | `page` | page number, 1 or more | no | Click: turns the book to that page. |
 | `show` | GikyMessage text | yes | Hover tooltip. Codes, placeholders, segments and `\n` work inside. |
 | `insert` | text | no, `{key}` stays literal | Shift-click: inserts the text into the chat input. |
-| `color` | `red`, `c`, `&c`, `#ff5555`, `&#ff5555`, `&x&f&f&5&5&5&5`, or a gradient: two or more of them joined by `-` without spaces, e.g. `#ff5555-#5555ff` or `red-blue` | yes | Color of the whole segment, overriding colors inside it. A gradient colors the characters along its colors and keeps decorations. An invalid value is ignored. |
-| `style` | words separated by spaces: `bold` `italic` `underlined` (or `underline`) `strikethrough` `obfuscated` `reset`, color names, `&` codes, gradients such as `c-e`; e.g. `style:"gold bold"` | yes | Style of the whole segment. `reset` means white with every decoration explicitly off; later words apply on top: `style:"reset gray"`. |
-| `phase` | number, a full loop is `1` | no | Shifts the colors of the segment's gradients along the text; `0` and `1` look the same, negative values move the other way. |
+| `color` | `red`, `c`, `&c`, `#ff5555`, `&#ff5555`, `&x&f&f&5&5&5&5`, or a gradient: two or more of them joined by `-` without spaces, e.g. `#ff5555-#5555ff` or `red-blue` | yes | Color of the segment where its text sets none (section 3). A gradient spreads its colors over the characters and keeps decorations; characters with a color of their own keep it, and the gradient goes on after them. An invalid value is ignored. |
+| `style` | words separated by spaces: `bold` `italic` `underlined` (or `underline`) `strikethrough` `obfuscated` `reset`, color names, `&` codes, shadows such as `$#000000:80`, gradients of colors (`c-e`) or of shadows (`$#000000-#333333`); e.g. `style:"gold bold $#000000:80"` | yes | Color, decorations and shadow of the segment where its text sets none (section 3). `reset` means white, no shadow and every decoration explicitly off; later words apply on top: `style:"reset gray"`. An invalid value is ignored. |
+| `shadow` | `#000000`, `$#000000`, `000000`, each with an optional alpha such as `#000000:80`; `none`; or a gradient: `#000000-#333333` | yes | Shadow of the segment where its text sets none (Minecraft 1.21.4+). A value from a placeholder needs no `$`. An invalid value is ignored. |
+| `force-color`, `force-style`, `force-shadow` | as `color`, `style`, `shadow` | yes | The same look over everything inside the segment (section 3). A forced gradient colors every character. `force-style:reset` also removes every shadow inside. |
+| `phase` | number, a full loop is `1` | no | Shifts the segment's gradients, of colors and of shadows, along the text; `0` and `1` look the same, negative values move the other way. |
 | `font` | resource key; the namespace defaults to `minecraft` | no | Font: `font:uniform`. |
 | `head` | player name | yes | Replaces the segment with that player's head (Minecraft 1.21.9+). If a name from a placeholder can't belong to a player (spaces, more than 16 characters), the segment's text is shown instead; a fixed invalid name is a load error. |
 | `sprite` | key of a texture in the blocks atlas: `block/stone`; a resource pack's `assets/myserver/textures/block/coin.png` is `myserver:block/coin` | no | Replaces the segment with that texture (Minecraft 1.21.9+). Only the blocks atlas is used; item textures are in a separate atlas since Minecraft 1.21.11. |
@@ -221,9 +233,12 @@ The MiniMessage format itself: https://docs.papermc.io/adventure/minimessage/for
    six `0-9a-fA-F` characters becomes `\#` or `\$`; MiniMessage's `\<` becomes `<`.
 3. Tags that are not standard MiniMessage tags are the plugin's placeholders: `<player>` →
    `{player}`.
-4. Colors and decorations become `&` codes where the tag opens. A closing tag becomes the end of a
-   `[...]` scope: `<red>Error</red> details` → `[&cError] details`. The scope can be left out where
-   the following text sets its own color anyway and no decoration was active.
+4. Colors, decorations and shadows become `&` and `$` codes where the tag opens. A color code ends
+   the decorations and the shadow (section 1), so write the color first and, after every color
+   code, repeat the decorations and the shadow that are still open:
+   `<bold>A <red>B</red> C</bold>` → `[&lA [&c&lB] C]`. A closing tag becomes the end of a `[...]`
+   scope: `<red>Error</red> details` → `[&cError] details`. The scope can be left out where the
+   text after it starts with a color code.
 5. Click, hover, insert, font, gradient, rainbow, lang, head and sprite tags become actions of a
    segment around the text they wrap. Tags that wrap the same text become one segment with several
    actions. Ranges that overlap without nesting are split into several segments.
@@ -244,7 +259,7 @@ The MiniMessage format itself: https://docs.papermc.io/adventure/minimessage/for
 | `<underlined>`, `<u>` | `&n` |
 | `<strikethrough>`, `<st>` | `&m` |
 | `<obfuscated>`, `<obf>` | `&k` |
-| `<!bold>`, `<bold:false>`, the same for other decorations | No code. Restructure so the decoration is never on for that text: end it with `]` or with `&r` plus the color again. For item names and lore see section 9. |
+| `<!bold>`, `<bold:false>`, the same for other decorations | No code. Restructure so the decoration is never on for that text: end it with `]`, with a color code, or with `&r` plus the color again. For item names and lore see section 9. |
 | `<reset>` | `&r`; also end any segment that is open at that point |
 | `<shadow:black>`, `<shadow:#000000>` | `$#000000:40` (MiniMessage's default alpha 0.25 = `40`) |
 | `<shadow:#ff0000:0.5>` | `$#ff0000:80` (alpha × 255 as two hex digits: 0.25 → `40`, 0.5 → `80`, 1 → `ff`) |
@@ -291,6 +306,7 @@ a placeholder value instead.
 | `<red><bold>Warning:</bold> the server restarts in <time>` | `&c[&lWarning:] the server restarts in {time}` |
 | `<red><bold>Alert<reset>: restart in <time>` | `&c&lAlert&r: restart in {time}` |
 | `<b>Bold</b> normal <i>italic</i>` | `[&lBold] normal [&oitalic]` |
+| `<bold><gold>Shop</gold><gray> is open</gray></bold>` | `&6&lShop&7&l is open` |
 | `<gray>[<gold>VIP</gold>] <white><player>` | `&7\[&6VIP&7\] &f{player}` |
 | `<gradient:#55ffff:#5555ff><bold>SkyCraft</bold></gradient> <gray>» <white>Welcome!` | `[&lSkyCraft](color:#55ffff-#5555ff) &7» &fWelcome!` |
 | `<click:run_command:/spawn><hover:show_text:'<green>Click to teleport'><gold>[Spawn]</gold></hover></click>` | `[&6\[Spawn\]](run:/spawn, show:&aClick to teleport)` |
@@ -299,6 +315,7 @@ a placeholder value instead.
 | `<hover:show_text:'<gray>Rules: be nice, no spam<newline>No cheats'><yellow>[?]</yellow></hover>` | `[&e\[?\]](show:"&7Rules: be nice, no spam\nNo cheats")` |
 | `<red>Line one<newline><gray>Line two` | `&cLine one\n&7Line two` |
 | `<shadow:black>Shadowed</shadow> text` | `[$#000000:40Shadowed] text` |
+| `<shadow:black><white>Title` | `&f$#000000:40Title` |
 | `<gray>You found <lang_or:item.minecraft.diamond:Diamond>!` | `&7You found [Diamond](lang:item.minecraft.diamond)!` |
 | `<rainbow>Rainbow text</rainbow>` | `[Rainbow text](color:#ff0000-#ffff00-#00ff00-#00ffff-#0000ff-#ff00ff)` |
 | `<gray>R&D team` | `&7R\&D team` |
@@ -318,16 +335,15 @@ join: '&7\[&a+&7\] &f{player} joined'
 1. `§` becomes `&`.
 2. Hex colors in other notations become `&#RRGGBB`: `&x&f&f&8&8&0&0` (or with `§`), `<#ff8800>`,
    `{#ff8800}`. `&#ff8800` and `#ff8800` stay.
-3. In legacy text a color code switches decorations off; in GikyMessage it does not. Where a color
-   code follows an active `&l` `&o` `&n` `&m` or `&k`, put `&r` right before it. A decoration placed
-   directly before a color code had no effect in legacy text; drop it.
+3. A color code ends decorations in GikyMessage as in legacy text, so the codes keep their order
+   and meaning. A decoration placed directly before a color code has no effect; drop it.
 4. Escape literal `[` `]` `{` `}` `\`, and a `#` or `$` followed by six `0-9a-fA-F` characters that
    is meant as text, such as the price `$100000` (section 6).
 5. Placeholders in other syntaxes become the keys the plugin supplies: `%player%` → `{player}`.
 
 | Legacy | GikyMessage |
 |---|---|
-| `&6&lSkyCraft &7» &fWelcome, %player%!` | `&6&lSkyCraft &r&7» &fWelcome, {player}!` |
+| `&6&lSkyCraft &7» &fWelcome, %player%!` | `&6&lSkyCraft &7» &fWelcome, {player}!` |
 | `§cError: §7unknown command` | `&cError: &7unknown command` |
 | `&x&f&f&8&8&0&0Orange` | `&#ff8800Orange` |
 | `&8[&6VIP&8] &f%player%` | `&8\[&6VIP&8\] &f{player}` |
@@ -338,12 +354,11 @@ join: '&7\[&a+&7\] &f{player} joined'
 Minecraft shows item names and lore in italic unless italic is explicitly switched off, and
 GikyMessage has no code that switches it off; `&r` does not. Prefer to let the plugin remove the
 default italic in code with `decorationIfAbsent(TextDecoration.ITALIC, TextDecoration.State.FALSE)`.
-If it must happen in the text, give every run of one color its own segment whose `style:` is `reset`
-plus that color, because `style:reset` turns all decorations off but also overrides colors inside
-the segment:
+If it must happen in the text, wrap the line in a segment with `style:reset`: it switches every
+decoration off where the codes inside leave it unset, and the colors inside stay:
 
 ```text
-[Deals ](style:"reset gray")[+5](style:"reset red")[ damage](style:"reset gray")
+[&7Deals &c+5&7 damage](style:reset)
 ```
 
 ## 10. Writing new messages
@@ -397,7 +412,7 @@ a message that can't work, such as `url:` with a fixed invalid address.
 | Feature | Adventure on the server | Minecraft on the player's side |
 |---|---|---|
 | `lang:` | 4.13+ | 1.19.4+ to show the fallback text |
-| `$#` shadows | 4.18+ | 1.21.4+ |
+| `$#` shadows, `shadow:`, `force-shadow:`, shadow gradients | 4.18+ | 1.21.4+ |
 | `head:`, `sprite:` | 4.25+ | 1.21.9+ |
 
 On an older Adventure, a message that uses these features fails to load with a
@@ -415,7 +430,10 @@ On an older Adventure, a message that uses these features fails to load with a
 - `color:` and `style:` use `gray` and `dark_gray`, never `grey`.
 - Hex colors and shadows have exactly six digits, and a shadow's alpha follows a colon:
   `$#000000:80`.
-- Decorations end where the source ended them: `]` or `&r`.
+- Each color code comes before the decorations and the shadow it goes with: `&6&l`,
+  `&f$#000000:80`.
+- Decorations and shadows end where the source ended them: `]`, `&r` or a color code; after a
+  color code, the ones that go on are written again.
 - Optional parts keep their spaces inside their brackets.
 - Placeholder keys match the plugin's keys exactly.
 - YAML values are in single quotes, with `''` for an apostrophe.

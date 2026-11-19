@@ -38,6 +38,20 @@ gradient goes on after them. `force-color:` colors every letter:
 [Welcome to &eSkyCraft](force-color:#55ffff-#5555ff)   the whole line is a gradient
 ```
 
+## Shadow gradients
+
+`shadow:` takes a gradient of [shadows](colors.md#text-shadow) the same way. Each shadow is written
+as in `shadow:`, with or without `$` and `#`, and may have a transparency after a colon:
+
+```text
+[&fSkyCraft](shadow:#ff5555-#5555ff)
+[&fSkyCraft](shadow:#000000:80-#333333:40)
+```
+
+Letters with a shadow of their own keep it; `force-shadow:` covers every letter. Shadow gradients
+need what shadows need: Minecraft 1.21.4 or newer for players and Adventure 4.18 or newer on the
+server.
+
 ## With placeholders
 
 The gradient is spread over the final text, so it fits a short name and a long one alike:
@@ -75,7 +89,8 @@ run along the text:
 ![Animation: the colors flow along the word SkyCraft](images/en/grad-animated.svg)
 
 GikyMessage doesn't animate anything by itself: your plugin re-sends the text with the next phase.
-Negative phases move the colors the other way.
+Negative phases move the colors the other way. `phase:` shifts every gradient of the segment: the
+colors and the shadows.
 
 ## Good to know
 

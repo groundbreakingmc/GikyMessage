@@ -14,8 +14,8 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Gradients in {@code color} and {@code force-color}: a value of colors joined by {@code -} is
- * spread over the characters of the segment.
+ * Gradients in {@code color} and {@code shadow}, and their forced forms: a value of colors
+ * joined by {@code -} is spread over the characters of the segment.
  */
 class TextGradientTest extends TextTestBase {
 
@@ -26,28 +26,39 @@ class TextGradientTest extends TextTestBase {
 
     private static final ShadowColor BLACK_SHADOW = ShadowColor.shadowColor(0xFF000000);
     private static final ShadowColor BLUE_SHADOW = ShadowColor.shadowColor(0xFF0000FF);
+    private static final ShadowColor NAVY_SHADOW = ShadowColor.shadowColor(0xFF000080);
 
     /** The text of every non-empty text node, in order. */
     private static List<String> texts(Component component) {
         final List<String> texts = new ArrayList<>();
-        walk(component, null, texts, null);
+        walk(component, null, null, texts, null, null);
         return texts;
     }
 
     /** The effective color of every non-empty text node, in order. */
     private static List<TextColor> colors(Component component) {
         final List<TextColor> colors = new ArrayList<>();
-        walk(component, null, null, colors);
+        walk(component, null, null, null, colors, null);
         return colors;
     }
 
-    private static void walk(Component component, TextColor color, List<String> texts, List<TextColor> colors) {
+    /** The effective shadow of every non-empty text node, in order. */
+    private static List<ShadowColor> shadows(Component component) {
+        final List<ShadowColor> shadows = new ArrayList<>();
+        walk(component, null, null, null, null, shadows);
+        return shadows;
+    }
+
+    private static void walk(Component component, TextColor color, ShadowColor shadow,
+                             List<String> texts, List<TextColor> colors, List<ShadowColor> shadows) {
         final TextColor ownColor = component.color() != null ? component.color() : color;
+        final ShadowColor ownShadow = component.shadowColor() != null ? component.shadowColor() : shadow;
         if (component instanceof TextComponent text && !text.content().isEmpty()) {
             if (texts != null) texts.add(text.content());
             if (colors != null) colors.add(ownColor);
+            if (shadows != null) shadows.add(ownShadow);
         }
-        for (final Component child : component.children()) walk(child, ownColor, texts, colors);
+        for (final Component child : component.children()) walk(child, ownColor, ownShadow, texts, colors, shadows);
     }
 
     /** The first text node with this text. */
@@ -118,6 +129,33 @@ class TextGradientTest extends TextTestBase {
     }
 
     @Test
+    void shadowTakesAGradient() {
+        assertEquals(List.of(BLACK_SHADOW, NAVY_SHADOW, BLUE_SHADOW),
+                shadows(Text.of("[ABC](shadow:#000000-#0000ff)").render()));
+        for (final String value : new String[]{"$#000000-$#0000ff", "$#000000-#0000ff", "000000-$0000ff", "#000000:ff-0000ff"}) {
+            assertEquals(Text.of("[ABC](shadow:#000000-#0000ff)").render(),
+                    Text.of("[ABC](shadow:" + value + ")").render(), value);
+        }
+        // Alpha is spread like the color.
+        assertEquals(List.of(ShadowColor.shadowColor(0x80000000), ShadowColor.shadowColor(0x601A1A1A),
+                        ShadowColor.shadowColor(0x40333333)),
+                shadows(Text.of("[ABC](shadow:#000000:80-#333333:40)").render()));
+        assertEquals(Text.of("[ABC](shadow:#000000-#0000ff)").render(),
+                render("[ABC](shadow:{format})", "#000000-#0000ff"));
+    }
+
+    @Test
+    void aPlainShadowGradientKeepsTheShadowsInside() {
+        final ShadowColor red = ShadowColor.shadowColor(0xFFFF0000);
+        // BC keeps its shadow and is not split; the gradient still counts it.
+        final Component plain = Text.of("[A$#ff0000BC](shadow:#000000-#0000ff)").render();
+        assertEquals(List.of("A", "BC"), texts(plain));
+        assertEquals(List.of(BLACK_SHADOW, red), shadows(plain));
+        assertEquals(List.of(BLACK_SHADOW, NAVY_SHADOW, BLUE_SHADOW),
+                shadows(Text.of("[A$#ff0000BC](force-shadow:#000000-#0000ff)").render()));
+    }
+
+    @Test
     void aColorGradientWinsOverTheColorOfStyle() {
         assertEquals(List.of(RED, BLUE), colors(Text.of("[AB](style:green, color:#ff0000-#0000ff)").render()));
     }
@@ -141,9 +179,18 @@ class TextGradientTest extends TextTestBase {
     }
 
     @Test
+    void phaseShiftsColorAndShadowGradients() {
+        assertEquals(List.of(BLUE, PURPLE, RED), colors(Text.of("[ABC](color:#ff0000-#0000ff, phase:0.5)").render()));
+        assertEquals(List.of(BLUE_SHADOW, NAVY_SHADOW, BLACK_SHADOW),
+                shadows(Text.of("[ABC](shadow:#000000-#0000ff, phase:0.5)").render()));
+    }
+
+    @Test
     void contentThatIsNotTextTakesTheFirstColor() {
         assertEquals(Component.translatable("myserver.ab", "AB").color(RED),
                 Text.of("[AB](color:#ff0000-#0000ff, lang:myserver.ab)").render());
+        assertEquals(Component.translatable("myserver.ab", "AB").shadowColor(BLACK_SHADOW),
+                Text.of("[AB](shadow:#000000-#0000ff, lang:myserver.ab)").render());
         assertEquals(Component.translatable("item.minecraft.diamond").color(RED),
                 render("[{item}](color:#ff0000-#0000ff)", Component.translatable("item.minecraft.diamond")).compact());
     }

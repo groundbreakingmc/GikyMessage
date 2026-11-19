@@ -144,7 +144,8 @@ values separated by spaces: colors, the words `bold`, `italic`, `underlined`, `s
 ```
 
 `shadow:` sets only the shadow, so its placeholder needs no `$`. It takes a shadow as text writes
-it, with or without `$` and `#`, such as `#ff5555` or `$#ff5555:80`, or `none` for no shadow:
+it, with or without `$` and `#`, such as `#ff5555` or `$#ff5555:80`, `none` for no shadow, or a
+[shadow gradient](gradients.md#shadow-gradients) such as `#000000-#333333`:
 
 ```text
 [{player}](shadow:{team_shadow})

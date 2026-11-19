@@ -193,24 +193,25 @@ final class StyleUtils {
     // Returns null for any other text.
     static Look parseColorLook(String value, float phase) {
         final TextColor color = parseColor(value);
-        if (color != null) return new Look(value, Style.style(color), null);
+        if (color != null) return new Look(value, Style.style(color), null, null);
         final int[] stops = colorStops(value, 0, value.length());
-        return stops == null ? null : new Look(value, Style.empty(), new Look.Gradient(stops, phase));
+        return stops == null ? null : new Look(value, Style.empty(), new Look.Gradient(stops, false, phase), null);
     }
 
-    // A shadow value: none, or a shadow as in text with or without $ and #, such as $#ff5555,
-    // #ff5555:80 or ff5555. Returns null for any other text. Where the platform has no shadow
-    // colors, a valid value gives an empty look: the compiler rejects a fixed one there.
-    static Look parseShadowLook(String value) {
+    // A shadow value: none, or shadows joined by -, each as in text with or without $ and #, such
+    // as $#ff5555, #ff5555:80 or ff5555. Returns null for any other text. Where the platform has
+    // no shadow colors, a valid value gives an empty look: the compiler rejects a fixed one there.
+    static Look parseShadowLook(String value, float phase) {
         if (value.equals("none")) {
-            return new Look(value, Platform.SHADOW_COLORS ? Shadows.noneStyle() : Style.empty(), null);
+            return new Look(value, Platform.SHADOW_COLORS ? Shadows.noneStyle() : Style.empty(), null, null);
         }
         final char[] chars = value.toCharArray();
-        if (shadowEnd(chars, 0) != chars.length) return null;
-        if (!Platform.SHADOW_COLORS) return new Look(value, Style.empty(), null);
-        final int digits = shadowDigits(chars, 0);
-        final int alpha = parseAlpha(chars, digits + 6);
-        return new Look(value, shadowStyle((alpha == -1 ? 0xFF : alpha) << 24 | parseHex(chars, digits)), null);
+        if (shadowsEnd(chars, 0) != chars.length) return null;
+        if (!Platform.SHADOW_COLORS) return new Look(value, Style.empty(), null, null);
+        final int[] stops = shadowValues(chars, 0, chars.length);
+        return stops.length == 1
+                ? new Look(value, shadowStyle(stops[0]), null, null)
+                : new Look(value, Style.empty(), null, new Look.Gradient(stops, true, phase));
     }
 
     // A style value. Returns null for invalid formatting; empty input produces an empty look. A
@@ -292,7 +293,7 @@ final class StyleUtils {
                 color = parsed;
             }
         }
-        return new Look(value, create(color, shadowColor, decorations), null);
+        return new Look(value, create(color, shadowColor, decorations), null, null);
     }
 
     // Two or more colors joined by - between start and end, as RGB; null for any other text.
@@ -312,11 +313,34 @@ final class StyleUtils {
         return count == stops.length ? stops : Arrays.copyOf(stops, count);
     }
 
+    // The end of shadows joined by - from index, or -1 when one of them is invalid.
+    private static int shadowsEnd(char[] chars, int index) {
+        int end = shadowEnd(chars, index);
+        while (end != -1 && end < chars.length && chars[end] == '-') end = shadowEnd(chars, end + 1);
+        return end;
+    }
+
     // The end of a shadow written at index as [$][#]rrggbb[:aa], or -1 when none is there.
     private static int shadowEnd(char[] chars, int index) {
         final int digits = shadowDigits(chars, index);
         if (parseHex(chars, digits) == -1) return -1;
         return parseAlpha(chars, digits + 6) == -1 ? digits + 6 : digits + 9;
+    }
+
+    // The ARGB of each shadow from index to an end that shadowsEnd gave; opaque without alpha.
+    private static int[] shadowValues(char[] chars, int index, int end) {
+        int count = 1;
+        for (int position = index; position < end; position++) {
+            if (chars[position] == '-') count++;
+        }
+        final int[] values = new int[count];
+        for (int stop = 0; stop < count; stop++) {
+            final int digits = shadowDigits(chars, index);
+            final int alpha = parseAlpha(chars, digits + 6);
+            values[stop] = (alpha == -1 ? 0xFF : alpha) << 24 | parseHex(chars, digits);
+            index = shadowEnd(chars, index) + 1;
+        }
+        return values;
     }
 
     private static int shadowDigits(char[] chars, int index) {
@@ -365,8 +389,10 @@ final class StyleUtils {
         };
     }
 
+    // Mixes each channel, alpha included, so shadows keep theirs and text colors have none.
     static int lerpColor(int a, int b, float t) {
-        return (lerp((a >> 16) & 0xFF, (b >> 16) & 0xFF, t) << 16)
+        return (lerp(a >>> 24, b >>> 24, t) << 24)
+                | (lerp((a >> 16) & 0xFF, (b >> 16) & 0xFF, t) << 16)
                 | (lerp((a >> 8) & 0xFF, (b >> 8) & 0xFF, t) << 8)
                 | lerp(a & 0xFF, b & 0xFF, t);
     }

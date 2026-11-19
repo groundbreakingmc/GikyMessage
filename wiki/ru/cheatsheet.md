@@ -50,7 +50,7 @@
 | `font:uniform` | Другой шрифт |
 | `color:red`, `style:"gold bold $#000000"`, `shadow:#000000:80` | Цвет, стиль и тень там, где текст сегмента их не задал |
 | `force-color:red`, `force-style:"gold bold"`, `force-shadow:none` | То же поверх всего внутри сегмента |
-| `color:#ff5555-#5555ff`, `phase:0.5` | [Градиент](gradients.md), сдвинутый вдоль текста |
+| `color:#ff5555-#5555ff`, `shadow:#000000-#333333`, `phase:0.5` | [Градиент](gradients.md) цветов или теней, сдвинутый вдоль текста |
 | `if:{clan}`, `unless:{clan}`, `if:{group}==vip`, `if:{level}>=10` | [Условия](conditions.md) |
 | `lang:item.minecraft.diamond` | [Перевод](translations.md) на язык игрока |
 | `transform:compact`, `transform:"upper max:10"` | [Преобразования](transforms.md) |

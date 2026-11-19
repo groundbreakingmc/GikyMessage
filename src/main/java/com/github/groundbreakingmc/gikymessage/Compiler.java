@@ -1244,7 +1244,7 @@ final class Compiler {
         contentToken = withLook(contentToken, Look.COLOR, colorValue, colorDynamic, false, phase, placeholders);
         contentToken = withLook(contentToken, Look.STYLE, styleValue, styleDynamic, false, phase, placeholders);
         if (!outerLook.isEmpty()) {
-            contentToken = Token.LookContent.create(contentToken, new Look(null, outerLook, null), false,
+            contentToken = Token.LookContent.create(contentToken, new Look(null, outerLook, null, null), false,
                     isDynamic(contentToken));
         }
         contentToken = withLook(contentToken, Look.STYLE, forceStyleValue, forceStyleDynamic, true, phase,

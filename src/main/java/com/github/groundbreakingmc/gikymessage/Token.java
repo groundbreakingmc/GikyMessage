@@ -459,16 +459,18 @@ interface Token {
             final Look cached = this.looks.get(slot);
             if (cached != null && cached.source.equals(value)) return cached;
             final Look parsed = Look.parse(this.kind, value, this.phase);
-            final Look look = parsed != null ? parsed : new Look(value, Style.empty(), null);
+            final Look look = parsed != null ? parsed : new Look(value, Style.empty(), null, null);
             this.looks.set(slot, look);
             return look;
         }
     }
 
+    // The style first, so that a reset in it removes shadows before a shadow gradient is spread.
     private static Component applyLook(Component component, Look look, boolean force) {
         Component result = component;
         if (!look.style.isEmpty()) result = applyStyle(result, look.style, force);
         if (look.colors != null) result = applyGradient(result, look.colors, force);
+        if (look.shadows != null) result = applyGradient(result, look.shadows, force);
         return result;
     }
 
@@ -1119,23 +1121,26 @@ interface Token {
 
     // Spreads a gradient over the characters of a component, each character a child of its own.
     // With force it colors every character. Without force it skips the characters that have a
-    // color of their own and counts them, so the gradient goes on after them. A component whose
-    // text is not its own, such as a translation, takes the color at its place.
+    // color of their own, or a shadow for a shadow gradient, and counts them, so the gradient
+    // goes on after them. A component whose text is not its own, such as a translation, takes
+    // the color at its place.
     private static Component applyGradient(Component component, Look.Gradient gradient, boolean force) {
         final Style[] styles = gradient.styles(countCodePoints(component));
         final ChildScratch scratch = childScratch();
         scratch.gradientIndex = 0;
-        return applyGradient(component, styles, force, false, scratch);
+        return applyGradient(component, styles, gradient.shadow(), force, false, scratch);
     }
 
     private static Component applyGradient(
             Component component,
             Style[] styles,
+            boolean shadow,
             boolean force,
             boolean inheritsOwn,
             ChildScratch scratch
     ) {
-        final boolean own = inheritsOwn || component.color() != null;
+        final boolean own = inheritsOwn
+                || (shadow ? StyleUtils.hasShadow(component.style()) : component.color() != null);
         if (own && !force) {
             scratch.gradientIndex += countCodePoints(component);
             return component;
@@ -1175,7 +1180,7 @@ interface Token {
 
             for (int index = 0, size = originalChildren.size(); index < size; index++) {
                 children.setComponent(outputIndex++,
-                        applyGradient(originalChildren.get(index), styles, force, own, scratch));
+                        applyGradient(originalChildren.get(index), styles, shadow, force, own, scratch));
             }
             return self.children(children);
         } finally {

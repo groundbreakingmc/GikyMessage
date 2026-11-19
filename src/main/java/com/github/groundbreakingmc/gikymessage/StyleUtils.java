@@ -27,11 +27,39 @@ final class StyleUtils {
     private static final AtomicReferenceArray<ShadowColor> SHADOW_COLOR_CACHE =
             new AtomicReferenceArray<>(COLOR_CACHE_SIZE);
 
+    // The styles that codes give most text: a named color or none, decorations, no shadow.
+    // Styles are immutable, so all templates share these; a slot keeps the last one asked for.
+    private static final NamedTextColor[] NAMED_COLORS = NamedTextColor.NAMES.values().toArray(new NamedTextColor[0]);
+    private static final int STYLE_CACHE_SIZE = 256;
+    private static final AtomicReferenceArray<SharedStyle> STYLE_CACHE = new AtomicReferenceArray<>(STYLE_CACHE_SIZE);
+
+    private record SharedStyle(int key, Style style) {
+    }
+
     private StyleUtils() {
     }
 
     static Style create(TextColor color, ShadowColor shadowColor, short decorations) {
-        return create(color, shadowColor, decorations, null, null, null, null);
+        final int named = shadowColor == null ? namedIndex(color) : -1;
+        if (named < 0) return create(color, shadowColor, decorations, null, null, null, null);
+        if (named == 0 && decorations == 0) return Style.empty();
+
+        final int key = named << 16 | decorations & 0xFFFF;
+        final int slot = colorCacheSlot(key) & (STYLE_CACHE_SIZE - 1);
+        final SharedStyle cached = STYLE_CACHE.get(slot);
+        if (cached != null && cached.key == key) return cached.style;
+        final Style style = create(color, null, decorations, null, null, null, null);
+        STYLE_CACHE.lazySet(slot, new SharedStyle(key, style));
+        return style;
+    }
+
+    // 0 for no color, 1 to 16 for a named one, -1 for any other.
+    private static int namedIndex(TextColor color) {
+        if (color == null) return 0;
+        for (int index = 0; index < NAMED_COLORS.length; index++) {
+            if (NAMED_COLORS[index] == color) return index + 1;
+        }
+        return -1;
     }
 
     static Style create(

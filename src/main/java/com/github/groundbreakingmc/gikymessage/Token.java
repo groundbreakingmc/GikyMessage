@@ -64,14 +64,18 @@ interface Token {
 
     final class Plain implements Token {
 
-        final String text;
-        final Style style;
-        private final Component component;
+        private final TextComponent component;
 
         Plain(String text, Style style) {
-            this.text = text;
-            this.style = style;
-            this.component = textComponent(text, style);
+            this.component = Component.text(text, style);
+        }
+
+        String text() {
+            return this.component.content();
+        }
+
+        Style style() {
+            return this.component.style();
         }
 
         @Override
@@ -1096,10 +1100,6 @@ interface Token {
             style = style.hoverEvent(hoverEvent);
         }
         return style;
-    }
-
-    private static Component textComponent(String content, Style style) {
-        return Component.text(content, style);
     }
 
     private static Component textComponent(

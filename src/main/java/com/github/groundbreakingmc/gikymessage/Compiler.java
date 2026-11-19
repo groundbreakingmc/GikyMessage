@@ -1596,11 +1596,11 @@ final class Compiler {
         if (count == 1) {
             final Token token = childCount == 1 ? children[0] : innerText;
             if (token instanceof Token.Plain plain) {
-                final Style merged = plain.style.merge(
+                final Style merged = plain.style().merge(
                         style,
                         Style.Merge.Strategy.IF_ABSENT_ON_TARGET
                 );
-                return new Token.Plain(plain.text, merged);
+                return new Token.Plain(plain.text(), merged);
             }
             // A sole child whose root style is fixed becomes the root itself, one level less.
             if (token instanceof Token.PlainDyn || token instanceof Token.DynChildren) {
@@ -1652,8 +1652,8 @@ final class Compiler {
             final Token[] children = Arrays.copyOfRange(tokens, 1, count);
             final boolean dynChild = hasDynamicChildren(children, children.length);
             return dynChild
-                    ? new Token.DynChildren(first.text, first.style, children, children.length)
-                    : new Token.Constant(first.text, first.style, children, children.length);
+                    ? new Token.DynChildren(first.text(), first.style(), children, children.length)
+                    : new Token.Constant(first.text(), first.style(), children, children.length);
         }
         final boolean dynChild = hasDynamicChildren(tokens, count);
         return dynChild

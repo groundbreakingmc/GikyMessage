@@ -146,6 +146,10 @@ interface Token {
                 releaseChildren(rendered);
             }
         }
+
+        private DynChildren withStyle(Style style) {
+            return new DynChildren(this.base.content(), style, this.children, this.childCount);
+        }
     }
 
     // staticParts may omit trailing empty entries: length <= phIndices.length + 1.
@@ -158,6 +162,10 @@ interface Token {
         private final TextComponent base;
         private final Component[] staticTails;
         private final int childCount;
+
+        private PlainDyn withStyle(Style style) {
+            return new PlainDyn(this.staticParts, this.phIndices, style);
+        }
 
         PlainDyn(String[] staticParts, int[] phIndices, Style style) {
             this.staticParts = staticParts;
@@ -419,8 +427,15 @@ interface Token {
         private final AtomicReferenceArray<Look> looks;
 
         static Token create(Token content, Look look, boolean force, boolean dynamic) {
-            return dynamic ? new LookContent(content, look, (byte) -1, NO_PARTS, NO_PH, 0f, force)
-                    : new Constant(applyLook(content.render(null, null), look, force));
+            if (!dynamic) return new Constant(applyLook(content.render(null, null), look, force));
+            // A plain style over content whose root style is fixed is applied to that root once.
+            if (!force && look.colors == null && look.shadows == null) {
+                if (content instanceof PlainDyn plain) return plain.withStyle(fill(plain.base.style(), look.style));
+                if (content instanceof DynChildren children) {
+                    return children.withStyle(fill(children.base.style(), look.style));
+                }
+            }
+            return new LookContent(content, look, (byte) -1, NO_PARTS, NO_PH, 0f, force);
         }
 
         static Token create(Token content, byte kind, String[] staticParts, int[] placeholderIndices,
@@ -469,14 +484,18 @@ interface Token {
         return result;
     }
 
+    // What a plain style gives a root with this style: it fills only what the root leaves unset.
+    private static Style fill(Style root, Style style) {
+        final Style applied = StyleUtils.resetsShadow(style) ? StyleUtils.withoutShadow(style) : style;
+        return root.merge(applied, Style.Merge.Strategy.IF_ABSENT_ON_TARGET);
+    }
+
     // Without force the style fills what the component's root leaves unset; its children
     // inherit it. With force it is set on every component.
     private static Component applyStyle(Component component, Style style, boolean force) {
+        if (!force) return component.style(fill(component.style(), style));
         final boolean resetsShadow = StyleUtils.resetsShadow(style);
         final Style applied = resetsShadow ? StyleUtils.withoutShadow(style) : style;
-        if (!force) {
-            return component.style(component.style().merge(applied, Style.Merge.Strategy.IF_ABSENT_ON_TARGET));
-        }
         // reset in a forced style removes every shadow of the segment.
         return forceStyle(component, applied, resetsShadow);
     }

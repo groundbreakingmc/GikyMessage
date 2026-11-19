@@ -234,7 +234,10 @@ interface Token {
                 final String replacement = plainText(placeholders, numbers, this.phIndices[0]);
                 final String tail = this.staticParts.length > 1 && this.staticParts[1] != null
                         ? this.staticParts[1] : "";
-                return Component.text(this.base.content() + replacement + tail, this.base.style());
+                // Concatenation copies even a value with nothing around it.
+                final String text = this.base.content().isEmpty() && tail.isEmpty()
+                        ? replacement : this.base.content() + replacement + tail;
+                return Component.text(text, this.base.style());
             }
 
             final StringBuilder builder = TL_SB.get();
